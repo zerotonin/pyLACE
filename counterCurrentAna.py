@@ -116,11 +116,11 @@ class matLabResultLoader():
 
     def ndArray2npArray2D(self,ndArray):
         temp = ndArray.tolist()
-        return np.array([x[0][:] for x in temp])
+        return np.fliplr(np.array([x[0][:] for x in temp])) # fliplr as x should be first
 
     def flattenNDarray(self,ndArray):
         temp = ndArray.tolist()
-        return np.array([x[0][0] for x in temp])
+        return np.array([np.fliplr(x[0][0]) for x in temp]) # fliplr as x should be first
     
     def splitResults2Variables(self):
         # traceInfo
