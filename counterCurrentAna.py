@@ -23,7 +23,7 @@ class sortMultiFileFolder():
         genotype = string[index:index+3]
         sex = string[index+3:index+4]
         number = string[index+4:index+7]
-        print(number,index,string)
+        #print(number,index,string)
         number = re.sub("[^0-9]", "", number)
         number = int(number)
         return genotype,number,sex
@@ -103,10 +103,11 @@ class sortMultiFileFolder():
 
 class matLabResultLoader():
 
-    def __init__(self, filePosition):
+    def __init__(self, filePosition, mode ='anaMat'):
         self.filePosition = filePosition
+        self.mode         = mode
 
-    def readFile(self): 
+    def readAnaMatFile(self): 
         # read matlab analysis
         mat = scipy.io.loadmat(self.filePosition)
         self.metaData     = mat['metaData']
@@ -150,7 +151,9 @@ class matLabResultLoader():
         self.medMaxVelocities = self.analysedData[0][0][6] 
     
     def getData(self):
-        self.readFile()
-        self.splitResults2Variables()
-        return self.traceInfo, self.traceContour, self.traceMidline, self.traceHead, self.traceTail, self.trace, self.bendability, self.binnedBend, self.saccs, self.trigAveSacc, self.medMaxVelocities
-
+        if self.mode == 'anaMat':
+            self.readAnaMatFile()
+            self.splitResults2Variables()
+            return self.traceInfo, self.traceContour, self.traceMidline, self.traceHead, self.traceTail, self.trace, self.bendability, self.binnedBend, self.saccs, self.trigAveSacc, self.medMaxVelocities
+        else:
+            raise ValueError('Unknown mode for matLabResultLoader: '+str(self.mode))
