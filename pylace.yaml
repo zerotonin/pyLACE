@@ -1,0 +1,19 @@
+# pylace.yaml 
+
+# install: conda env create -f pylace.yaml 
+# update:  conda env update -f pylace.yaml 
+name: pylace
+dependencies:
+  - python=3.7
+  - pip
+  - ipython
+  - pandas
+  - opencv
+  - numpy
+  - scipy
+  - tqdm
+  - pip:
+      - VidStab
+      - pillow
+      - lxml      
+      - matplotlib
