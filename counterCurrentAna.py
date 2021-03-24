@@ -120,7 +120,7 @@ class matLabResultLoader():
 
     def flattenNDarray(self,ndArray):
         temp = ndArray.tolist()
-        return np.array([np.fliplr(x[0][0]) for x in temp]) # fliplr as x should be first
+        return [np.fliplr(np.array(x[0][0].tolist())) for x in temp] # fliplr as x should be first
     
     def splitResults2Variables(self):
         # traceInfo
