@@ -15,4 +15,3 @@ traCor = traceCorrector(dataDict)
 traCor.calibrateTracking()
 print("calibration done")
 traCor.runTest()
-traCor.
