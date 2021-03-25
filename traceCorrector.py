@@ -69,8 +69,12 @@ class traceCorrector:
             self.ax.set_xlabel('frame: ' + str(self.frameI) + ' | dur: '+ str(np.round(self.frameI/self.headerDict['suggested_frame_rate'],2)))
         plt.draw()
 
-    def getFrameNo4Norpix(self,bonus):
-        return int(np.abs(((self.frameI+self.originFrame)%self.headerDict['allocated_frames'])+bonus))
+    def getFrameNo4Norpix(self,correctionShift):
+        # negative shifts are set as a positive shift with AllocatedFrame - shift
+        if correctionShift < 0:
+            correctionShift = self.headerDict['allocated_frames'] + correctionShift
+        # return corrected frame number
+        return int(np.abs(((self.frameI+self.originFrame+correctionShift)%self.headerDict['allocated_frames'])))
 
     def loadNorPixFrame(self,frameShift):
         return self.mH.getFrame(self.getFrameNo4Norpix(frameShift))
