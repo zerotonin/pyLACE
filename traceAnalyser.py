@@ -1,6 +1,7 @@
 
 import numpy as np
-from scipy.interpolate import LinearNDInterpolator
+from scipy.interpolate import LinearNDInterpolator, interp1d
+
 class traceAnalyser():
 
     def __init__(self,traceCorrectorObj):
@@ -105,6 +106,55 @@ class traceAnalyser():
         self.inZoneBendability =self.bendability[self.zoneIDX]
 
     def saveResults(self):
-        pass
+        temp = {'head x pix': self.head_pix[:,0],
+                'head y pix': self.head_pix[:,1],
+                'tail x pix': self.tail_pix[:,0],
+                'tail y pix': self.tail_pix[:,1],
+                'head x mm': self.head_mm[:,0],
+                'head y mm': self.head_mm[:,1],
+                'tail x mm': self.tail_mm[:,0],
+                'tail y mm': self.tail_mm[:,1]}
+        self.headTail_df = pd.DataFrame(data=temp)
 
     
+    def calculateBodyLength(self,midLine):
+        vectorNorms =np.linalg.norm(np.diff(midLine, axis = 0),axis=1)
+        bodyLen = vectorNorms.sum()
+        bodyAxis = np.cumsum(np.insert(vectorNorms,0,0.,axis =0))
+        return bodyLen,bodyAxis
+    
+    def interpMidLine(self,midLine,step = 10):
+        # get the bodylength and an axis along the bodylength
+        bodyLen,bodyAxis = self.calculateBodyLength(midLine)
+
+        # create interpolation functions for x and y
+        fX = interp1d(bodyAxis,midLine[:,0],kind='cubic')
+        fY = interp1d(bodyAxis,midLine[:,1],kind='cubic')
+
+        # create ten evenly spaced points along the body-length-axis
+        newBodyAxis = np.linspace(0,bodyAxis[-1],step)
+ 
+        # interpolate the midLine at these points
+        newX =fX(newBodyAxis)
+        newY =fY(newBodyAxis)
+
+        #return new midLine
+        return np.vstack((newX,newY)).T
+    
+    def getUniformMidLine(self,midLinePoints =10):
+        self.midLineUniform_mm = list()
+        for mL in self.midLine_mm:
+            self.midLineUniform_mm.append(self.interpMidLine(mL,midLinePoints))
+        self.midLineUniform_pix = list()
+        for mL in self.midLine_pix:
+            self.midLineUniform_pix.append(self.interpMidLine(mL,midLinePoints))
+        
+        # convert the list to
+        self.midLineUniform_mm  = np.array(self.midLineUniform_mm) 
+        self.midLineUniform_pix = np.array(self.midLineUniform_pix)
+
+        
+
+
+
+
