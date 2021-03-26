@@ -22,8 +22,10 @@ class traceAnalyser():
         self.pixelOffset   = traceCorrectorObj.pixelOffset
         self.frameOffset   = traceCorrectorObj.frameShift
         self.traceLenFrame = traceCorrectorObj.headerDict['allocated_frames']
+        self.originFrame   = traceCorrectorObj.headerDict['origin']
         self.fps           = traceCorrectorObj.headerDict['suggested_frame_rate']
         self.traceLenSec   = self.traceLenFrame/self.fps
+        self.makeMovieIDX()
 
         # meta data
         self.genotype = traceCorrectorObj.dataDict['genotype'] 
@@ -35,6 +37,15 @@ class traceAnalyser():
         self.arenaCoords_pix = traceCorrectorObj.boxCoords 
         self.sortCoordsArenaPix()
         self.makeInterpolator()
+        self.zoneMargins  = np.array([[40,11.5],[163,31.5]])
+
+    def makeMovieIDX(self):
+        if self.frameOffset < 0:
+            frameShift = self.frameOffset + self.traceLenFrame
+        else:
+            frameShift = self.frameOffset
+            
+        self.movieIDX = (np.arange(self.traceLenFrame)+self.originFrame + frameShift)%self.traceLenFrame
 
     def sortCoordsArenaPix(self):
         descY = np.flipud(self.arenaCoords_pix[np.argsort(self.arenaCoords_pix[:, 1])])
@@ -58,11 +69,42 @@ class traceAnalyser():
         self.contour_mm = [self.interpolate2mm(x) for x in self.contour_pix] 
         self.midLine_mm = [self.interpolate2mm(x) for x in self.midLine_pix] 
 
-    def calculateSpatialHistogram(self):
-        pass
+    def calculateSpatialHistogram(self,bins=[16,8]):
+        allMidLine =  np.vstack((self.midLine_mm[:]))
+        temp = np.histogram2d(allMidLine[:,0],allMidLine[:,1],bins,density=True)
+        self.probDensity  = temp[0].T
+        self.probDensity_xCenters = temp[1]
+        self.probDensity_yCenters = temp[2]
 
-    def calculateBendingInCentralZone(self):
-        pass
+
+    def calculateInZoneIDX(self):
+        self.zoneIDX = list()
+        for frameI in range(self.traceLenFrame):
+            # shortHand
+            mL = self.midLine_mm[frameI]
+            # check if the whole body is inside the zone margins
+            # all is true when all are true
+            #    ... false when all are false            
+            #    ... false when one is true and the rest false
+            #    ... false when one is false and the rest true
+                       
+            boolTests = [(mL[:,0] >= self.zoneMargins[0,0]).all(),
+                         (mL[:,1] >= self.zoneMargins[0,1]).all(),
+                         (mL[:,0] <= self.zoneMargins[1,0]).all(),
+                         (mL[:,1] <= self.zoneMargins[1,1]).all()]
+            
+            if all(boolTests):
+                self.zoneIDX.append(True)
+            else:
+                self.zoneIDX.append(False)
+
+    def inZoneAnalyse(self):
+        self.calculateInZoneIDX()
+        self.inZoneFraction = sum(self.zoneIDX)/self.traceLenFrame
+        self.inZoneDuration = self.inZoneFraction*self.traceLenSec
+        self.inZoneBendability =self.bendability[self.zoneIDX]
 
     def saveResults(self):
         pass
+
+    
