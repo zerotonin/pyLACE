@@ -12,6 +12,7 @@ dependencies:
   - numpy
   - scipy
   - tqdm
+  - seaborn
   - pip:
       - VidStab
       - pillow
