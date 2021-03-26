@@ -4,6 +4,8 @@ from mediaHandler import mediaHandler
 from traceCorrector import traceCorrector
 from counterCurrentAna import sortMultiFileFolder
 import traceAnalyser
+import fishPlot
+import matplotlib.pyplot as plt
 
 #reload(sortMultiFileFolder)
 
@@ -15,7 +17,17 @@ dataDict = fileDict['INTM7']
 traCor = traceCorrector(dataDict)
 traCor.calibrateTracking()
 print("calibration done")
-traCor.runTest()
+#traCor.runTest()
 
 traAna = traceAnalyser.traceAnalyser(traCor)
 traAna.pixelTrajectories2mmTrajectories()
+
+frameI = 14687
+
+fig,axs = plt.subplots(2)
+fishPlot.frameOverlay(axs[0],traCor.loadNorPixFrame(frameI),traAna.contour_pix[frameI],
+                      traAna.midLine_pix[frameI],traAna.head_pix[frameI,:],
+                      traAna.tail_pix[frameI,:],traAna.arenaCoords_pix)
+fishPlot.plotTraceResult(axs[1],traAna.contour_pix[frameI],
+                      traAna.midLine_pix[frameI],traAna.head_pix[frameI,:],
+                      traAna.tail_pix[frameI,:],traAna.arenaCoords_pix)
