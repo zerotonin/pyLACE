@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from counterCurrentAna import matLabResultLoader
 from mediaHandler import mediaHandler
-
+from fishPlot import frameOverlay
 class traceCorrector:
 
     def __init__(self,dataDict):
@@ -18,13 +18,15 @@ class traceCorrector:
         self.mH = mediaHandler(self.dataDict['seq'],'norpix')
         
         #shorthands
-        self.contour     = self.matLabLoader.traceContour
-        self.head        = self.matLabLoader.traceHead
-        self.tail        = self.matLabLoader.traceTail
-        self.midLine     = self.matLabLoader.traceMidline
-        self.originFrame = self.mH.media.header_dict['origin']
-        self.headerDict  = self.mH.media.header_dict
-        self.pixelOffset = np.array([0.,0.])
+        self.contour          = self.matLabLoader.traceContour
+        self.head             = self.matLabLoader.traceHead
+        self.tail             = self.matLabLoader.traceTail
+        self.midLine          = self.matLabLoader.traceMidline
+        self.headerDict       = self.mH.media.header_dict
+        self.originFrame      = self.headerDict ['origin']
+        self.allocated_frames = self.headerDict['allocated_frames'] 
+        self.fps              = self.headerDict['suggested_frame_rate']  
+        self.pixelOffset      = np.array([0.,0.])
         
         #preallocations
         self.currentFrame = None
@@ -35,9 +37,8 @@ class traceCorrector:
         self.frameShift         = 0
         self.pixelOffset        = np.array([0.,0.])
         self.coordShift         = np.zeros(shape=(1,2))
-        #refresh timer
-        #start other libraries
-        #plt.ion()
+        
+        #matplotlib 
         self.fig,self.ax = plt.subplots()
         self.fig.canvas.mpl_connect('key_press_event', self.on_press)
 
@@ -54,27 +55,22 @@ class traceCorrector:
         self.midLine = [x + self.coordShift for x in self.midLine]
 
     def plotFrameOverlay(self):
-        self.ax.imshow(self.currentFrame,cmap='gray')  
-        self.ax.plot(self.midLine[self.frameI][:,0],self.midLine[self.frameI][:,1],'g.-')
-        self.ax.plot(self.contour[self.frameI][:,0],self.contour[self.frameI][:,1],'y-')
-        self.ax.plot(self.head[self.frameI,0],self.head[self.frameI,1],'bo')
-        self.ax.plot(self.tail[self.frameI,0],self.tail[self.frameI,1],'bs')
-        self.ax.plot(self.boxCoords[:,0],self.boxCoords[:,1],'y-')
-        self.ax.plot(self.boxCoords[[0,-1],0],self.boxCoords[[0,-1],1],'y-')
-        self.ax.set_xlabel('frame: ' + str(self.frameI) + ' | dur: '+ str(np.round(self.frameI/self.headerDict['suggested_frame_rate'],2)))
+        frameOverlay(self.ax, self.currentFrame, self.contour[self.frameI],
+                     self.midLine[self.frameI], self.head[self.frameI,:], 
+                     self.tail[self.frameI,:], self.boxCoords)
         if self.calibrationOngoing:
             self.ax.set_title('q = quit | f = fullscreen | a = -1 frame | A -10 frames | c = +1 frame | D +10 frames | w = negative origin | e = origin frame| cursor moves detection | s = save frame' )
             self.ax.set_xlabel('frame offSet: ' + str(self.frameShift) + ' | origin frame: '+ str(self.originFrame) + ' | pixelShift (x,y): ' + str(self.pixelOffset) )
         else:
-            self.ax.set_xlabel('frame: ' + str(self.frameI) + ' | dur: '+ str(np.round(self.frameI/self.headerDict['suggested_frame_rate'],2)))
+            self.ax.set_xlabel('frame: ' + str(self.frameI) + ' | dur: '+ str(np.round(self.frameI/self.fps,2)))
         plt.draw()
 
     def getFrameNo4Norpix(self,correctionShift):
         # negative shifts are set as a positive shift with AllocatedFrame - shift
         if correctionShift < 0:
-            correctionShift = self.headerDict['allocated_frames'] + correctionShift
+            correctionShift = self.allocated_frames + correctionShift
         # return corrected frame number
-        return int(np.abs(((self.frameI+self.originFrame+correctionShift)%self.headerDict['allocated_frames'])))
+        return int(np.abs(((self.frameI+self.originFrame+correctionShift)%self.allocated_frames)))
 
     def loadNorPixFrame(self,frameShift):
         return self.mH.getFrame(self.getFrameNo4Norpix(frameShift))
@@ -144,7 +140,7 @@ class traceCorrector:
     def runTest(self,lengthInFrames =100):
         self.fig,self.ax = plt.subplots()
         plt.ion()
-        for frameI in np.linspace(0,self.headerDict['allocated_frames']-1,lengthInFrames, dtype=int ):
+        for frameI in np.linspace(0,self.allocated_frames-1,lengthInFrames, dtype=int ):
             self.frameI = frameI
             self.refreshImage(True)
             plt.pause(0.001)
