@@ -11,6 +11,8 @@ dependencies:
   - opencv
   - numpy
   - scipy
+  - yaml
+  - pyyaml
   - tqdm
   - seaborn
   - pip:

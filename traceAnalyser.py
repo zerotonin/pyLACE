@@ -40,6 +40,50 @@ class traceAnalyser():
         self.makeInterpolator()
         self.zoneMargins  = np.array([[40,11.5],[163,31.5]])
 
+        #preallocators
+        self.exportDict           = traceCorrectorObj.dataDict
+        self.inZoneFraction       = None
+        self.inZoneDuration       = None  
+        self.probDensity_xCenters = None 
+        self.probDensity_yCenters = None        
+        self.inZoneBendability    = None
+        self.midLineUniform_mm    = None
+        self.midLineUniform_pix   = None
+        self.head_mm              = None    
+        self.tail_mm              = None    
+        self.contour_mm           = None 
+        self.midLine_mm           = None 
+        self.probDensity          = None 
+
+    def exportMetaDict(self):
+        # advance exportDict
+        self.exportDict['movieFrameIDX']            = self.movieIDX
+        self.exportDict['fps']                      = self.fps
+        self.exportDict['traceLenFrame']            = self.traceLenFrame
+        self.exportDict['traceLenSec']              = self.traceLenSec
+        self.exportDict['inZoneFraction']           = self.inZoneFraction
+        self.exportDict['inZoneDuration']           = self.inZoneDuration
+        self.exportDict['probDensity_xCenters']     = self.probDensity_xCenters
+        self.exportDict['probDensity_yCenters']     = self.probDensity_yCenters
+        self.exportDict['path2_inZoneBendability']  = None
+        self.exportDict['path2_midLineUniform_mm']  = None
+        self.exportDict['path2_midLineUniform_pix'] = None
+        self.exportDict['path2_head_mm']            = None
+        self.exportDict['path2_tail_mm']            = None
+        self.exportDict['path2_probDensity']        = None
+        
+        return self.exportDict
+
+    def exportDataList(self):
+        self.dataList = list()
+        self.dataList.append(['inZoneBendability', np.array(self.inZoneBendability),3])
+        self.dataList.append(['midLineUniform_mm', np.array(self.midLineUniform_mm),3])
+        self.dataList.append(['midLineUniform_pix',np.array(self.midLineUniform_pix),3])
+        self.dataList.append(['head_mm',self.head_mm,2])
+        self.dataList.append(['tail_mm',self.tail_mm,2])
+        self.dataList.append(['probDensity',self.probDensity,2])
+        return self.dataList
+
     def makeMovieIDX(self):
         if self.frameOffset < 0:
             frameShift = self.frameOffset + self.traceLenFrame
