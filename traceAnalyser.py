@@ -105,17 +105,6 @@ class traceAnalyser():
         self.inZoneDuration = self.inZoneFraction*self.traceLenSec
         self.inZoneBendability =self.bendability[self.zoneIDX]
 
-    def saveResults(self):
-        temp = {'head x pix': self.head_pix[:,0],
-                'head y pix': self.head_pix[:,1],
-                'tail x pix': self.tail_pix[:,0],
-                'tail y pix': self.tail_pix[:,1],
-                'head x mm': self.head_mm[:,0],
-                'head y mm': self.head_mm[:,1],
-                'tail x mm': self.tail_mm[:,0],
-                'tail y mm': self.tail_mm[:,1]}
-        self.headTail_df = pd.DataFrame(data=temp)
-
     
     def calculateBodyLength(self,midLine):
         vectorNorms =np.linalg.norm(np.diff(midLine, axis = 0),axis=1)
