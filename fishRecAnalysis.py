@@ -33,12 +33,28 @@ class fishRecAnalysis():
         self.traAna.exportMetaDict()
         self.dataList = self.traAna.exportDataList()
 
+
+    def prepDf_3D(self,col1Name,col2Name,reps):
+        columnLabels = np.linspace(0,reps-1,reps,dtype=int)
+        columnLabels = [[col1Name+'_'+str(x),col2Name+'_'+str(x)] for x in columnLabels]
+        columnLabels = [j for sub in columnLabels for j in sub]
+        return pd.DataFrame([],columns=columnLabels),columnLabels
+
+
+    def makePandasDF_3D(self,data,col1Name,col2Name,reps):
+        dataDF,colLabels = self.prepDf_3D(col1Name,col2Name,reps)
+        for  detection in data:
+                entryDict = dict(zip(colLabels, detection.flatten()))
+                dataDF    = dataDF.append(entryDict,ignore_index=True)
+        return dataDF
+
+
     def saveResults(self):
         for dataListEntry in self.dataList:
             if dataListEntry[2] == 2:
                 self.save2DMatrix(dataListEntry)
             elif dataListEntry[2] == 3:
-                self.dataListEntry
+                self.save3DMatrix(dataListEntry)
 
 
     def save2DMatrix(self,dataListEntry):
@@ -55,6 +71,7 @@ class fishRecAnalysis():
     def save3DMatrix(self,dataListEntry):
         temp = deepcopy(dataListEntry)
         temp[1] = temp[1].reshape(temp[1].shape[0], -1)
+        print(temp.shape)
         self.save2DMatrix(temp)
     
     def load2DMatrix(self,filePosition):
