@@ -20,20 +20,18 @@ genName = 'rei'
 reload(fishRecAnalysis)
 fRAobj= fishRecAnalysis.fishRecAnalysis(dataDict,genName,expString)
 fRAobj.correctionAnalysis()
-fRAobj.makeSaveFolder()
+#fRAobj.makeSaveFolder()
+#fRAobj.saveResults()
+zoneDF = fRAobj.makePandasDF_3D(fRAobj.dataList[0][1],'bodyAxis','angle',10)
+midMMDF = fRAobj.makePandasDF_3D(fRAobj.dataList[1][1],'x_coord','y_coord',10)
+midPixDF = fRAobj.makePandasDF_3D(fRAobj.dataList[2][1],'x_coord','y_coord',10)
 
 
-def save2DMatrix(tag,mat,dataDict):
+zoneBendabilityDF
+dataList = fRAobj.dataList
+t
 
-        tag = fRAobj.dataList[3][0]
-        mat = fRAobj.dataList[3][1]
-
-        fileName = tag + '.txt'
-        filePosition = os.path.join(fRAobj.savePath,fileName)
-        np.savetxt(filePosition,mat)
-        fRAobj.dataDict['path2_'+tag] = filePosition
-
-
+plt.plot(fRAobj.dataList[3][1][:,0],fRAobj.dataList[3][1][:,1])
 '''
 traCor = traceCorrector(dataDict)
 traCor.calibrateTracking()
