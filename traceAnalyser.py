@@ -147,7 +147,7 @@ class traceAnalyser():
         self.calculateInZoneIDX()
         self.inZoneFraction = sum(self.zoneIDX)/self.traceLenFrame
         self.inZoneDuration = self.inZoneFraction*self.traceLenSec
-        self.inZoneBendability =self.bendability[self.zoneIDX]
+        self.inZoneBendability =self.binnedBend[self.zoneIDX]
 
     
     def calculateBodyLength(self,midLine):
