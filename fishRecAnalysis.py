@@ -65,12 +65,13 @@ class fishRecAnalysis():
         return dataDF
     
     def makePandasDF4Hist(self):
-        #shortHand
+        
         data = self.dataList[-1][1]
-
-        columnLabels = ['streamAxisMM ' +str(int(x)) for x in self.probDensity_xCenters]
+        streamAxis = np.linspace(0,162,data.shape[1]+2)
+        orthoAxis  = np.linspace(0,43,data.shape[0]+2)
+        columnLabels = ['streamAxisMM ' +str(int(x)) for x in streamAxis[1:-1]]
         columnLabels = ['orthoIndexMM']+ columnLabels
-        data = np.vstack(self.probDensity_yCenters,data.T)).T
+        data = np.vstack((orthoAxis[1:-1],data.T)).T
         dataDF =pd.DataFrame(data,columns=columnLabels)
         dataDF.set_index('orthoIndexMM')
         return dataDF
@@ -96,6 +97,8 @@ class fishRecAnalysis():
             savePos = os.path.join(self.savePath,key+'.csv')
             self.dataDict['path2_'+key] = savePos
             dataFrames[key].to_csv(savePos)
+        dbEntry = self.makeDataBaseEntry()
+        return dbEntry
 
     def makeDataBaseEntry(self):
         dbEntry = self.dataDict.copy()
@@ -114,6 +117,7 @@ class fishRecAnalysis():
         del dbEntry['csv']
         del dbEntry['mat']
         del dbEntry['anaMat']
+        return dbEntry
 
     def save2DMatrix(self,dataListEntry):
 
