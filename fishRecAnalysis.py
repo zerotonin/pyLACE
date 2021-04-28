@@ -41,7 +41,8 @@ class fishRecAnalysis():
         return pd.DataFrame([],columns=columnLabels),columnLabels
 
 
-    def makePandasDF_3D(self,data,col1Name,col2Name,reps):
+    def makePandasDF_3D(self,data,col1Name,col2Name):
+        reps = max([len(entry) for entry in data])
         dataDF,colLabels = self.prepDf_3D(col1Name,col2Name,reps)
         for  detection in data:
                 entryDict = dict(zip(colLabels, detection.flatten()))
