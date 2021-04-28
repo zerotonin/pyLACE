@@ -63,6 +63,7 @@ class traceAnalyser():
         self.exportDict['traceLenSec']              = self.traceLenSec
         self.exportDict['inZoneFraction']           = self.inZoneFraction
         self.exportDict['inZoneDuration']           = self.inZoneDuration
+        self.exportDict['inZoneMedDiverg_Deg']      = self.medianDivergenceFromStraightInZone_DEG
         self.exportDict['probDensity_xCenters']     = self.probDensity_xCenters
         self.exportDict['probDensity_yCenters']     = self.probDensity_yCenters
         self.exportDict['path2_inZoneBendability']  = None
@@ -148,6 +149,7 @@ class traceAnalyser():
         self.inZoneFraction = sum(self.zoneIDX)/self.traceLenFrame
         self.inZoneDuration = self.inZoneFraction*self.traceLenSec
         self.inZoneBendability =list(self.bendability[self.zoneIDX].squeeze())
+        self.medianDivergenceFromStraightInZone_DEG = np.median([np.sum(np.abs(x[:,1]-180)) for x in self.inZoneBendability])
 
     
     def calculateBodyLength(self,midLine):
