@@ -21,6 +21,7 @@ class fishRecAnalysis():
         folderName = '{}_{}_{}_{}_{}_ID#{}'.format(self.expStr,self.genName,self.dataDict['genotype'],self.dataDict['sex'],self.dataDict['animalNo'],recNumber)
         self.savePath = os.path.join(self.dbPath,folderName)
         os.mkdir(self.savePath)
+        #return folderName
 
     def correctionAnalysis(self):
         self.traCor = traceCorrector(self.dataDict)
@@ -40,6 +41,11 @@ class fishRecAnalysis():
         columnLabels = [j for sub in columnLabels for j in sub]
         return pd.DataFrame([],columns=columnLabels),columnLabels
 
+    def getTimeIndex(self,dataDF):
+        dataDF.index= dataDF.index/self.traAna.fps
+        dataDF.index.name = 'time sec'
+        return dataDF #np.linspace(0,self.traAna.traceLenSec,self.traAna.traceLenFrame)
+
     def makePandasDF_3D(self,data,col1Name,col2Name,index=None):
         reps = max([len(entry) for entry in data])
         dataDF,colLabels = self.prepDf_3D(col1Name,col2Name,reps)
@@ -48,18 +54,66 @@ class fishRecAnalysis():
             dataDF    = dataDF.append(entryDict,ignore_index=True)
         
         if index == 'Time':
-            dataDF.index= dataDF.index/self.traAna.fps
-            dataDF.index.name = 'time sec'
+            dataDF = self.getTimeIndex(dataDF)
 
         return dataDF
 
-    def saveResults(self):
-        for dataListEntry in self.dataList:
-            if dataListEntry[2] == 2:
-                self.save2DMatrix(dataListEntry)
-            elif dataListEntry[2] == 3:
-                self.save3DMatrix(dataListEntry)
+    def makePandasDF_2D(self,data,col1Name,col2Name,index=None):
+        dataDF = pd.DataFrame(data,columns= [col1Name,col2Name])
+        if index == 'Time':
+            dataDF = self.getTimeIndex(dataDF)
+        return dataDF
+    
+    def makePandasDF4Hist(self):
+        #shortHand
+        data = self.dataList[-1][1]
 
+        columnLabels = ['streamAxisMM ' +str(int(x)) for x in self.probDensity_xCenters]
+        columnLabels = ['orthoIndexMM']+ columnLabels
+        data = np.vstack(self.probDensity_yCenters,data.T)).T
+        dataDF =pd.DataFrame(data,columns=columnLabels)
+        dataDF.set_index('orthoIndexMM')
+        return dataDF
+
+
+    def makeResultDFs(self):
+
+        inZoneBendability   = self.makePandasDF_3D(self.dataList[0][1],'bodyAxis','angle')
+        midLineUniform_mm  = self.makePandasDF_3D(self.dataList[1][1],'x_coord','y_coord','Time')
+        midLineUniform_pix = self.makePandasDF_3D(self.dataList[2][1],'x_coord','y_coord','Time')
+        head_mm = self.makePandasDF_2D(self.dataList[3][1],'x_coord','y_coord','Time')
+        tail_mm = self.makePandasDF_2D(self.dataList[4][1],'x_coord','y_coord','Time')
+        probDensity   = self.makePandasDF4Hist()
+        
+        return {'inZoneBendability': inZoneBendability,'midLineUniform_mm': midLineUniform_mm,
+                'midLineUniform_pix': midLineUniform_pix,'head_mm': head_mm,
+                'tail_mm': tail_mm,'probDensity': probDensity}
+
+    def saveDataFrames(self):
+        dataFrames = self.makeResultDFs()
+        self.makeSaveFolder()
+        for key in dataFrames.keys():
+            savePos = os.path.join(self.savePath,key+'.csv')
+            self.dataDict['path2_'+key] = savePos
+            dataFrames[key].to_csv(savePos)
+
+    def makeDataBaseEntry(self):
+        dbEntry = self.dataDict.copy()
+        del dbEntry['movieFrameIDX']
+        del dbEntry['probDensity_xCenters']
+        del dbEntry['probDensity_yCenters']
+        dbEntry['path2_smr'] = dbEntry['smr']
+        dbEntry['path2_s2r'] = dbEntry['s2r']
+        dbEntry['path2_seq'] = dbEntry['seq']
+        dbEntry['path2_csv'] = dbEntry['csv']
+        dbEntry['path2_mat'] = dbEntry['mat']
+        dbEntry['path2_anaMat'] = dbEntry['anaMat']
+        del dbEntry['smr']
+        del dbEntry['s2r']
+        del dbEntry['seq']
+        del dbEntry['csv']
+        del dbEntry['mat']
+        del dbEntry['anaMat']
 
     def save2DMatrix(self,dataListEntry):
 
@@ -84,4 +138,13 @@ class fishRecAnalysis():
     def load3DMatrix(self,filePosition):
         temp = self.load2DMatrix(filePosition)
         return temp.reshape(temp.shape[0], temp.shape[1] // arr.shape[2], arr.shape[2])
+
+
+
+
+
+
+
+
+
 
