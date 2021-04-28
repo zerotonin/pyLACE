@@ -1,5 +1,6 @@
 from importlib import reload
 import numpy as np
+import pandas as pd
 from mediaHandler import mediaHandler
 from traceCorrector import traceCorrector
 from counterCurrentAna import sortMultiFileFolder
@@ -7,10 +8,15 @@ import traceAnalyser
 import fishPlot
 import matplotlib.pyplot as plt
 import fishRecAnalysis
+import fishDataBase
 
-#reload(sortMultiFileFolder)
 
-mff = sortMultiFileFolder('/media/gwdg-backup/BackUp/Vranda/data_counter_c-start/countercurrent_onefolder/rei_last_generation_11-2018') 
+multiFileFolder = '/media/gwdg-backup/BackUp/Vranda/data_counter_c-start/countercurrent_onefolder/rei_last_generation_11-2018'
+db = fishDataBase.fishDataBase()
+db.runMultiTraceFolder(multiFileFolder,'rei','CCur')
+
+
+
 fileDict = mff.__main__() 
 #print(fileDict.keys())
 dataDict = fileDict['INTF2']
@@ -22,57 +28,4 @@ fRAobj= fishRecAnalysis.fishRecAnalysis(dataDict,genName,expString)
 fRAobj.correctionAnalysis()
 #fRAobj.makeSaveFolder()
 #fRAobj.saveResults()
-zoneDF = fRAobj.makePandasDF_3D(fRAobj.dataList[0][1],'bodyAxis','angle',10)
-midMMDF = fRAobj.makePandasDF_3D(fRAobj.dataList[1][1],'x_coord','y_coord',10)
-midPixDF = fRAobj.makePandasDF_3D(fRAobj.dataList[2][1],'x_coord','y_coord',10)
-
-
-zoneBendabilityDF
-dataList = fRAobj.dataList
-t
-
-plt.plot(fRAobj.dataList[3][1][:,0],fRAobj.dataList[3][1][:,1])
-'''
-traCor = traceCorrector(dataDict)
-traCor.calibrateTracking()
-print("calibration done")
-#traCor.runTest()
-reload(traceAnalyser)
-reload(fishPlot)
-traAna = traceAnalyser.traceAnalyser(traCor)
-traAna.pixelTrajectories2mmTrajectories()
-traAna.calculateSpatialHistogram()
-traAna.inZoneAnalyse()
-traAna.getUniformMidLine()
-exportDict = traAna.exportMetaDict()
-
-
-# Database Path are set like follows
-# sourcePath / %experiment_%genotype_%sex_%animalNo_rec_%recNumber/
-# each path holds:
-# yaml file, image of test acquisition, image of spatial hist,
-# text files of the matrices
-expString = 'CCurr'
-genName = 'rei'
-databasePath = '/media/gwdg-backup/BackUp/Zebrafish/pythonDatabase'
-
-
-
-
-frameI = 14222
-
-reload(fishPlot)
-fig,axs = plt.subplots(2)
-fishPlot.frameOverlay(axs[0],traCor.mH.getFrame(traAna.movieIDX[frameI]),traAna.contour_pix[frameI],
-                      traAna.midLine_pix[frameI],traAna.head_pix[frameI,:],
-                      traAna.tail_pix[frameI,:],traAna.arenaCoords_pix)
-fishPlot.plotTraceResult(axs[1],traAna.contour_mm[frameI],
-                      traAna.midLine_mm[frameI],traAna.head_mm[frameI,:],
-                      traAna.tail_mm[frameI,:],traAna.arenaCoords_mm)
-
-
-fig,axs = plt.subplots()
-fishPlot.simpleSpatialHist(axs,traAna.probDensity)
-fishPlot.seabornSpatialHist(traAna.midLine_mm)
-plt.show()
-'''
+dbEntry = fRAobj.saveDataFrames()
