@@ -76,7 +76,7 @@ class traceAnalyser():
 
     def exportDataList(self):
         self.dataList = list()
-        self.dataList.append(['inZoneBendability', np.array(self.inZoneBendability),3])
+        self.dataList.append(['inZoneBendability', self.inZoneBendability,3])
         self.dataList.append(['midLineUniform_mm', np.array(self.midLineUniform_mm),3])
         self.dataList.append(['midLineUniform_pix',np.array(self.midLineUniform_pix),3])
         self.dataList.append(['head_mm',self.head_mm,2])
@@ -147,7 +147,7 @@ class traceAnalyser():
         self.calculateInZoneIDX()
         self.inZoneFraction = sum(self.zoneIDX)/self.traceLenFrame
         self.inZoneDuration = self.inZoneFraction*self.traceLenSec
-        self.inZoneBendability =self.bendability[self.zoneIDX]
+        self.inZoneBendability =list(self.bendability[self.zoneIDX].squeeze())
 
     
     def calculateBodyLength(self,midLine):
