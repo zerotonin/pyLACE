@@ -29,7 +29,7 @@ class fishDataBase():
                 self.initDataBase()
     
     def initDataBase(self):
-        dataBaseFields = ['genotype', 'sex', 'animalNo', 'fps', 'traceLenFrame', 
+        dataBaseFields = ['genotype', 'sex', 'animalNo', 'birthDate','fps', 'traceLenFrame', 
                   'traceLenSec', 'inZoneFraction', 'inZoneDuration', 
                   'inZoneMedDiverg_Deg', 'path2_inZoneBendability', 
                   'path2_midLineUniform_mm', 'path2_midLineUniform_pix', 
@@ -40,12 +40,12 @@ class fishDataBase():
         self.dataBase.to_csv(self.dbPos)
         self.saveDataBase()
     
-    def runMultiTraceFolder(self,folderPos,genName,expString):
+    def runMultiTraceFolder(self,folderPos,genName,expString,birthDate):
         mff = sortMultiFileFolder(folderPos) 
         fileDict = mff.__main__() 
         for key in tqdm(fileDict.keys(),desc='analyse files'):
             dataDict = fileDict[key]
-            fRAobj= fishRecAnalysis.fishRecAnalysis(dataDict,genName,expString)
+            fRAobj= fishRecAnalysis.fishRecAnalysis(dataDict,genName,expString,birthDate)
             fRAobj.correctionAnalysis()
             dbEntry = fRAobj.saveDataFrames()
             self.addDataBase(dbEntry)

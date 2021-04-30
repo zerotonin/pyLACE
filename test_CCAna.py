@@ -13,7 +13,7 @@ import fishDataBase
 
 multiFileFolder = '/media/gwdg-backup/BackUp/Vranda/data_counter_c-start/countercurrent_onefolder/rei_last_generation_11-2018'
 db = fishDataBase.fishDataBase()
-db.runMultiTraceFolder(multiFileFolder,'rei','CCur')
+db.runMultiTraceFolder(multiFileFolder,'rei','CCur','11-2018')
 
 '''
 
