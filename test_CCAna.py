@@ -15,7 +15,7 @@ multiFileFolder = '/media/gwdg-backup/BackUp/Vranda/data_counter_c-start/counter
 db = fishDataBase.fishDataBase()
 db.runMultiTraceFolder(multiFileFolder,'rei','CCur')
 
-
+'''
 
 fileDict = mff.__main__() 
 #print(fileDict.keys())
@@ -29,3 +29,4 @@ fRAobj.correctionAnalysis()
 #fRAobj.makeSaveFolder()
 #fRAobj.saveResults()
 dbEntry = fRAobj.saveDataFrames()
+'''
