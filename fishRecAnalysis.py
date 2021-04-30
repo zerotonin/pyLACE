@@ -14,7 +14,7 @@ class fishRecAnalysis():
         self.dbPath   = dataBasePath
         self.dataDict = dataDict
         self.genName  = genName
-        self.dataDict['genotype'] = self.genName'-'+self.dataDict['genotype']
+        self.dataDict['genotype'] = self.genName+'-'+self.dataDict['genotype']
         self.expStr   = expStr
     
     def makeSaveFolder(self):
