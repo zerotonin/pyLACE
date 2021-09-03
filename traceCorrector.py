@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from counterCurrentAna import matLabResultLoader
+from matLabResultLoader import matLabResultLoader
 from mediaHandler import mediaHandler
 from fishPlot import frameOverlay
 class traceCorrector:
