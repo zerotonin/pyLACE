@@ -7,7 +7,7 @@ from tqdm import tqdm
 class fishDataBase():
 
     def __init__(self,dataBasePath = '/media/gwdg-backup/BackUp/Zebrafish/pythonDatabase',dbPos = None):
-        self.dbPath   = dataBasePath
+        self.dbPath  = dataBasePath
         if dbPos == None:
             self.dbPos = os.path.join(self.dbPath,'fishDataBase.csv')
         else:
@@ -29,7 +29,7 @@ class fishDataBase():
                 self.initDataBase()
     
     def initDataBase(self):
-        dataBaseFields = ['genotype', 'sex', 'animalNo', 'fps', 'traceLenFrame', 
+        dataBaseFields = ['genotype', 'sex', 'animalNo', 'birthDate','fps', 'traceLenFrame', 
                   'traceLenSec', 'inZoneFraction', 'inZoneDuration', 
                   'inZoneMedDiverg_Deg', 'path2_inZoneBendability', 
                   'path2_midLineUniform_mm', 'path2_midLineUniform_pix', 
@@ -40,16 +40,21 @@ class fishDataBase():
         self.dataBase.to_csv(self.dbPos)
         self.saveDataBase()
     
-    def runMultiTraceFolder(self,folderPos,genName,expString):
+    def runMultiTraceFolder(self,folderPos,genName,expString,birthDate,startAt=0):
         mff = sortMultiFileFolder(folderPos) 
-        fileDict = mff.__main__() 
-        for key in tqdm(fileDict.keys(),desc='analyse files'):
-            dataDict = fileDict[key]
-            fRAobj= fishRecAnalysis.fishRecAnalysis(dataDict,genName,expString)
-            fRAobj.correctionAnalysis()
-            dbEntry = fRAobj.saveDataFrames()
-            self.addDataBase(dbEntry)
-            self.saveDataBase()
+        fileDict = mff.__main__()
+        keys = [k for k in fileDict.keys()] 
+
+        for key in tqdm(keys[startAt::],desc='analyse files'):
+            try:
+                dataDict = fileDict[key]
+                fRAobj= fishRecAnalysis.fishRecAnalysis(dataDict,genName,expString,birthDate)
+                fRAobj.correctionAnalysis()
+                dbEntry = fRAobj.saveDataFrames()
+                self.addDataBase(dbEntry)
+                self.saveDataBase()
+            except:
+                print('The following directory could not be analysed: '+ dataDict['seq'])
 
 
     def addDataBase(self,dbEntry):

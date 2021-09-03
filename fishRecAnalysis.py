@@ -10,15 +10,17 @@ from copy import deepcopy
 
 class fishRecAnalysis():
     
-    def __init__(self,dataDict,genName,expStr,dataBasePath = '/media/gwdg-backup/BackUp/Zebrafish/pythonDatabase'):
-        self.dataDict = dataDict
+    def __init__(self,dataDict,genName,expStr,birthDate,dataBasePath = '/media/gwdg-backup/BackUp/Zebrafish/pythonDatabase'):
         self.dbPath   = dataBasePath
+        self.dataDict = dataDict
         self.genName  = genName
+        self.dataDict['genotype'] = self.genName+'-'+self.dataDict['genotype']
+        self.dataDict['birthDate'] = birthDate
         self.expStr   = expStr
     
     def makeSaveFolder(self):
         recNumber = len([os.path.join(self.dbPath, o) for o in os.listdir(self.dbPath)  if os.path.isdir(os.path.join(self.dbPath,o))])
-        folderName = '{}_{}_{}_{}_{}_ID#{}'.format(self.expStr,self.genName,self.dataDict['genotype'],self.dataDict['sex'],self.dataDict['animalNo'],recNumber)
+        folderName = '{}_{}_{}_{}_{}_ID#{}'.format(self.expStr,self.dataDict['genotype'],self.dataDict['birthDate'],self.dataDict['sex'],self.dataDict['animalNo'],recNumber)
         self.savePath = os.path.join(self.dbPath,folderName)
         os.mkdir(self.savePath)
         #return folderName
