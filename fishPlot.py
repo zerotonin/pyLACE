@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 import seaborn as sns
 import numpy as np
 import pandas as pd
@@ -32,3 +33,58 @@ def seabornSpatialHist(midLine):
     g.ax_joint.set_aspect('equal')
     g.plot_marginals(sns.histplot, color="#173021", alpha=.75, bins=25)
 
+
+def addColorBar(ax,cmap,vmin,vmax,orientation,axisLableStr):
+    sm = cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=vmin, vmax=vmax))
+    if orientation == 'h':
+        cbar = plt.colorbar(sm,orientation="horizontal",ax=ax)
+        cbar.ax.set_xlabel(axisLableStr, rotation=0)
+    if orientation == 'v':
+        cbar = plt.colorbar(sm,orientation="vertical",ax=ax)
+        cbar.ax.set_xlabel(axisLableStr, rotation=90)
+
+
+def midLinePlot(ax,traceMidline,start,stop,step,colormapStr,fps):
+
+    cmap = cm.get_cmap(colormapStr)
+    for i  in range(start,stop):
+        if i%step == 0:
+            midLine = traceMidline[i]
+            c = (i-start)/ (stop-start)
+            ax.plot(midLine[:,0],midLine[:,1],'.-',color=cmap(c))
+            ax.plot(midLine[-1,0],midLine[-1,1],'k.')
+
+    addColorBar(ax,cmap,0,(stop-start)/fps,'h','time, s')
+
+    plt.gca().set_aspect('equal', adjustable='box')
+
+
+def makeTimeAxis(length,fps,unit='s'):
+    time_s = np.linspace(0,length/fps,length)
+    if unit == 's':
+        return time_s
+    if unit == 'ms':
+        return time_s*1000
+    if unit == 'min':
+        return time_s/60
+    if unit == 'h':
+        return time_s/3600
+
+
+
+def plotAngleVelAbs(fig,ax,timeAx,angleDeg,velDegS,angleStr):
+
+    color = 'tab:blue'
+    ax.set_xlabel('time, s')
+    ax.set_ylabel(f'{angleStr} angle, deg', color=color)
+    ax.plot(timeAx,angleDeg, color=color)
+    ax.tick_params(axis='y', labelcolor=color)
+
+    ax2 = ax.twinx()
+
+    color ='xkcd:sky blue'
+    ax2.set_ylabel(f'{angleStr} velocity, deg*s-1', color=color)
+    ax2.plot(timeAx,velDegS, color=color)
+    ax2.tick_params(axis='y', labelcolor=color)
+
+    fig.tight_layout() 

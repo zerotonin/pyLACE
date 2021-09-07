@@ -1,4 +1,4 @@
-import scipy
+import scipy.io
 import numpy as np
 class matLabResultLoader():
 
@@ -43,7 +43,7 @@ class matLabResultLoader():
         self.traceHead        = self.ndArray2npArray2D(self.traceResult[:,3])
         self.traceTail        = self.ndArray2npArray2D(self.traceResult[:,4])
         self.trace            = self.analysedData[0][0][1]
-        self.bendability      = self.analysedData[0][0][2]
+        self.bendability      = [x[0][:] for x in self.analysedData[0][0][2].tolist()]
         self.binnedBend       = self.analysedData[0][0][3]
         self.saccs            = self.analysedData[0][0][4]
         self.trigAveSacc      = self.analysedData[0][0][5]
