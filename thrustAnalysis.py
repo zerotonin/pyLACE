@@ -7,7 +7,7 @@ import os,matLabResultLoader,glob
 
 # load metaData
 collectionDir = '/media/gwdg-backup/BackUp/Zebrafish/combinedData/traceResultsAna/ABTLF'
-metaData = pd.read_pickle("./dummy.pkl")
+metaData = pd.read_pickle("/media/gwdg-backup/BackUp/Zebrafish/combinedData/traceResultsAna_meta_pandasPickle.pkl")
 
 #get data set
 ABTLFmeta = metaData.loc[metaData['genoType'] == 'ABTLF']
