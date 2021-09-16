@@ -11,7 +11,7 @@ class spike2SimpleReader():
     
     def readByNeo(self):
         self.neoReader = neo.io.Spike2IO(filename=self.fileName)
-        self.dataBlock = reader.read(lazy=False)[0]
+        self.dataBlock = self.neoReader.read(lazy=False)[0]
 
     def readSegments(self):
         self.outPutData = list()
