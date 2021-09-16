@@ -150,6 +150,14 @@ class segmentSaver():
 
 
     def analogSignalDict2Pandas(self,segment):
+        """ This function transforms the analog signals into one pandas dataframe. The time in seconds is
+        the index of the dataframe. The analogsignals are different columns in it.
+
+        :param segment: a tuple with the dictionaries for the analog signals and the event data
+        :type segment: tuple
+        :return: a pandas dataframe described as above
+        :rtype: dataframe
+        """        
         # get Dict
         aSigDict = segment[0]
         # rescale time to seconds
@@ -163,6 +171,15 @@ class segmentSaver():
         return df
     
     def eventDict2Pandas(self,segment,df):
+        """This function adds the event data as boolean arrays to the dataframe
+
+        :param segment: a tuple with the dictionaries for the analog signals and the event data
+        :type segment: tuple
+        :return: a pandas dataframe described in analogSignalDict2Pandas
+        :rtype: dataframe
+        :return: same dataframe with additional event channels
+        :rtype: data frame
+        """        
         # get Dict
         eventDict = segment[1]
 
@@ -175,7 +192,16 @@ class segmentSaver():
         return df
     
     def events2boolSignal(self,indArray,events):
- 
+        """ This function maps the time stamp of the event channel on to the time samples
+        of the analog channels and returns this information  as a boolean array.
+
+        :param indArray: time index as numpy array
+        :type indArray: numpy array
+        :param events: times in seconds when the event occured 
+        :type events: numpy array
+        :return: a boolean array where the occurences are mapped to the closest time index.
+        :rtype: numpy array dtype booleans
+        """        
         boolArray = np.full(indArray.shape,False)
         for occurence in events:
             absDiff = np.abs(indArray-occurence)
