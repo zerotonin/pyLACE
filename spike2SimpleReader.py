@@ -1,5 +1,5 @@
+import neo
 class spike2SimpleReader():
-    import neo
 
     def __init__(self,fileName):
         self.fileName      = fileName
