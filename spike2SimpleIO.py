@@ -111,13 +111,16 @@ class segmentSaver():
     
     def main(self):
 
+        segNum = len(self.s2sr)
+        c = 0
         for segment in self.s2sr.outPutData:
             #create data frame on the basis of the analogData
             df = self.analogSignalDict2Pandas(segment)
             # add events
             df = self.eventDict2Pandas(segment,df)
             #save to savePos
-            df.to_hdf(self.savePos, key='df', mode='w')
+            df.to_hdf(self.savePos[:-4]+f'_{c}_{segNum}'+self.savePos[-4::], key='df', mode='w')
+            c+=1
         return df
 
 
