@@ -1,4 +1,7 @@
 import neo
+import pandas as pd
+import numpy as np
+import quantities as pq
 class spike2SimpleReader():
     """
     This class loads simple smr files of the Cambridge Electronics Software
@@ -99,3 +102,56 @@ class spike2SimpleReader():
         """        
         self.readByNeo()
         self.readSegments()
+
+class segmentSaver():
+    
+    def __init__(self,spike2SimplerReaderobject,savePos):
+        self.s2sr     = spike2SimplerReaderobject
+        self.savePos  = savePos
+    
+    def main(self):
+
+        for segment in self.s2sr.outPutData:
+            #create data frame on the basis of the analogData
+            df = self.analogSignalDict2Pandas(segment)
+            # add events
+            df = self.eventDict2Pandas(segment,df)
+            #save to savePos
+            df.to_hdf(self.savePos, key='df', mode='w')
+        return df
+
+
+    def analogSignalDict2Pandas(self,segment):
+        # get Dict
+        aSigDict = segment[0]
+        # rescale time to seconds
+        aSigDict['time_s'] = aSigDict['time_s'].rescale(pq.s) 
+
+        for channel in  list(aSigDict.keys()):
+            aSigDict[channel] = np.array(aSigDict[channel]).flatten()
+        
+        df = pd.DataFrame(aSigDict)
+        df.set_index('time_s', inplace=True)
+        return df
+    
+    def eventDict2Pandas(self,segment,df):
+        # get Dict
+        eventDict = segment[1]
+
+        for channel in  list(eventDict.keys()):
+            # rescale time to seconds
+            times = eventDict[channel].rescale(pq.s) 
+            times = np.array(times.flatten())
+            df[channel] = self.events2boolSignal(df.index.to_numpy(),times)
+        
+        return df
+    
+    def events2boolSignal(self,indArray,events):
+ 
+        boolArray = np.full(indArray.shape,False)
+        for occurence in events:
+            absDiff = np.abs(indArray-occurence)
+            pos = absDiff.argmin()
+            boolArray[pos] = True
+
+        return boolArray
