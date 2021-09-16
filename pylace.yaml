@@ -22,4 +22,7 @@ dependencies:
       - lxml      
       - matplotlib
       - opencv-python
+      - tables # h5 saving for pandas
+      - pyarrow # for parquett saving in pandas
+      - fastparquet # for parquett saving in pandas
       - neo # for electrophysiological data
