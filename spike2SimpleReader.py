@@ -37,6 +37,7 @@ class spike2SimpleReader():
         for aSignal in seg.analogsignals:
             analogData[aSignal.name] = aSignal.magnitude
         return analogData
-
-
-
+    
+    def main(self):
+        self.readByNeo()
+        self.readSegments()
