@@ -104,14 +104,38 @@ class spike2SimpleReader():
         self.readSegments()
 
 class segmentSaver():
-    
+    """ This class writes the CED data read by the spike2SimpleReader to a pandas object.
+        The event channels are therefore changed into boolean arrays. NOTE! The event channel
+        is not subject to the sample frequency of the analog signals. This is changed here and 
+        the nearest sample point to the event is used for this event
+    """    
     def __init__(self,spike2SimplerReaderobject,savePos):
+        """ This function initializes the segment save class. It needs the reader object and the
+        position to which it should save the data, e.g. /destinationFolder/fileName.ext . It will
+        augment the save position so that the segments can be read, e.g. 
+
+        /destinationFolder/fileName_1_3.ext 
+        /destinationFolder/fileName_2_3.ext 
+        /destinationFolder/fileName_3_3.ext 
+
+        :param spike2SimplerReaderobject: the reader object
+        :type spike2SimplerReaderobject: python object
+        :param savePos: file position where to save the files
+        :type savePos: str
+        """        
         self.s2sr     = spike2SimplerReaderobject
         self.savePos  = savePos
     
     def main(self):
+        """This is the main function that will split the reader object
+        into dataframes which hold the data of each segment. Optionally
+        all segment-dataframes are returned in a list.
 
+        :return: a list of dataframes for each segment
+        :rtype: list of pandas dataframes
+        """        
         segNum = len(self.s2sr)
+        dataframeList = list()
         c = 0
         for segment in self.s2sr.outPutData:
             #create data frame on the basis of the analogData
@@ -121,7 +145,8 @@ class segmentSaver():
             #save to savePos
             df.to_hdf(self.savePos[:-4]+f'_{c}_{segNum}'+self.savePos[-4::], key='df', mode='w')
             c+=1
-        return df
+            dataframeList.append(df)
+        return dataframeList
 
 
     def analogSignalDict2Pandas(self,segment):
