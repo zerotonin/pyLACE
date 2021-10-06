@@ -134,7 +134,7 @@ class segmentSaver():
         :return: a list of dataframes for each segment
         :rtype: list of pandas dataframes
         """        
-        segNum = len(self.s2sr)
+        segNum = len(self.s2sr.outPutData)
         dataframeList = list()
         c = 0
         for segment in self.s2sr.outPutData:
