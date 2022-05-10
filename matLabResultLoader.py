@@ -23,7 +23,7 @@ class matLabResultLoader():
     
     def splitResults2Variables(self):
         # traceInfo
-        #
+        # 
         # col  1: x-position in pixel
         # col  2: y-position in pixel
         # col  3: major axis length of the fitted ellipse

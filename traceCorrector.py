@@ -9,8 +9,6 @@ class traceCorrector:
         # dictionary with the meta data and file positions
         self.dataDict = dataDict
 
-        # self known arena sizes
-        self.arena_sizes = {'cruise':(248,114),'c_start':(80,40),'counter_current':(167,45)}
 
         # read arena box
         if self.dataDict['csv'] == '':
@@ -163,20 +161,5 @@ class traceCorrector:
             self.refreshImage(True)
             plt.pause(0.001)
 
-    def interp_trace_mm(self,x_length,y_length,x_old,y_old):
-        """ If the user entered the wrong dimensions of the arena and therefore
-        wrongly calculated the mm trace this function can fix this. This
 
-        WARNING the translational velocities will be approximations
-
-        :param x_length: real x length of the arena
-        :type x_length: float
-        :param y_length: real y length of the arena
-        :type y_length: float
-        :param x_old: false x length of the arena
-        :type x_old: float
-        :param y_old: false y length of the arena
-        :type y_old: float
-        """
-        pass
 
