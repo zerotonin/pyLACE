@@ -1,4 +1,5 @@
 
+from cv2 import mixChannels
 from traceCorrector import traceCorrector
 import traceAnalyser
 import fishPlot
@@ -17,6 +18,9 @@ class fishRecAnalysis():
         self.dataDict['genotype'] = self.genName+'-'+self.dataDict['genotype']
         self.dataDict['birthDate'] = birthDate
         self.expStr   = expStr
+
+        # self known arena sizes experiment type key tuple is (y,x)
+        self.arena_sizes = {'cruise':(114,248),'c_start':(40,80),'counter_current':(45,167)}
     
     def makeSaveFolder(self):
         recNumber = len([os.path.join(self.dbPath, o) for o in os.listdir(self.dbPath)  if os.path.isdir(os.path.join(self.dbPath,o))])
@@ -27,12 +31,16 @@ class fishRecAnalysis():
 
     def correctionAnalysis(self):
         self.traCor = traceCorrector(self.dataDict)
+        # calibrate the movie if nescessary
         if self.traCor.mmTraceAvailable == False:
             self.traCor.calibrateTracking()
-        
+        # do pixel to mm conversion if nescessary
         self.traAna = traceAnalyser.traceAnalyser(self.traCor)
         if self.traCor.mmTraceAvailable == False:
             self.traAna.pixelTrajectories2mmTrajectories()
+        # check if coordinates are in arena
+        self.check_mm_trace()
+        # analysis depending on experiment type
         self.traAna.calculateSpatialHistogram()
         self.traAna.inZoneAnalyse()
         self.traAna.getUniformMidLine()
@@ -146,7 +154,74 @@ class fishRecAnalysis():
     
     def load3DMatrix(self,filePosition):
         temp = self.load2DMatrix(filePosition)
-        return temp.reshape(temp.shape[0], temp.shape[1] // arr.shape[2], arr.shape[2])
+        return temp.reshape(temp.shape[0], temp.shape[1] // temp.shape[2], temp.shape[2])
+
+    def check_mm_trace(self):
+        if self.expStr == 'CCur':
+            if np.max(self.traAna.trace_mm[:,0]) > self.arena_sizes['counter_current'][0] or np.max(self.traAna.trace_mm[:,1]) > self.arena_sizes['counter_current'][1]:
+                self.wrong_arena_dlg(self.arena_sizes['counter_current'])
+        elif self.expStr == 'Ta' or self.expStr == 'Unt' :
+            if np.max(self.traAna.trace_mm[:,0]) > self.arena_sizes['cruise'][0] or np.max(self.traAna.trace_mm[:,1]) > self.arena_sizes['cruise'][1]:
+                self.wrong_arena_dlg(self.arena_sizes['cruise'])
+        elif self.expStr == 'cst':
+            if np.max(self.traAna.trace_mm[:,0]) > self.arena_sizes['c_start'][0] or np.max(self.traAna.trace_mm[:,1]) > self.arena_sizes['c_start'][1]:
+                self.wrong_arena_dlg(self.arena_sizes['c_start'])
+        else:
+            raise ValueError('fishRecAnalysis: check_mm_trace: Unknown experiment type: ' + str(self.expStr))
+
+    
+    def wrong_arena_dlg(self,expected_size):
+        print('===============================================================================')
+        print('| The current file has trajectory coordinates outside the experimental setup! |')
+        print('===============================================================================')
+        print(' ')
+        print('analysed MatLab file: ', self.dataDict['anaMat'])
+        print('experiment string: ', self.expStr, ' | expected arena size (y,x): ', expected_size)
+        print('found maximal coordinates (y,x):', (np.max(self.traAna.trace_mm[:,0]),np.max(self.traAna.trace_mm[:,1])))
+
+        ans = 'x'
+        while ans not in 'ACTSN':
+            ans = input('Which arena was WRONGLY used? (A)bort, (C)ounter current, cruise (T)ank, C-(S)tart, or (N)one all is fine: ')
+            ans = ans.upper()
+
+        if ans == 'A':
+            raise ValueError('Aborted file due to user input: ' + self.dataDict['anaMat'])
+        elif ans == 'C':
+            self.interp_trace_mm(expected_size[0],expected_size[1],self.arena_sizes['counter_current'][0],self.arena_sizes['counter_current'][1])
+        elif ans == 'T':
+            self.interp_trace_mm(expected_size[0],expected_size[1],self.arena_sizes['cruise'][0],self.arena_sizes['cruise'][1])
+        elif ans == 'S':
+            self.interp_trace_mm(expected_size[0],expected_size[1],self.arena_sizes['c_start'][0],self.arena_sizes['c_start'][1])
+        else:
+            print('Nothing was changed')
+
+        pass
+    
+    def interp_trace_mm(self,y_length,x_length,y_old,x_old):
+        """ If the user entered the wrong dimensions of the arena and therefore
+        wrongly calculated the mm trace this function can fix this. This
+
+        WARNING the translational velocities will be approximations
+
+        :param y_length: real y length of the arena
+        :type y_length: float
+        :param x_length: real x length of the arena
+        :type x_length: float
+        :param y_old: false y length of the arena
+        :type y_old: float
+        :param x_old: false x length of the arena
+        :type x_old: float
+        """
+        y_factor = y_length/y_old
+        x_factor = x_length/x_old
+        mix_factor = (x_factor+y_factor)/2.0
+
+        self.traAna.trace_mm[:,0]=self.traAna.trace_mm[:,0]*y_factor
+        self.traAna.trace_mm[:,1]=self.traAna.trace_mm[:,1]*x_factor
+        self.traAna.trace_mm[:,3]=self.traAna.trace_mm[:,3]*mix_factor
+        self.traAna.trace_mm[:,4]=self.traAna.trace_mm[:,4]*mix_factor
+
+        self.traAna.medMaxVelocities[:,0:2] = self.traAna.medMaxVelocities[:,0:2]*mix_factor
 
 
 
