@@ -85,12 +85,21 @@ class traceAnalyser():
 
     def exportDataList(self):
         self.dataList = list()
-        self.dataList.append(['inZoneBendability', self.inZoneBendability,3])
-        self.dataList.append(['midLineUniform_mm', np.array(self.midLineUniform_mm),3])
-        self.dataList.append(['midLineUniform_pix',np.array(self.midLineUniform_pix),3])
-        self.dataList.append(['head_mm',self.head_mm,2])
-        self.dataList.append(['tail_mm',self.tail_mm,2])
-        self.dataList.append(['probDensity',self.probDensity,2])
+        if self.inZoneBendability != None:
+            self.dataList.append(['inZoneBendability', self.inZoneBendability,3])
+        if self.midLineUniform_mm != None:
+            self.dataList.append(['midLineUniform_mm', np.array(self.midLineUniform_mm),3])
+        if self.midLineUniform_pix != None:
+            self.dataList.append(['midLineUniform_pix',np.array(self.midLineUniform_pix),3])
+        if self.head_mm != None:
+            self.dataList.append(['head_mm',self.head_mm,2])
+        if self.tail_mm != None:
+            self.dataList.append(['tail_mm',self.tail_mm,2])
+        if self.probDensity != None:
+            self.dataList.append(['probDensity',self.probDensity,2])
+        if self.mm_tra_available == True:
+            self.dataList.append(['trace_mm',self.trace_mm,2])
+
         return self.dataList
 
     def makeMovieIDX(self):
