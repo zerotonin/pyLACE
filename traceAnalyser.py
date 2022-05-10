@@ -42,11 +42,11 @@ class traceAnalyser():
             self.arenaCoords_pix = traceCorrectorObj.boxCoords 
             self.sortCoordsArenaPix()
             self.makeInterpolator()
-            self.zoneMargins  = np.array([[40,11.5],[163,31.5]])
             self.trace_mm
         else:
             self.trace_mm = traceCorrectorObj.matLabLoader.trace
-
+        self.zoneMargins  = np.array([[40,11.5],[163,31.5]])
+        
         #preallocators
         self.exportDict           = traceCorrectorObj.dataDict
         self.inZoneFraction       = None
@@ -129,26 +129,34 @@ class traceAnalyser():
         else:
             allMidLine =  np.vstack((self.midLine_mm[:]))
             temp = np.histogram2d(allMidLine[:,0],allMidLine[:,1],bins,density=True)
-            self.probDensity  = temp[0].T
-            self.probDensity_xCenters = temp[1]
-            self.probDensity_yCenters = temp[2]
+        self.probDensity  = temp[0].T
+        self.probDensity_xCenters = temp[1]
+        self.probDensity_yCenters = temp[2]
 
 
     def calculateInZoneIDX(self):
         self.zoneIDX = list()
         for frameI in range(self.traceLenFrame):
             # shortHand
-            mL = self.midLine_mm[frameI]
-            # check if the whole body is inside the zone margins
-            # all is true when all are true
-            #    ... false when all are false            
-            #    ... false when one is true and the rest false
-            #    ... false when one is false and the rest true
-                       
-            boolTests = [(mL[:,0] >= self.zoneMargins[0,0]).all(),
-                         (mL[:,1] >= self.zoneMargins[0,1]).all(),
-                         (mL[:,0] <= self.zoneMargins[1,0]).all(),
-                         (mL[:,1] <= self.zoneMargins[1,1]).all()]
+            mmt = self.trace_mm[frameI,:]
+            if self. mm_tra_available:
+                boolTests = [(mmt[0] >= self.zoneMargins[0,0]),
+                             (mmt[1] >= self.zoneMargins[0,1]),
+                             (mmt[0] <= self.zoneMargins[1,0]),
+                             (mmt[1] <= self.zoneMargins[1,1])]
+            
+            else:
+                mL = self.midLine_mm[frameI]
+                # check if the whole body is inside the zone margins
+                # all is true when all are true
+                #    ... false when all are false            
+                #    ... false when one is true and the rest false
+                #    ... false when one is false and the rest true
+                        
+                boolTests = [(mL[:,0] >= self.zoneMargins[0,0]).all(),
+                            (mL[:,1] >= self.zoneMargins[0,1]).all(),
+                            (mL[:,0] <= self.zoneMargins[1,0]).all(),
+                            (mL[:,1] <= self.zoneMargins[1,1]).all()]
             
             if all(boolTests):
                 self.zoneIDX.append(True)
