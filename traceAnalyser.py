@@ -197,10 +197,8 @@ class traceAnalyser():
         return np.vstack((newX,newY)).T
     
     def getUniformMidLine(self,midLinePoints =10):
-        if self.mm_tra_available == True:
-            self.midLineUniform_pix = self.get_uniform_midline_subroutine(self.midLine_pix,midLinePoints)
-        else:
-            self.midLineUniform_pix = self.get_uniform_midline_subroutine(self.midLine_pix,midLinePoints)
+        self.midLineUniform_pix = self.get_uniform_midline_subroutine(self.midLine_pix,midLinePoints)
+        if self.mm_tra_available == False:
             self.midLineUniform_mm = self.get_uniform_midline_subroutine(self.midLine_mm,midLinePoints)
 
         
