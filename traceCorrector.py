@@ -8,24 +8,42 @@ class traceCorrector:
     def __init__(self,dataDict):
         # dictionary with the meta data and file positions
         self.dataDict = dataDict
+
+        # self known arena sizes
+        self.arena_sizes = {'cruise':(248,114),'c_start':(80,40),'counter_current':(167,45)}
+
         # read arena box
-        self.boxCoords = np.genfromtxt(self.dataDict['csv'],delimiter=',')      
+        if self.dataDict['csv'] == '':
+            self.mmTraceAvailable = True
+        else:
+            self.mmTraceAvailable = False
+            self.boxCoords = np.genfromtxt(self.dataDict['csv'],delimiter=',')      
 
         # load matlab data
         self.matLabLoader = matLabResultLoader(self.dataDict['anaMat'])
         self.matLabLoader.getData()
         # load movie file
-        self.mH = mediaHandler(self.dataDict['seq'],'norpix')
+        if self.dataDict['seq'] != '':
+            self.mH = mediaHandler(self.dataDict['seq'],'norpix')
+        elif self.dataDict['avi'] != '':
+            self.mH = mediaHandler(self.dataDict['avi'],'movie')
         
         #shorthands
         self.contour          = self.matLabLoader.traceContour
         self.head             = self.matLabLoader.traceHead
         self.tail             = self.matLabLoader.traceTail
         self.midLine          = self.matLabLoader.traceMidline
-        self.headerDict       = self.mH.media.header_dict
-        self.originFrame      = self.headerDict ['origin']
-        self.allocated_frames = self.headerDict['allocated_frames'] 
-        self.fps              = self.headerDict['suggested_frame_rate']  
+        if self.mH.modus == 'norpix':
+            self.headerDict       = self.mH.media.header_dict
+            self.originFrame      = self.headerDict ['origin']
+            self.allocated_frames = self.headerDict['allocated_frames'] 
+            self.fps              = self.headerDict['suggested_frame_rate'] 
+        elif self.mH.modus == 'movie':
+            self.headerDict       = None
+            self.originFrame      = 0
+            self.allocated_frames = self.mH.length 
+            self.fps              = self.mH.fps
+
         self.pixelOffset      = np.array([0.,0.])
         
         #preallocations
@@ -144,3 +162,21 @@ class traceCorrector:
             self.frameI = frameI
             self.refreshImage(True)
             plt.pause(0.001)
+
+    def interp_trace_mm(self,x_length,y_length,x_old,y_old):
+        """ If the user entered the wrong dimensions of the arena and therefore
+        wrongly calculated the mm trace this function can fix this. This
+
+        WARNING the translational velocities will be approximations
+
+        :param x_length: real x length of the arena
+        :type x_length: float
+        :param y_length: real y length of the arena
+        :type y_length: float
+        :param x_old: false x length of the arena
+        :type x_old: float
+        :param y_old: false y length of the arena
+        :type y_old: float
+        """
+        pass
+

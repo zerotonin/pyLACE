@@ -10,10 +10,10 @@ import matplotlib.pyplot as plt
 import fishRecAnalysis
 import fishDataBase
 
-
 multiFileFolder = '/media/gwdg-backup/BackUp/Vranda/data_counter_c-start/countercurrent_onefolder/rei_last_generation_11-2018'
+multiFileFolder = '/media/gwdg-backup/BackUp/Vranda/Finaldata_rei/Countercurrent_trials_rei/'
 db = fishDataBase.fishDataBase()
-db.runMultiTraceFolder(multiFileFolder,'rei','CCur','11-2018',startAt=13)
+db.runMultiTraceFolder(multiFileFolder,'rei','CCur','11-2018',startAt=0,)
 
 '''
 

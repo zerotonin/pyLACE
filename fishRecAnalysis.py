@@ -27,9 +27,12 @@ class fishRecAnalysis():
 
     def correctionAnalysis(self):
         self.traCor = traceCorrector(self.dataDict)
-        self.traCor.calibrateTracking()
+        if self.traCor.mmTraceAvailable == False:
+            self.traCor.calibrateTracking()
+        
         self.traAna = traceAnalyser.traceAnalyser(self.traCor)
-        self.traAna.pixelTrajectories2mmTrajectories()
+        if self.traCor.mmTraceAvailable == False:
+            self.traAna.pixelTrajectories2mmTrajectories()
         self.traAna.calculateSpatialHistogram()
         self.traAna.inZoneAnalyse()
         self.traAna.getUniformMidLine()

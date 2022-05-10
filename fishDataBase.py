@@ -54,7 +54,7 @@ class fishDataBase():
                 self.addDataBase(dbEntry)
                 self.saveDataBase()
             except:
-                print('The following directory could not be analysed: '+ dataDict['seq'])
+                print('The following directory could not be analysed: '+ dataDict['anaMat'])
 
 
     def addDataBase(self,dbEntry):

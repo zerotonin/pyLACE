@@ -1,10 +1,13 @@
 
+from sqlite3 import enable_shared_cache
 import numpy as np
 from scipy.interpolate import LinearNDInterpolator, interp1d
 
 class traceAnalyser():
 
     def __init__(self,traceCorrectorObj):
+        # some data already is completely analysed in MatLab than
+        self.mm_tra_available = traceCorrectorObj.mmTraceAvailable
 
         # fish data -> pixel based
         self.head_pix            = traceCorrectorObj.head 
@@ -22,9 +25,9 @@ class traceAnalyser():
         self.headerDict    = traceCorrectorObj.headerDict
         self.pixelOffset   = traceCorrectorObj.pixelOffset
         self.frameOffset   = traceCorrectorObj.frameShift
-        self.traceLenFrame = traceCorrectorObj.headerDict['allocated_frames']
-        self.originFrame   = traceCorrectorObj.headerDict['origin']
-        self.fps           = traceCorrectorObj.headerDict['suggested_frame_rate']
+        self.traceLenFrame = traceCorrectorObj.allocated_frames
+        self.originFrame   = traceCorrectorObj.originFrame
+        self.fps           = traceCorrectorObj.fps
         self.traceLenSec   = self.traceLenFrame/self.fps
         self.makeMovieIDX()
 
@@ -34,11 +37,15 @@ class traceAnalyser():
         self.animalNo = traceCorrectorObj.dataDict['animalNo']
 
         # arena coordinates 
-        self.arenaCoords_mm  = np.array([[0,0],[162,0],[162,43],[0,43]])
-        self.arenaCoords_pix = traceCorrectorObj.boxCoords 
-        self.sortCoordsArenaPix()
-        self.makeInterpolator()
-        self.zoneMargins  = np.array([[40,11.5],[163,31.5]])
+        if self.mm_tra_available == False:
+            self.arenaCoords_mm  = np.array([[0,0],[162,0],[162,43],[0,43]])
+            self.arenaCoords_pix = traceCorrectorObj.boxCoords 
+            self.sortCoordsArenaPix()
+            self.makeInterpolator()
+            self.zoneMargins  = np.array([[40,11.5],[163,31.5]])
+            self.trace_mm
+        else:
+            self.trace_mm = traceCorrectorObj.matLabLoader.trace
 
         #preallocators
         self.exportDict           = traceCorrectorObj.dataDict
@@ -54,6 +61,7 @@ class traceAnalyser():
         self.contour_mm           = None 
         self.midLine_mm           = None 
         self.probDensity          = None 
+
 
     def exportMetaDict(self):
         # advance exportDict
@@ -116,11 +124,14 @@ class traceAnalyser():
         self.midLine_mm = [self.interpolate2mm(x) for x in self.midLine_pix] 
 
     def calculateSpatialHistogram(self,bins=[16,8]):
-        allMidLine =  np.vstack((self.midLine_mm[:]))
-        temp = np.histogram2d(allMidLine[:,0],allMidLine[:,1],bins,density=True)
-        self.probDensity  = temp[0].T
-        self.probDensity_xCenters = temp[1]
-        self.probDensity_yCenters = temp[2]
+        if self.mm_tra_available:
+            temp = np.histogram2d(self.trace_mm[:,0],self.trace_mm [:,1],bins,density=True) 
+        else:
+            allMidLine =  np.vstack((self.midLine_mm[:]))
+            temp = np.histogram2d(allMidLine[:,0],allMidLine[:,1],bins,density=True)
+            self.probDensity  = temp[0].T
+            self.probDensity_xCenters = temp[1]
+            self.probDensity_yCenters = temp[2]
 
 
     def calculateInZoneIDX(self):

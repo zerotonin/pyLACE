@@ -21,6 +21,8 @@ start = 0
 fishPlot.midLinePlot(ax,traceMidline,start,stop,step,colormapStr,fps)
 plt.show()
 
+mrl.traceResult
+
 
 
 reload(fishPlot)

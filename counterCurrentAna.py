@@ -48,6 +48,12 @@ class sortMultiFileFolder():
             genotype,animalNo,sex =self.extractGenotypeNumberSex4intWT(fileNameUpper,'INTF')
         elif 'INTM' in fileNameUpper:
             genotype,animalNo,sex =self.extractGenotypeNumberSex4intWT(fileNameUpper,'INTM')
+        elif 'INTWF' in fileNameUpper:
+            fileNameUpper = fileNameUpper.replace('INTW','INT')
+            genotype,animalNo,sex =self.extractGenotypeNumberSex4intWT(fileNameUpper,'INTF')
+        elif 'INTWM'in fileNameUpper:
+            fileNameUpper = fileNameUpper.replace('INTW','INT')
+            genotype,animalNo,sex =self.extractGenotypeNumberSex4intWT(fileNameUpper,'INTM')
         else:
             genotype,animalNo,sex = ['N/A',-1,'N/A']
             print('file seems wrongly named: ',fileName)
