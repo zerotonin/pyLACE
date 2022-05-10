@@ -85,17 +85,17 @@ class traceAnalyser():
 
     def exportDataList(self):
         self.dataList = list()
-        if self.inZoneBendability != None:
+        if self.inZoneBendability:
             self.dataList.append(['inZoneBendability', self.inZoneBendability,3])
-        if self.midLineUniform_mm != None:
+        if self.midLineUniform_mm:
             self.dataList.append(['midLineUniform_mm', np.array(self.midLineUniform_mm),3])
-        if self.midLineUniform_pix != None:
+        if self.midLineUniform_pix:
             self.dataList.append(['midLineUniform_pix',np.array(self.midLineUniform_pix),3])
-        if self.head_mm != None:
+        if self.head_mm:
             self.dataList.append(['head_mm',self.head_mm,2])
-        if self.tail_mm != None:
+        if self.tail_mm:
             self.dataList.append(['tail_mm',self.tail_mm,2])
-        if self.probDensity != None:
+        if self.probDensity:
             self.dataList.append(['probDensity',self.probDensity,2])
         if self.mm_tra_available == True:
             self.dataList.append(['trace_mm',self.trace_mm,2])
@@ -176,8 +176,7 @@ class traceAnalyser():
         self.calculateInZoneIDX()
         self.inZoneFraction = sum(self.zoneIDX)/self.traceLenFrame
         self.inZoneDuration = self.inZoneFraction*self.traceLenSec
-        self.bendability = np.array(self.bendability)
-        self.inZoneBendability =list(self.bendability[self.zoneIDX].squeeze())
+        self.inZoneBendability = [i for indx,i in enumerate(self.bendability) if self.zoneIDX[indx] == True]
         self.medianDivergenceFromStraightInZone_DEG = np.median([np.sum(np.abs(x[:,1]-180)) for x in self.inZoneBendability])
 
     
