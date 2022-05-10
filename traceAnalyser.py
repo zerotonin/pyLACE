@@ -46,7 +46,7 @@ class traceAnalyser():
         else:
             self.trace_mm = traceCorrectorObj.matLabLoader.trace
         self.zoneMargins  = np.array([[40,11.5],[163,31.5]])
-        
+
         #preallocators
         self.exportDict           = traceCorrectorObj.dataDict
         self.inZoneFraction       = None
@@ -167,6 +167,7 @@ class traceAnalyser():
         self.calculateInZoneIDX()
         self.inZoneFraction = sum(self.zoneIDX)/self.traceLenFrame
         self.inZoneDuration = self.inZoneFraction*self.traceLenSec
+        self.bendability = np.array(self.bendability)
         self.inZoneBendability =list(self.bendability[self.zoneIDX].squeeze())
         self.medianDivergenceFromStraightInZone_DEG = np.median([np.sum(np.abs(x[:,1]-180)) for x in self.inZoneBendability])
 
