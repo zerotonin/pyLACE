@@ -197,16 +197,20 @@ class traceAnalyser():
         return np.vstack((newX,newY)).T
     
     def getUniformMidLine(self,midLinePoints =10):
-        self.midLineUniform_mm = list()
-        for mL in self.midLine_mm:
-            self.midLineUniform_mm.append(self.interpMidLine(mL,midLinePoints))
-        self.midLineUniform_pix = list()
-        for mL in self.midLine_pix:
-            self.midLineUniform_pix.append(self.interpMidLine(mL,midLinePoints))
+        if self.mm_tra_available == True:
+            self.midLineUniform_pix = self.get_uniform_midline_subroutine(self.midLine_pix,midLinePoints)
+        else:
+            self.midLineUniform_pix = self.get_uniform_midline_subroutine(self.midLine_pix,midLinePoints)
+            self.midLineUniform_mm = self.get_uniform_midline_subroutine(self.midLine_mm,midLinePoints)
+
         
+
+    def get_uniform_midline_subroutine(self,mid_line,mid_line_points):
+        mid_line_result = list()
+        for mL in mid_line:
+            mid_line_result.append(self.interpMidLine(mL,mid_line_points))
         # convert the list to
-        self.midLineUniform_mm  = np.array(self.midLineUniform_mm) 
-        self.midLineUniform_pix = np.array(self.midLineUniform_pix)
+        return np.array(mid_line_result)
 
         
 

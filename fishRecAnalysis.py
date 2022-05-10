@@ -41,8 +41,9 @@ class fishRecAnalysis():
         # check if coordinates are in arena
         self.check_mm_trace()
         # analysis depending on experiment type
-        self.traAna.calculateSpatialHistogram()
-        self.traAna.inZoneAnalyse()
+        if self.expStr == 'CCur':
+            self.traAna.calculateSpatialHistogram()
+            self.traAna.inZoneAnalyse()
         self.traAna.getUniformMidLine()
         self.traAna.exportMetaDict()
         self.dataList = self.traAna.exportDataList()
