@@ -226,8 +226,8 @@ class fishRecAnalysis():
         x_factor = x_length/x_old
         mix_factor = (x_factor+y_factor)/2.0
 
-        self.traAna.trace_mm[:,0]=self.traAna.trace_mm[:,0]*y_factor
-        self.traAna.trace_mm[:,1]=self.traAna.trace_mm[:,1]*x_factor
+        self.traAna.trace_mm[:,0]=self.traAna.trace_mm[:,0]*x_factor # matlab traces have x-coordinate in first position
+        self.traAna.trace_mm[:,1]=self.traAna.trace_mm[:,1]*y_factor # matlab traces have y-coordinate in second position
         self.traAna.trace_mm[:,3]=self.traAna.trace_mm[:,3]*mix_factor
         self.traAna.trace_mm[:,4]=self.traAna.trace_mm[:,4]*mix_factor
 

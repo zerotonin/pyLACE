@@ -85,17 +85,17 @@ class traceAnalyser():
 
     def exportDataList(self):
         self.dataList = list()
-        if self.inZoneBendability:
+        if not isinstance(self.inZoneBendability,type(None)):
             self.dataList.append(['inZoneBendability', self.inZoneBendability,3])
-        if self.midLineUniform_mm:
+        if not isinstance(self.midLineUniform_mm,type(None)):
             self.dataList.append(['midLineUniform_mm', np.array(self.midLineUniform_mm),3])
-        if self.midLineUniform_pix:
+        if not isinstance(self.midLineUniform_pix,type(None)):
             self.dataList.append(['midLineUniform_pix',np.array(self.midLineUniform_pix),3])
-        if self.head_mm:
+        if not isinstance(self.head_mm,type(None)):
             self.dataList.append(['head_mm',self.head_mm,2])
-        if self.tail_mm:
+        if not isinstance(self.tail_mm,type(None)):
             self.dataList.append(['tail_mm',self.tail_mm,2])
-        if self.probDensity:
+        if not isinstance(self.probDensity,type(None)):
             self.dataList.append(['probDensity',self.probDensity,2])
         if self.mm_tra_available == True:
             self.dataList.append(['trace_mm',self.trace_mm,2])
@@ -134,7 +134,7 @@ class traceAnalyser():
 
     def calculateSpatialHistogram(self,bins=[16,8]):
         if self.mm_tra_available:
-            temp = np.histogram2d(self.trace_mm[:,0],self.trace_mm [:,1],bins,density=True) 
+            temp = np.histogram2d(self.trace_mm[:,1],self.trace_mm [:,0],bins,density=True) # matlab trajectories are x than y therefore we have to flip the inices here
         else:
             allMidLine =  np.vstack((self.midLine_mm[:]))
             temp = np.histogram2d(allMidLine[:,0],allMidLine[:,1],bins,density=True)
