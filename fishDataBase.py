@@ -44,17 +44,19 @@ class fishDataBase():
         mff = sortMultiFileFolder(folderPos) 
         fileDict = mff.__main__()
         keys = [k for k in fileDict.keys()] 
+        allready_analysed_filenames = [os.path.basename(x) for x in self.dataBase.path2_anaMat]
 
         for key in tqdm(keys[startAt::],desc='analyse files'):
-            try:
-                dataDict = fileDict[key]
-                fRAobj= fishRecAnalysis.fishRecAnalysis(dataDict,genName,expString,birthDate)
-                fRAobj.correctionAnalysis()
-                dbEntry = fRAobj.saveDataFrames()
-                self.addDataBase(dbEntry)
-                self.saveDataBase()
-            except:
-                print('The following directory could not be analysed: '+ dataDict['anaMat'])
+            dataDict = fileDict[key]
+            if os.path.basename(dataDict['anaMat']) not in allready_analysed_filenames:
+                try:
+                    fRAobj= fishRecAnalysis.fishRecAnalysis(dataDict,genName,expString,birthDate)
+                    fRAobj.correctionAnalysis()
+                    dbEntry = fRAobj.saveDataFrames()
+                    self.addDataBase(dbEntry)
+                    self.saveDataBase()
+                except:
+                    print('The following directory could not be analysed: '+ dataDict['anaMat'])
 
 
     def addDataBase(self,dbEntry):
