@@ -97,19 +97,19 @@ class fishRecAnalysis():
         for data in self.dataList:
 
             if data[0] == 'inZoneBendability':
-                returnDict['inZoneBendability'] = self.makePandasDF_3D(self.dataList[1],'bodyAxis','angle')
+                returnDict['inZoneBendability'] = self.makePandasDF_3D(data[1],'bodyAxis','angle')
             elif data[0] =='midLineUniform_mm': 
-                returnDict['midLineUniform_mm'] = self.makePandasDF_3D(self.dataList[1],'x_coord','y_coord','Time')
+                returnDict['midLineUniform_mm'] = self.makePandasDF_3D(data[1],'x_coord','y_coord','Time')
             elif data[0] =='midLineUniform_pix': 
-                returnDict['midLineUniform_pix'] = self.makePandasDF_3D(self.dataList[1],'x_coord','y_coord','Time')
+                returnDict['midLineUniform_pix'] = self.makePandasDF_3D(data[1],'x_coord','y_coord','Time')
             elif data[0] =='head_mm': 
-                returnDict['head_mm'] = self.makePandasDF_2D(self.dataList[1],'x_coord','y_coord','Time')
+                returnDict['head_mm'] = self.makePandasDF_2D(data[1],'x_coord','y_coord','Time')
             elif data[0] =='tail_mm': 
-                returnDict['tail_mm'] = self.makePandasDF_2D(self.dataList[1],'x_coord','y_coord','Time')
+                returnDict['tail_mm'] = self.makePandasDF_2D(data[1],'x_coord','y_coord','Time')
             elif data[0] =='trace_mm': 
                 returnDict['trace_mm'] = pd.DataFrame(self.traAna.trace_mm,columns=['x_position_mm','y_position_mm','yaw_rad','thrust_m/s','slip_m/s','yaw_deg/s'])
-            elif data[0] =='': 
-                returnDict['probDensity']   = self.makePandasDF4Hist(self.dataList[1])
+            elif data[0] =='probDensity': 
+                returnDict['probDensity']   = self.makePandasDF4Hist(data[1])
         
         return returnDict
 
