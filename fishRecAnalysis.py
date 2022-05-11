@@ -117,9 +117,10 @@ class fishRecAnalysis():
         dataFrames = self.makeResultDFs()
         self.makeSaveFolder()
         for key in dataFrames.keys():
-            savePos = os.path.join(self.savePath,key+'.csv')
-            self.dataDict['path2_'+key] = savePos
-            dataFrames[key].to_csv(savePos)
+            if not isinstance(dataFrames[key],type(None)):
+                savePos = os.path.join(self.savePath,key+'.csv')
+                self.dataDict['path2_'+key] = savePos
+                dataFrames[key].to_csv(savePos)
         dbEntry = self.makeDataBaseEntry()
         return dbEntry
 
