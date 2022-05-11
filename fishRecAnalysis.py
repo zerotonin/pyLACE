@@ -77,10 +77,9 @@ class fishRecAnalysis():
         if index == 'Time':
             dataDF = self.getTimeIndex(dataDF)
         return dataDF
-    
-    def makePandasDF4Hist(self):
-        
-        data = self.dataList[-1][1]
+       
+    def makePandasDF4Hist(self,data):
+   
         streamAxis = np.linspace(0,162,data.shape[1]+2)
         orthoAxis  = np.linspace(0,43,data.shape[0]+2)
         columnLabels = ['streamAxisMM ' +str(int(x)) for x in streamAxis[1:-1]]
@@ -92,17 +91,27 @@ class fishRecAnalysis():
 
 
     def makeResultDFs(self):
+        returnDict = {'inZoneBendability': None,'midLineUniform_mm': None,
+                'midLineUniform_pix': None,'head_mm': None,
+                'tail_mm': None,'probDensity': None,'trace_mm':None}
+        for data in self.dataList:
 
-        inZoneBendability   = self.makePandasDF_3D(self.dataList[0][1],'bodyAxis','angle')
-        midLineUniform_mm  = self.makePandasDF_3D(self.dataList[1][1],'x_coord','y_coord','Time')
-        midLineUniform_pix = self.makePandasDF_3D(self.dataList[2][1],'x_coord','y_coord','Time')
-        head_mm = self.makePandasDF_2D(self.dataList[3][1],'x_coord','y_coord','Time')
-        tail_mm = self.makePandasDF_2D(self.dataList[4][1],'x_coord','y_coord','Time')
-        probDensity   = self.makePandasDF4Hist()
+            if data[0] == 'inZoneBendability':
+                returnDict['inZoneBendability'] = self.makePandasDF_3D(self.dataList[1],'bodyAxis','angle')
+            elif data[0] =='midLineUniform_mm': 
+                returnDict['midLineUniform_mm'] = self.makePandasDF_3D(self.dataList[1],'x_coord','y_coord','Time')
+            elif data[0] =='midLineUniform_pix': 
+                returnDict['midLineUniform_pix'] = self.makePandasDF_3D(self.dataList[1],'x_coord','y_coord','Time')
+            elif data[0] =='head_mm': 
+                returnDict['head_mm'] = self.makePandasDF_2D(self.dataList[1],'x_coord','y_coord','Time')
+            elif data[0] =='tail_mm': 
+                returnDict['tail_mm'] = self.makePandasDF_2D(self.dataList[1],'x_coord','y_coord','Time')
+            elif data[0] =='trace_mm': 
+                returnDict['trace_mm'] = pd.DataFrame(self.traAna.trace_mm,columns=['x_position_mm','y_position_mm','yaw_rad','thrust_m/s','slip_m/s','yaw_deg/s'])
+            elif data[0] =='': 
+                returnDict['probDensity']   = self.makePandasDF4Hist(self.dataList[1])
         
-        return {'inZoneBendability': inZoneBendability,'midLineUniform_mm': midLineUniform_mm,
-                'midLineUniform_pix': midLineUniform_pix,'head_mm': head_mm,
-                'tail_mm': tail_mm,'probDensity': probDensity}
+        return returnDict
 
     def saveDataFrames(self):
         dataFrames = self.makeResultDFs()
