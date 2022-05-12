@@ -39,7 +39,7 @@ class fishRecAnalysis():
         if self.traCor.mmTraceAvailable == False:
             self.traAna.pixelTrajectories2mmTrajectories()
         # check if coordinates are in arena
-        self.check_mm_trace()
+        self.check_mm_trace(default_answer='x')
         # analysis depending on experiment type
         if self.expStr == 'CCur':
             self.traAna.calculateSpatialHistogram()
@@ -167,21 +167,21 @@ class fishRecAnalysis():
         temp = self.load2DMatrix(filePosition)
         return temp.reshape(temp.shape[0], temp.shape[1] // temp.shape[2], temp.shape[2])
 
-    def check_mm_trace(self):
+    def check_mm_trace(self,default_answer='x'):
         if self.expStr == 'CCur':
             if np.max(self.traAna.trace_mm[:,0]) > self.arena_sizes['counter_current'][0] or np.max(self.traAna.trace_mm[:,1]) > self.arena_sizes['counter_current'][1]:
-                self.wrong_arena_dlg(self.arena_sizes['counter_current'])
+                self.wrong_arena_dlg(self.arena_sizes['counter_current'],default_answer)
         elif self.expStr == 'Ta' or self.expStr == 'Unt' :
             if np.max(self.traAna.trace_mm[:,0]) > self.arena_sizes['cruise'][0] or np.max(self.traAna.trace_mm[:,1]) > self.arena_sizes['cruise'][1]:
-                self.wrong_arena_dlg(self.arena_sizes['cruise'])
+                self.wrong_arena_dlg(self.arena_sizes['cruise'],default_answer)
         elif self.expStr == 'cst':
             if np.max(self.traAna.trace_mm[:,0]) > self.arena_sizes['c_start'][0] or np.max(self.traAna.trace_mm[:,1]) > self.arena_sizes['c_start'][1]:
-                self.wrong_arena_dlg(self.arena_sizes['c_start'])
+                self.wrong_arena_dlg(self.arena_sizes['c_start'],default_answer)
         else:
             raise ValueError('fishRecAnalysis: check_mm_trace: Unknown experiment type: ' + str(self.expStr))
 
     
-    def wrong_arena_dlg(self,expected_size):
+    def wrong_arena_dlg(self,expected_size,default_answer='x'):
         print('===============================================================================')
         print('| The current file has trajectory coordinates outside the experimental setup! |')
         print('===============================================================================')
@@ -190,18 +190,17 @@ class fishRecAnalysis():
         print('experiment string: ', self.expStr, ' | expected arena size (y,x): ', expected_size)
         print('found maximal coordinates (y,x):', (np.max(self.traAna.trace_mm[:,0]),np.max(self.traAna.trace_mm[:,1])))
 
-        ans = 'x'
-        while ans not in 'ACTSN':
-            ans = input('Which arena was WRONGLY used? (A)bort, (C)ounter current, cruise (T)ank, C-(S)tart, or (N)one all is fine: ')
-            ans = ans.upper()
+        while default_answer not in 'ACTSN':
+            default_answer = input('Which arena was WRONGLY used? (A)bort, (C)ounter current, cruise (T)ank, C-(S)tart, or (N)one all is fine: ')
+            default_answer = default_answer.upper()
 
-        if ans == 'A':
+        if default_answer == 'A':
             raise ValueError('Aborted file due to user input: ' + self.dataDict['anaMat'])
-        elif ans == 'C':
+        elif default_answer == 'C':
             self.interp_trace_mm(expected_size[0],expected_size[1],self.arena_sizes['counter_current'][0],self.arena_sizes['counter_current'][1])
-        elif ans == 'T':
+        elif default_answer == 'T':
             self.interp_trace_mm(expected_size[0],expected_size[1],self.arena_sizes['cruise'][0],self.arena_sizes['cruise'][1])
-        elif ans == 'S':
+        elif default_answer == 'S':
             self.interp_trace_mm(expected_size[0],expected_size[1],self.arena_sizes['c_start'][0],self.arena_sizes['c_start'][1])
         else:
             print('Nothing was changed')
