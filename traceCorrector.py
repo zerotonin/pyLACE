@@ -58,6 +58,9 @@ class traceCorrector:
         self.fig,self.ax = plt.subplots()
         self.fig.canvas.mpl_connect('key_press_event', self.on_press)
 
+    def close_figure(self):
+        plt.close(self.fig)
+
     def calculateCoordShift(self,bufferShift):
         imageWidth = self.mH.imageWidth # shorthand
         xShift = int(bufferShift%imageWidth)  # modulo
