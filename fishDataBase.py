@@ -65,6 +65,7 @@ class fishDataBase():
     def integrateDataBase(self,db_to_integrate_fPos):
         # shorthand
         new_df = pd.read_csv(db_to_integrate_fPos)
+        del new_df['Unnamed: 0']
         self.database  = self.database.append(new_df,ignore_index=True)
     
     def saveDataBase(self):
