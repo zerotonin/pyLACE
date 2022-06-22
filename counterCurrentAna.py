@@ -5,9 +5,10 @@ import scipy.io
 
 class sortMultiFileFolder():
 
-    def __init__(self,sourcePath):
+    def __init__(self,sourcePath,experiment_string):
         self.sourcePath = sourcePath
         self.fileDict   = dict()
+        self.experiment_string = experiment_string
 
     def extractGenotypeNumberSex(self,string,tag):
         index = string.find(tag)
@@ -75,6 +76,7 @@ class sortMultiFileFolder():
         dataDict['genotype'] = fileDataTuple[0] 
         dataDict['sex']      = fileDataTuple[2]
         dataDict['animalNo'] = fileDataTuple[1]
+        dataDict['expType'] = self.experiment_string
         dataDict['smr']      = '' 
         dataDict['s2r']      = ''
         dataDict['seq']      = ''
