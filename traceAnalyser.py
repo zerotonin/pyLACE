@@ -61,6 +61,7 @@ class traceAnalyser():
         self.contour_mm           = None 
         self.midLine_mm           = None 
         self.probDensity          = None 
+        self.medianDivergenceFromStraightInZone_DEG =None
 
 
     def exportMetaDict(self):
