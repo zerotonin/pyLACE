@@ -29,7 +29,7 @@ class fishDataBase():
                 self.initDataBase()
     
     def initDataBase(self):
-        dataBaseFields = ['genotype', 'sex', 'animalNo', 'birthDate','fps', 'traceLenFrame', 
+        dataBaseFields = ['genotype', 'sex', 'animalNo','expType', 'birthDate','fps', 'traceLenFrame', 
                   'traceLenSec', 'inZoneFraction', 'inZoneDuration', 
                   'inZoneMedDiverg_Deg', 'path2_inZoneBendability', 
                   'path2_midLineUniform_mm', 'path2_midLineUniform_pix', 
@@ -41,7 +41,7 @@ class fishDataBase():
         self.saveDataBase()
     
     def runMultiTraceFolder(self,folderPos,genName,expString,birthDate,startAt=0):
-        mff = sortMultiFileFolder(folderPos) 
+        mff = sortMultiFileFolder(folderPos,expString) 
         fileDict = mff.__main__()
         keys = [k for k in fileDict.keys()] 
         allready_analysed_filenames = [os.path.basename(x) for x in self.dataBase.path2_anaMat]
