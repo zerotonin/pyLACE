@@ -15,7 +15,7 @@ multiFileFolder = '/media/gwdg-backup/BackUp/Vranda/data_counter_c-start/counter
 multiFileFolder = '/media/gwdg-backup/BackUp/Vranda/Finaldata_rei/Motivated_trials_rei'
 db = fishDataBase.fishDataBase()
 # Experiment types CCur counter current , Ta tapped, Unt untapped, cst, c-startz
-db.runMultiTraceFolder(multiFileFolder,'rei','Ta','11-2018',startAt=0)
+db.runMultiTraceFolder(multiFileFolder,'rei','Ta','11-2018',start_at=0)
 
 
 
@@ -34,8 +34,8 @@ dbEntry = fRAobj.saveDataFrames()
 
 
 
-hist_dict = dict((k,[]) for k in db.dataBase['genotype'].unique())
-for i,row in db.dataBase.iterrows():
+hist_dict = dict((k,[]) for k in db.database['genotype'].unique())
+for i,row in db.database.iterrows():
     genotype = row['genotype']
     hist = np.genfromtxt(row['path2_probDensity'],delimiter=',')
     hist_dict[genotype].append(hist)
@@ -74,12 +74,12 @@ db = fishDataBase.fishDataBase()
 for parameter in ['inZoneFraction', 'inZoneDuration','inZoneMedDiverg_Deg']:
     plt.figure()
     sns.boxplot(x="genotype", y=parameter, order=['rei-INT', 'rei-HT', 'rei-HM'],
-            hue="sex", data=db.dataBase)
+            hue="sex", data=db.database)
 
 plt.show()
 
 
 
-df = db.dataBase
+df = db.database
 df_unt = df.loc[df.exp]
 '

@@ -16,7 +16,7 @@ multiFileFolder = '/media/gwdg-backup/BackUp/Vranda/data_counter_c-start/counter
 multiFileFolder = '/media/gwdg-backup/BackUp/Vranda/Finaldata_rei/Countercurrent_trials_rei'
 db = fishDataBase.fishDataBase()
 # Experiment types CCur counter current , Ta tapped, Unt untapped, cst, c-startz
-db.runMultiTraceFolder(multiFileFolder,'rei','CCur','11-2018',startAt=0)
+db.runMultiTraceFolder(multiFileFolder,'rei','CCur','11-2018',start_at=0)
 
 
 def analyse_trace(trace_df,fps,activity_tresh= (0.1,0.1,100)):
@@ -37,7 +37,7 @@ def analyse_trace(trace_df,fps,activity_tresh= (0.1,0.1,100)):
             'cruising_yaw_mean_m/s', 'cruising_thrust_median_m/s', 'cruising_slip_median_m/s', 'cruising_yaw_median_m/s', 'activity_duration_s', 'activity_fraction', 'sec_to_first_stop']
     return dict(zip(keys,data))
 
-df = db.dataBase
+df = db.database
 speed_data = list()
 for i,row in tqdm(df.iterrows()):
     trace_df = pd.read_csv(row.path2_trace_mm)
