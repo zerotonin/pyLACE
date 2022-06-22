@@ -76,7 +76,7 @@ class sortMultiFileFolder():
         dataDict['genotype'] = fileDataTuple[0] 
         dataDict['sex']      = fileDataTuple[2]
         dataDict['animalNo'] = fileDataTuple[1]
-        dataDict['expType'] = self.experiment_string
+        dataDict['expType']  = self.get_full_experiment_name()
         dataDict['smr']      = '' 
         dataDict['s2r']      = ''
         dataDict['seq']      = ''
@@ -85,6 +85,18 @@ class sortMultiFileFolder():
         dataDict['anaMat']   = ''
         return dataDict       
     
+    def get_full_experiment_name(self):
+        if self.experiment_string == 'CCur':
+            return 'counter current'
+        elif self.experiment_string == 'Ta':
+            return 'motivated swimming'
+        elif self.experiment_string == 'Unt':
+            return 'free swiming'
+        elif self.experiment_string == 'cst':
+            return 'c-start'
+        else:
+            raise ValueError(f'sortMultiFileFolder: get_full_experiment_name: unknown experiment sting: f{self.experiment_string}')
+
     def updateDataDict(self,dataSetKey,fileDataTuple,filePath):
         # with matlab files there can always be results_ana.mat and results.mat
         if fileDataTuple[3] == 'mat':
