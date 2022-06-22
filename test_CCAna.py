@@ -14,6 +14,7 @@ import seaborn as sns
 multiFileFolder = '/media/gwdg-backup/BackUp/Vranda/data_counter_c-start/countercurrent_onefolder/rei_last_generation_11-2018'
 multiFileFolder = '/media/gwdg-backup/BackUp/Vranda/Finaldata_rei/Motivated_trials_rei'
 db = fishDataBase.fishDataBase()
+# Experiment types CCur counter current , Ta tapped, Unt untapped, cst, c-startz
 db.runMultiTraceFolder(multiFileFolder,'rei','Ta','11-2018',startAt=0)
 
 
