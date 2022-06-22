@@ -34,6 +34,7 @@ class fishRecAnalysis():
         # calibrate the movie if nescessary
         if self.traCor.mmTraceAvailable == False:
             self.traCor.calibrateTracking()
+        self.traCor.close_figure()
         # do pixel to mm conversion if nescessary
         self.traAna = traceAnalyser.traceAnalyser(self.traCor)
         if self.traCor.mmTraceAvailable == False:
