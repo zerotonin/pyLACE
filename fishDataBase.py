@@ -12,9 +12,9 @@ class fishDataBase():
             self.data_base_file_position = os.path.join(self.database_path,'fishDataBase.csv')
         else:
             self.data_base_file_position = data_base_file_position
-        self.loadDataBase()
+        self.load_database()
 
-    def loadDataBase(self):
+    def load_database(self):
         try:
             self.database = pd.read_csv(self.data_base_file_position)
             del self.database['Unnamed: 0']
@@ -26,41 +26,41 @@ class fishDataBase():
             if answer == 'n':
                 raise ValueError('Cannot read fish data base')
             else:
-                self.initDataBase()
+                self.init_database()
     
-    def initDataBase(self):
-        dataBaseFields = ['genotype', 'sex', 'animalNo','expType', 'birthDate','fps', 'traceLenFrame', 
+    def init_database(self):
+        data_base_fields = ['genotype', 'sex', 'animalNo','expType', 'birthDate','fps', 'traceLenFrame', 
                   'traceLenSec', 'inZoneFraction', 'inZoneDuration', 
                   'inZoneMedDiverg_Deg', 'path2_inZoneBendability', 
                   'path2_midLineUniform_mm', 'path2_midLineUniform_pix', 
                   'path2_head_mm', 'path2_tail_mm', 'path2_probDensity', 
                   'path2_smr', 'path2_s2r', 'path2_seq', 'path2_csv', 
                   'path2_mat', 'path2_anaMat']
-        self.database = pd.DataFrame([],columns=dataBaseFields)
+        self.database = pd.DataFrame([],columns=data_base_fields)
         self.database.to_csv(self.data_base_file_position)
         self.saveDataBase()
     
-    def runMultiTraceFolder(self,folderPos,genName,expString,birthDate,startAt=0):
-        mff = sortMultiFileFolder(folderPos,expString) 
-        fileDict = mff.__main__()
-        keys = [k for k in fileDict.keys()] 
+    def runMultiTraceFolder(self,folder_position,gene_name,experiment_str,birth_date,start_at=0):
+        mff = sortMultiFileFolder(folder_position,experiment_str) 
+        file_dictionary = mff.__main__()
+        keys = [k for k in file_dictionary.keys()] 
         allready_analysed_filenames = [os.path.basename(x) for x in self.database.path2_anaMat]
 
-        for key in tqdm(keys[startAt::],desc='analyse files'):
-            dataDict = fileDict[key]
-            if os.path.basename(dataDict['anaMat']) not in allready_analysed_filenames:
+        for key in tqdm(keys[start_at::],desc='analyse files'):
+            data_dictionary = file_dictionary[key]
+            if os.path.basename(data_dictionary['anaMat']) not in allready_analysed_filenames:
                 try:
-                    fRAobj= fishRecAnalysis.fishRecAnalysis(dataDict,genName,expString,birthDate)
+                    fRAobj= fishRecAnalysis.fishRecAnalysis(data_dictionary,gene_name,experiment_str,birth_date)
                     fRAobj.correctionAnalysis()
-                    dbEntry = fRAobj.saveDataFrames()
-                    self.addDataBase(dbEntry)
+                    database_entry = fRAobj.saveDataFrames()
+                    self.addDataBase(database_entry)
                     self.saveDataBase()
                 except:
-                    print('The following directory could not be analysed: '+ dataDict['anaMat'])
+                    print('The following directory could not be analysed: '+ data_dictionary['anaMat'])
 
 
-    def addDataBase(self,dbEntry):
-        self.database  = self.database.append(dbEntry,ignore_index=True)
+    def addDataBase(self,database_entry):
+        self.database  = self.database.append(database_entry,ignore_index=True)
 
     def integrateDataBase(self,db_to_integrate_fPos):
         # shorthand
