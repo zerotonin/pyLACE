@@ -1,5 +1,4 @@
-
-from cv2 import mixChannels
+#import cv2
 from traceCorrector import traceCorrector
 import traceAnalyser
 import fishPlot

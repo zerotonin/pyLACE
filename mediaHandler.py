@@ -1,7 +1,7 @@
 import pims,tqdm,os
 import numpy as np
 from vidstab import VidStab, layer_overlay, download_ostrich_video
-from cv2 import cv2
+import cv2
 
 
 class mediaHandler():
