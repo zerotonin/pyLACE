@@ -8,6 +8,9 @@ class fishDataBase():
 
     def __init__(self,data_base_path = '/media/gwdg-backup/BackUp/Zebrafish/pythonDatabase',data_base_file_position = None):
         self.database_path  = data_base_path
+        self.data_paths = ['path2_inZoneBendability',
+                           'path2_midLineUniform_mm', 'path2_midLineUniform_pix', 'path2_head_mm',
+                           'path2_tail_mm', 'path2_probDensity', 'path2_trace_mm']
         if data_base_file_position == None:
             self.data_base_file_position = os.path.join(self.database_path,'fishDataBase.csv')
         else:
@@ -67,7 +70,17 @@ class fishDataBase():
         new_df = pd.read_csv(db_to_integrate_fPos)
         del new_df['Unnamed: 0']
         self.database  = self.database.append(new_df,ignore_index=True)
-    
+
+    def rebase_paths(self,default_path='/media/gwdg-backup/BackUp/Zebrafish/pythonDatabase'):
+        """This function rebases all database entry paths to the position of the databases csv file.
+
+
+        Args:
+            default_path (str, optional): This is the current path you want to replace. Defaults to '/media/gwdg-backup/BackUp/Zebrafish/pythonDatabase'.
+        """
+        for path_column in self.data_paths:
+            self.database[path_column] = self.database[path_column].replace({default_path:self.database_path}, regex=True)
+
     def saveDataBase(self):
         print(self.data_base_file_position)
         self.database.to_csv(self.data_base_file_position)
