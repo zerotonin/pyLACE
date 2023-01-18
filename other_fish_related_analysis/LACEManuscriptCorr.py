@@ -1,6 +1,6 @@
 from enum import auto
 from os import minor
-import matLabResultLoader
+import data_handlers.matLabResultLoader as matLabResultLoader
 from importlib import reload
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm

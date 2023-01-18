@@ -3,7 +3,7 @@ from sre_compile import isstring
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import fishDataBase
+import fish_data_base.fishDataBase as fishDataBase
 import seaborn as sns
 from tqdm import tqdm
 import speed_analyser

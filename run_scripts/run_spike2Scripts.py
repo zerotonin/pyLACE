@@ -4,7 +4,7 @@ import pandas as pd
 from pandas.core import api
 from pandas.core.arrays.boolean import BooleanArray
 import quantities as pq
-import spike2SimpleIO 
+import data_handlers.spike2SimpleIO as spike2SimpleIO 
 import seaborn as sns
 import matplotlib.pyplot as plt
 

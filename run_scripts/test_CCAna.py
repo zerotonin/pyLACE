@@ -1,21 +1,21 @@
 from importlib import reload
 import numpy as np
 import pandas as pd
-from mediaHandler import mediaHandler
+from data_handlers.mediaHandler import mediaHandler
 from traceCorrector import traceCorrector
 from counterCurrentAna import sortMultiFileFolder
 import traceAnalyser
 import fishPlot
 import matplotlib.pyplot as plt
 import fishRecAnalysis
-import fishDataBase
+import fish_data_base.fishDataBase as fishDataBase
 import seaborn as sns
 
 multiFileFolder = '/media/gwdg-backup/BackUp/Vranda/data_counter_c-start/countercurrent_onefolder/rei_last_generation_11-2018'
 multiFileFolder = '/media/gwdg-backup/BackUp/Vranda/Finaldata_rei/Motivated_trials_rei'
 db = fishDataBase.fishDataBase()
 # Experiment types CCur counter current , Ta tapped, Unt untapped, cst, c-startz
-db.runMultiTraceFolder(multiFileFolder,'rei','Ta','11-2018',start_at=0)
+db.run_multi_trace_folder(multiFileFolder,'rei','Ta','11-2018',start_at=0)
 
 
 
