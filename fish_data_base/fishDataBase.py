@@ -1,6 +1,6 @@
 import pandas as pd
 import os, fishRecAnalysis
-from counterCurrentAna import sortMultiFileFolder
+from fish_data_base.counterCurrentAna import sortMultiFileFolder
 from tqdm import tqdm
 
 class fishDataBase():

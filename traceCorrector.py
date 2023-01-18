@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from matLabResultLoader import matLabResultLoader
-from mediaHandler import mediaHandler
+from data_handlers.matLabResultLoader import matLabResultLoader
+from data_handlers.mediaHandler import mediaHandler
 from fishPlot import frameOverlay
 class traceCorrector:
 

@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks
 from tqdm import tqdm
-import os,matLabResultLoader,glob
+import os,data_handlers.matLabResultLoader as matLabResultLoader,glob
 
 def exact_mc_perm_test(xs, ys, nmc):
     n, k = len(xs), 0

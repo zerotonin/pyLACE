@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from data_handlers.mediaHandler import mediaHandler
 from traceCorrector import traceCorrector
-from counterCurrentAna import sortMultiFileFolder
+from fish_data_base.counterCurrentAna import sortMultiFileFolder
 import traceAnalyser
 import fishPlot
 import matplotlib.pyplot as plt
