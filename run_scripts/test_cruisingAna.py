@@ -9,9 +9,9 @@ from tqdm import tqdm
 import trace_analysis.speed_analyser as speed_analyser
 
 #%%
-multiFileFolder = '/media/gwdg-backup/BackUp/Vranda/data_counter_c-start/countercurrent_onefolder/rei_last_generation_11-2018'
-multiFileFolder = '/media/gwdg-backup/BackUp/Vranda/Finaldata_rei/Countercurrent_trials_rei'
-db = fishDataBase.fishDataBase("/home/bgeurten/fishDataBase/")
+#multiFileFolder = '/media/gwdg-backup/BackUp/Vranda/data_counter_c-start/countercurrent_onefolder/rei_last_generation_11-2018'
+#multiFileFolder = '/media/gwdg-backup/BackUp/Vranda/Finaldata_rei/Countercurrent_trials_rei'
+#db = fishDataBase.fishDataBase("/home/bgeurten/fishDataBase/")
 # Experiment types CCur counter current , Ta tapped, Unt untapped, cst, c-startz
 #db.runMultiTraceFolder(multiFileFolder,'rei','CCur','11-2018',start_at=0)
 #%%
@@ -29,7 +29,7 @@ for i,row in tqdm(df.iterrows()):
         trace_df = pd.read_csv(row.path2_head_mm)
     sa.fps = row.fps
     sa.trace_df = trace_df
-    speed_data.append(sa.analyse_fish_speed_df())
+    speed_data.append(sa.analyse_fish_speed())
 speed_df = pd.concat([df[['genotype', 'sex', 'animalNo', 'expType', 'birthDate']],pd.DataFrame(speed_data)],axis=1)
 
 

@@ -94,7 +94,7 @@ class SpeedAnalyser:
         data = self.calculate_central_speed_values(self.all_speed)
         data += self.calculate_central_speed_values(self.cruise_speed)
 
-        activity_start_end = index_tools.bool_seq_to_start_end_indices(self.activity)
+        activity_start_end = index_tools.bool_Seq2start_end_indices(self.activity)
         data.append(self.activity.sum() / self.fps)
         data.append(self.activity.sum() / self.activity.shape[0])
         data.append(self.activity[::-1].idxmax() / self.fps)
