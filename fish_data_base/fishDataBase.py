@@ -17,7 +17,8 @@ class fishDataBase():
         self.database_path  = database_path
         self.data_paths = ['path2_inZoneBendability',
                            'path2_midLineUniform_mm', 'path2_midLineUniform_pix', 'path2_head_mm',
-                           'path2_tail_mm', 'path2_probDensity', 'path2_trace_mm']
+                           'path2_tail_mm', 'path2_probDensity', 'path2_trace_mm', 'path2_probDensity', 'path2_smr',
+                           'path2_csv']
         if database_file_position == None:
             self.database_file_position = os.path.join(self.database_path,'fishDataBase.csv')
         else:
