@@ -11,14 +11,14 @@ import trace_analysis.speed_analyser as speed_analyser
 #%%
 multiFileFolder = '/media/gwdg-backup/BackUp/Vranda/data_counter_c-start/countercurrent_onefolder/rei_last_generation_11-2018'
 multiFileFolder = '/media/gwdg-backup/BackUp/Vranda/Finaldata_rei/Countercurrent_trials_rei'
-db = fishDataBase.fishDataBase("/home/bgeurten/fishDataBase")
+db = fishDataBase.fishDataBase("/home/bgeurten/fishDataBase/")
 # Experiment types CCur counter current , Ta tapped, Unt untapped, cst, c-startz
 #db.runMultiTraceFolder(multiFileFolder,'rei','CCur','11-2018',start_at=0)
 #%%
 db = fishDataBase.fishDataBase("/home/bgeurten/fishDataBase",'/home/bgeurten/fishDataBase/fishDataBase_cruise.csv')
 db.rebase_paths()
 
-sa = speed_analyser.speed_analyser(501)
+sa = speed_analyser.SpeedAnalyser(501)
 
 df = db.database
 speed_data = list()
