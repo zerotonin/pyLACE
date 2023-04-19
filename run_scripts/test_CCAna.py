@@ -7,7 +7,7 @@ from fish_data_base.counterCurrentAna import sortMultiFileFolder
 import traceAnalyser
 import fishPlot
 import matplotlib.pyplot as plt
-import fishRecAnalysis
+import fish_data_base.fishRecAnalysis as fishRecAnalysis
 import fish_data_base.fishDataBase as fishDataBase
 import seaborn as sns
 
@@ -82,4 +82,3 @@ plt.show()
 
 df = db.database
 df_unt = df.loc[df.exp]
-'
