@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import fish_data_base.fishDataBase as fishDataBase
 import seaborn as sns
 from tqdm import tqdm
-import speed_analyser
+import trace_analysis.speed_analyser as speed_analyser
 
 #%%
 multiFileFolder = '/media/gwdg-backup/BackUp/Vranda/data_counter_c-start/countercurrent_onefolder/rei_last_generation_11-2018'
