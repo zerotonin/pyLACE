@@ -31,7 +31,7 @@ for i,row in tqdm(df.iterrows()):
     sa.trace_df = trace_df
     speed_data.append(sa.analyse_fish_speed())
 speed_df = pd.concat([df[['genotype', 'sex', 'animalNo', 'expType', 'birthDate']],pd.DataFrame(speed_data)],axis=1)
-
+#speed_df.to_csv("/home/bgeurten/PyProjects/reRandomStats/Data/rei_kinematic_data.csv", index=False)
 
 import seaborn as sns
 for expType in [('Ta','motivated swimming'),('Unt','free swimming')]:
@@ -40,8 +40,8 @@ for expType in [('Ta','motivated swimming'),('Unt','free swimming')]:
                       'cruising_slip_median_m/s', 'cruising_yaw_median_m/s', 'activity_duration_s', 'activity_fraction', 
                       'sec_to_first_stop', 'torque']:
         f= plt.figure()
-        sns.boxplot(x="genotype", y=parameter, order=['rei-INT', 'rei-HT', 'rei-HM'],# hue_order =['male','female'],
-                hue="sex",data=speed_df.loc[speed_df['expType']==expType[1],:]).set_title(expType[1])
+        sns.boxplot(x="genotype", y=parameter, order=['rei-INT', 'rei-HT', 'rei-HM'],
+                hue="sex",hue_order=['M','F'],data=speed_df.loc[speed_df['expType']==expType[1],:]).set_title(expType[1])
         plt.savefig('/home/bgeurten/fishDataBase/figures/'+f'{expType[1]}--{parameter}.svg'.replace(' ','_').replace('/','_per_'))
 plt.show()
 
