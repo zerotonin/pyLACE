@@ -9,6 +9,77 @@ import os
 from copy import deepcopy
 
 class fishRecAnalysis():
+    """
+    A class used to analyze and process zebrafish recordings in a pandas DataFrame.
+
+    ...
+
+    Attributes
+    ----------
+    dbPath : str
+        Path to the database folder containing the data files.
+    dataDict : dict
+        Dictionary containing the metadata of the recording.
+    genName : str
+        Name of the genotype.
+    expStr : str
+        Experiment string describing the type of experiment.
+    arena_sizes : dict
+        Dictionary containing the known arena sizes for different experiment types.
+
+    Methods
+    -------
+    makeSaveFolder()
+        Create a folder to save the analysis results.
+
+    correctionAnalysis()
+        Perform trace correction and analysis on the data.
+
+    prepDf_3D(col1Name, col2Name, reps)
+        Prepare a 3D DataFrame with given column names and repetitions.
+
+    getTimeIndex(dataDF)
+        Get the time index for the DataFrame.
+
+    makePandasDF_3D(data, col1Name, col2Name, index=None)
+        Create a 3D pandas DataFrame.
+
+    makePandasDF_2D(data, col1Name, col2Name, index=None)
+        Create a 2D pandas DataFrame.
+
+    makePandasDF4Hist(data)
+        Create a pandas DataFrame for histogram data.
+
+    makeResultDFs()
+        Create a dictionary containing all result DataFrames.
+
+    saveDataFrames()
+        Save all result DataFrames as CSV files.
+
+    makeDataBaseEntry()
+        Create a database entry with relevant information.
+
+    save2DMatrix(dataListEntry)
+        Save a 2D matrix to a file.
+
+    save3DMatrix(dataListEntry)
+        Save a 3D matrix to a file.
+
+    load2DMatrix(filePosition)
+        Load a 2D matrix from a file.
+
+    load3DMatrix(filePosition)
+        Load a 3D matrix from a file.
+
+    check_mm_trace(default_answer='x')
+        Check if the mm trace coordinates are within the expected arena dimensions.
+
+    wrong_arena_dlg(expected_size, default_answer='x')
+        Display a message about wrong arena dimensions and prompt for user input.
+
+    interp_trace_mm(y_length, x_length, y_old, x_old)
+        Interpolate the trace data based on corrected arena dimensions.
+    """
     
     def __init__(self,dataDict,genName,expStr,birthDate,dataBasePath = '/media/gwdg-backup/BackUp/Zebrafish/pythonDatabase'):
         self.dbPath   = dataBasePath
@@ -232,13 +303,3 @@ class fishRecAnalysis():
         self.traAna.trace_mm[:,4]=self.traAna.trace_mm[:,4]*mix_factor
 
         self.traAna.medMaxVelocities[:,0:2] = self.traAna.medMaxVelocities[:,0:2]*mix_factor
-
-
-
-
-
-
-
-
-
-
