@@ -1,6 +1,6 @@
 #import cv2
-from traceCorrector import traceCorrector
-import traceAnalyser
+from trace_analysis.traceCorrector import traceCorrector
+import trace_analysis.traceAnalyser
 import fishPlot
 import pandas as pd
 import numpy as np
