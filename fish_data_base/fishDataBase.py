@@ -129,4 +129,4 @@ class fishDataBase():
         Saves the current state of the database to the specified file position.
         """
         print(self.database_file_position)
-        self.database.to_csv(self.database_file_position)
+        self.database.to_csv(self.database_file_position,index=False)
