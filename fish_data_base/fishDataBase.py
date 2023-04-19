@@ -1,5 +1,5 @@
 import pandas as pd
-import os, fishRecAnalysis
+import os, fish_data_base.fishRecAnalysis as fishRecAnalysis
 from fish_data_base.counterCurrentAna import sortMultiFileFolder
 from tqdm import tqdm
 
