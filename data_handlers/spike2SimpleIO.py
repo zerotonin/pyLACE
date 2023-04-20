@@ -143,7 +143,7 @@ class segmentSaver():
             # add events
             df = self.eventDict2Pandas(segment,df)
             #save to savePos
-            df.to_hdf(self.savePos[:-4]+f'_{c}_{segNum}'+self.savePos[-4::], key='df', mode='w')
+            df.to_csv(self.savePos[:-4]+f'_{c}_{segNum}'+self.savePos[-4::])
             c+=1
             dataframeList.append(df)
         return dataframeList
