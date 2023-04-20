@@ -55,7 +55,7 @@ class SpikeDetector:
         peak_end_time = self.df_signal.index[peak_data['right_bases']].to_numpy()
         peak_amplitude = peak_data['prominences']
         spike_df = pd.DataFrame(np.stack([peak_pos_time, peak_start_time, peak_end_time, peak_amplitude]).T,
-                   columns=['spike_peak_s', 'spike_start_s', 'spike_stop_s', 'amplitude_mV'])
+                   columns=['spike_peak_s', 'spike_start_s', 'spike_stop_s', 'amplitude_muV'])
         return spike_df
 
     def get_peak_time_and_amp(self, noise_std_factor=1.5):
