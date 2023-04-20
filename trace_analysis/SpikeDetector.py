@@ -33,6 +33,7 @@ class SpikeDetector:
             The input DataFrame containing the electrophysiology signal.
         """
         self.df_signal = df_signal
+        self.spike_train_df = None
 
     def find_peaks_in_df(self, threshold):
         """
@@ -83,6 +84,7 @@ class SpikeDetector:
         spike_df = pd.concat([spike_df_positive, spike_df_negative])
         spike_df = spike_df.sort_values(by='spike_peak_s')
         spike_df = spike_df.reset_index(drop=True)
+        self.spike_train_df = spike_df
         return spike_df
 
     @staticmethod
