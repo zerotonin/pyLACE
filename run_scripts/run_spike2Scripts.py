@@ -23,12 +23,12 @@ spike_train_df = sd.main()
 """
 
 #%%
-db = fishDataBase.fishDataBase("/home/bgeurten/fishDataBase",'/home/bgeurten/fishDataBase/fishDataBase_cstart.csv')
+db = fishDataBase.T("/home/bgeurten/fishDataBase",'/home/bgeurten/fishDataBase/fishDataBase_cstart.csv')
 #db.rebase_paths()
 
 
-multiFileFolder = '/home/bgeurten/cstart_experiments/sufge1/'
-# Experiment types CCur counter current , Ta tapped, Unt untapped, cst, c-startz
-db.run_multi_trace_folder(multiFileFolder,'sufge1','cst','08-2019',start_at=0)
+multiFileFolder = '/home/bgeurten/cstart_experiments/rei/'
+# Experiment types CCur couynter current , Ta tapped, Unt untapped, cst, c-startz
+db.run_multi_trace_folder(multiFileFolder,'rei','cst','08-2019',start_at=0)
 
 

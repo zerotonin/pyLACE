@@ -32,7 +32,10 @@ class fishDataBase():
         """
         try:
             self.database = pd.read_csv(self.database_file_position)
-            del self.database['Unnamed: 0']
+            try:
+                del self.database['Unnamed: 0']
+            except:
+                pass
         except:
             answer ='?'
             while answer != 'y' and answer !='n':
