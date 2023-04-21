@@ -34,6 +34,13 @@ class SpikeDetector:
     get_timing_from_keyboard()
         Retrieves the time stamp (in seconds) when the user activated the stimulus and triggered the experiment.
 
+    calculate_latency()
+        Calculates the latency between the stimulus occurrence and the first Mauthner spike,
+        and the latency between the stimulus occurrence and the first other spike.
+        
+    quantify_spike_properties()
+        Calculates the latency to spikes and returns a dictionary with the spike counts and latencies.
+
     main(noise_factor=1.5)
         Runs the spike detection process and returns the DataFrame containing the detected spikes and their properties.
     """
