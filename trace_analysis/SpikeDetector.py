@@ -38,7 +38,7 @@ class SpikeDetector:
         Runs the spike detection process and returns the DataFrame containing the detected spikes and their properties.
     """
 
-    def __init__(self, df_signal, stimulus_occurence_s, min_latency_s=0.005):
+    def __init__(self, df_signal, min_latency_s=0.005):
         """
         Initializes the SpikeDetector class with the input DataFrame.
 
@@ -46,15 +46,13 @@ class SpikeDetector:
         ----------
         df_signal : pd.DataFrame
             The input DataFrame containing the electrophysiology signal.
-        stimulus_occurence_s : float
-            The time (in seconds) when the stimulus occurred.
         min_latency_s : float, optional
             The minimum latency (in seconds) between the stimulus occurrence and a spike (default is 0.005).
         """
         self.df_signal = df_signal
-        self.spike_train_df = None
-        self.stimulus_occurence_s = stimulus_occurence_s
         self.min_latency_s = min_latency_s
+        self.spike_train_df = None
+        self.stimulus_occurence_s = None
 
 
     def find_peaks_in_df(self, threshold):
