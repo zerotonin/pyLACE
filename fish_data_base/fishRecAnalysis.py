@@ -123,15 +123,15 @@ class fishRecAnalysis():
         os.mkdir(self.savePath)
         #return folderName
 
-    def correctionAnalysis(self):
+    def correctionAnalysis(self,correction_mode = False):
         """
         Performs the correction and analysis of the trace data.
         """        
         self.traCor = traceCorrector(self.dataDict)
         # calibrate the movie if nescessary
-        if self.traCor.mmTraceAvailable == False:
+        if self.traCor.mmTraceAvailable == False and correction_mode == TRUE:
             self.traCor.calibrateTracking()
-        self.traCor.close_figure()
+            self.traCor.close_figure()
         # do pixel to mm conversion if nescessary
         self.traAna = traceAnalyser(self.traCor,self.get_arena_size_by_experiment_tag())
         if self.traCor.mmTraceAvailable == False:
@@ -142,11 +142,13 @@ class fishRecAnalysis():
         if self.expStr == 'CCur':
             self.traAna.calculateSpatialHistogram()
             self.traAna.inZoneAnalyse()
-        if self.expStr == 'cst':
-            pass
         self.traAna.getUniformMidLine()
         self.traAna.exportMetaDict()
         self.dataList = self.traAna.exportDataList()
+        if self.expStr == 'cst':
+            spike_train_df, spike_properties = self.process_spike_data()
+            self.dataList.append(['spike_train_df',spike_train_df,2])
+            self.dataList.append(['spike_properties',spike_properties,2])
 
     def process_spike_data(self):
         """
@@ -166,7 +168,7 @@ class fishRecAnalysis():
         df = segSav.main()[0]
 
         # Detect spikes
-        sd = SpikeDetector.SpikeDetector(df)
+        sd = SpikeDetector(df)
         spike_train_df, spike_properties = sd.main()
 
         return spike_train_df, spike_properties
@@ -175,11 +177,7 @@ class fishRecAnalysis():
 
     def prepDf_3D(self,col1Name,col2Name,reps):
         """
-        Prepares an empty DataFrame with columns for 3D data.
-        
-        Args:
-            col1Name (str): The prefix for the first set of column names.
-            col2Name (str): The prefix for the second set of column names.
+        Prepares an empty DataFrame with colspike_train_dfhe second set of column names.
             reps (int): The number of repetitions in the data.
         
         Returns:
@@ -279,7 +277,8 @@ class fishRecAnalysis():
         """
         returnDict = {'inZoneBendability': None,'midLineUniform_mm': None,
                 'midLineUniform_pix': None,'head_mm': None,
-                'tail_mm': None,'probDensity': None,'trace_mm':None}
+                'tail_mm': None,'probDensity': None,'trace_mm':None,
+                'spike_train_df':None,'spike_properties':None}
         for data in self.dataList:
 
             if data[0] == 'inZoneBendability':
@@ -296,6 +295,8 @@ class fishRecAnalysis():
                 returnDict['trace_mm'] = pd.DataFrame(self.traAna.trace_mm,columns=['x_position_mm','y_position_mm','yaw_rad','thrust_m/s','slip_m/s','yaw_deg/s'])
             elif data[0] =='probDensity': 
                 returnDict['probDensity']   = self.makePandasDF4Hist(data[1])
+            elif data[0] =='spike_train_df': 
+                returnDict['spike_train_df']   = data[1]
         
         return returnDict
 
@@ -339,6 +340,9 @@ class fishRecAnalysis():
         del dbEntry['csv']
         del dbEntry['mat']
         del dbEntry['anaMat']
+        if self.expStr == 'cst':
+            spike_properties = self.dataList[-1][1]
+            dbEntry = {**dbEntry, **spike_properties}
         return dbEntry
 
     def save2DMatrix(self,dataListEntry):
