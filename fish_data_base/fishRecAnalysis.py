@@ -129,7 +129,7 @@ class fishRecAnalysis():
         """        
         self.traCor = traceCorrector(self.dataDict)
         # calibrate the movie if nescessary
-        if self.traCor.mmTraceAvailable == False and correction_mode == TRUE:
+        if self.traCor.mmTraceAvailable == False and correction_mode == True:
             self.traCor.calibrateTracking()
             self.traCor.close_figure()
         # do pixel to mm conversion if nescessary
