@@ -79,13 +79,12 @@ class SpikeDetector:
         self.df_signal['Signal stream 0'] = self.df_signal['Signal stream 0'] * -1
         spike_df_negative = self.find_peaks_in_df(threshold=threshold)
         self.df_signal['Signal stream 0'] = self.df_signal['Signal stream 0'] * -1
-        spike_df_negative.amplitude_mV = spike_df_negative.amplitude_mV * -1
+        spike_df_negative.amplitude_mV = spike_df_negative.amplitude_muV * -1
 
         spike_df = pd.concat([spike_df_positive, spike_df_negative])
         spike_df = spike_df.sort_values(by='spike_peak_s')
         spike_df = spike_df.reset_index(drop=True)
         self.spike_train_df = spike_df
-        return spike_df
 
     @staticmethod
     def calculate_instantaneous_spike_freq(spike_df):
@@ -106,3 +105,22 @@ class SpikeDetector:
         # Calculate instantaneous frequency
         instantaneous_frequency = 1 / inter_spike_intervals
         return instantaneous_frequency
+    
+    def seperate_M_units(self):
+        """
+        In our experiments we stimulated the fish 2with a stratling stimulus an air blast from a micro in jection pump.
+        This startles the animal into a flight reaction usually controlled by two giant fibres in the zebrafish spinal chord, called
+        Mauthner neurons or M-cells. These spikes are much larger and usually above 7.5 microVolts in amplitude. IN this function we subdivide spikes
+        in Mauthner and other category.
+        """
+
+        self.spike_train_df['spike_category'] = 'Other'
+        self.spike_train_df.loc[self.spike_train_df.amplitude_muV.abs() > 7.5,'spike_category'] = 'Mauthner'
+    
+    def main(self, noise_factor=1.5):
+        self.get_peak_time_and_amp(noise_factor)
+        self.seperate_M_units()
+        instant_freq = self.calculate_instantaneous_spike_freq(self.spike_train_df)
+        instant_freq = np.insert(instant_freq,0,0)
+        self.spike_train_df['instant_freq'] = instant_freq
+        return self.spike_train_df
