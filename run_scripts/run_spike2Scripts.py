@@ -10,7 +10,9 @@ import matplotlib.pyplot as plt
 from scipy.signal import find_peaks
 import trace_analysis.SpikeDetector as SpikeDetector
 
-fN = r'/home/bgeurten/cstart_experiments/sufge1/Homozygous/male/movie9/HmM10 II.smr'
+
+#fN = r'/home/bgeurten/cstart_experiments/sufge1/Homozygous/male/movie9/HmM10 II.smr'
+fN = r'/home/bgeurten/cstart_experiments/sufge1/IntWild/male/movie5/IntM6.smr'
 s2sr = spike2SimpleIO.spike2SimpleReader(fN)
 s2sr.main()
 segSav = spike2SimpleIO.segmentSaver(s2sr,'./testPanda.csv')
