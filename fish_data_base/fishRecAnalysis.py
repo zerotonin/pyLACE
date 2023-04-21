@@ -1,6 +1,8 @@
 #import cv2
 from trace_analysis.traceCorrector import traceCorrector
 from trace_analysis.traceAnalyser import traceAnalyser
+from trace_analysis.SpikeDetector import SpikeDetector
+import data_handlers.spike2SimpleIO as spike2SimpleIO 
 #import fishPlot
 import pandas as pd
 import numpy as np
@@ -140,9 +142,35 @@ class fishRecAnalysis():
         if self.expStr == 'CCur':
             self.traAna.calculateSpatialHistogram()
             self.traAna.inZoneAnalyse()
+        if self.expStr == 'cst':
+            pass
         self.traAna.getUniformMidLine()
         self.traAna.exportMetaDict()
         self.dataList = self.traAna.exportDataList()
+
+    def process_spike_data(self):
+        """
+        Process spike data from a Spike2 file and detect spikes.
+
+        Returns:
+            tuple: A tuple containing the following elements:
+                pd.DataFrame: A DataFrame containing the spike train data.
+                dict: A dictionary containing spike properties such as latencies and spike counts for Mauthner and other cells.
+        """
+        # Read the Spike2 file
+        s2sr = spike2SimpleIO.spike2SimpleReader(self.dataDict['smr'])
+        s2sr.main()
+
+        # Save segments to a CSV file
+        segSav = spike2SimpleIO.segmentSaver(s2sr, 'no csv file will be produced')
+        df = segSav.main()[0]
+
+        # Detect spikes
+        sd = SpikeDetector.SpikeDetector(df)
+        spike_train_df, spike_properties = sd.main()
+
+        return spike_train_df, spike_properties
+    
 
 
     def prepDf_3D(self,col1Name,col2Name,reps):
