@@ -210,6 +210,7 @@ class traceAnalyser():
 
         # Add a row of NaNs at the end of the speeds array
         speeds = np.vstack((speeds, np.full((1, 3), np.nan)))
+        speeds[:,2] = np.rad2deg(speeds[:,2])
 
         # Concatenate trace_mm and speeds arrays
         trace_mm = np.hstack((trace_mm, speeds))
