@@ -10,6 +10,8 @@ class SpikeDetector:
     ----------
     df_signal : pd.DataFrame
         The input DataFrame containing the electrophysiology signal.
+    spike_train_df : pd.DataFrame
+        The DataFrame containing the detected spike times, amplitudes, and instantaneous frequencies.
 
     Methods
     -------
@@ -21,6 +23,12 @@ class SpikeDetector:
         
     calculate_instantaneous_spike_freq(spike_df)
         Calculates the instantaneous spike frequency based on inter-spike intervals.
+        
+    separate_M_units()
+        Separates the detected spikes into Mauthner and other categories based on their amplitudes.
+
+    main(noise_factor=1.5)
+        Runs the spike detection process and returns the DataFrame containing the detected spikes and their properties.
     """
 
     def __init__(self, df_signal):
@@ -106,21 +114,40 @@ class SpikeDetector:
         instantaneous_frequency = 1 / inter_spike_intervals
         return instantaneous_frequency
     
-    def seperate_M_units(self):
+    def separate_M_units(self):
         """
-        In our experiments we stimulated the fish 2with a stratling stimulus an air blast from a micro in jection pump.
-        This startles the animal into a flight reaction usually controlled by two giant fibres in the zebrafish spinal chord, called
-        Mauthner neurons or M-cells. These spikes are much larger and usually above 7.5 microVolts in amplitude. IN this function we subdivide spikes
-        in Mauthner and other category.
+        Separates the detected spikes into Mauthner and other categories based on their amplitudes.
+
+        In the experiments, the fish were stimulated with a startle stimulus (an air blast from a micro injection pump),
+        which triggers a flight reaction controlled by two giant fibers in the zebrafish spinal chord, called Mauthner neurons
+        or M-cells. These spikes are much larger and usually above 7.5 microVolts in amplitude. This function subdivides spikes
+        into Mauthner and other categories.
         """
 
         self.spike_train_df['spike_category'] = 'Other'
         self.spike_train_df.loc[self.spike_train_df.amplitude_muV.abs() > 7.5,'spike_category'] = 'Mauthner'
     
     def main(self, noise_factor=1.5):
+        """
+        Runs the spike detection process and returns the DataFrame containing the detected spikes and their properties.
+
+        Parameters
+        ----------
+        noise_factor : float, optional
+            The noise standard deviation factor for setting the prominence threshold (default is 1.5).
+
+        Returns
+        -------
+        spike_train_df : pd.DataFrame
+            A DataFrame containing the detected spike times, amplitudes, and instantaneous frequencies.
+        """
+        # Detect spikes and their properties
         self.get_peak_time_and_amp(noise_factor)
-        self.seperate_M_units()
+        # Separate spikes into Mauthner and other categories
+        self.separate_M_units()
+        # Calculate instantaneous spike frequencies
         instant_freq = self.calculate_instantaneous_spike_freq(self.spike_train_df)
-        instant_freq = np.insert(instant_freq,0,0)
+        instant_freq = np.insert(instant_freq, 0, 0)
+        # Add instantaneous frequencies to the spike_train_df DataFrame
         self.spike_train_df['instant_freq'] = instant_freq
         return self.spike_train_df
