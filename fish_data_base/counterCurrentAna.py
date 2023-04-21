@@ -25,7 +25,6 @@ class sortMultiFileFolder:
         Returns:
             Tuple[str, int, str]: The genotype, number, and sex information extracted from the file name.
         """
-        file_name = tag
         index = file_name.find(tag)
         genotype = file_name[index:index+2]
         sex = file_name[index+2:index+3]
