@@ -23,8 +23,8 @@ spike_train_df = sd.main()
 """
 
 #%%
-db = fishDataBase.fishDataBase("/home/bgeurten/fishDataBase",'/home/bgeurten/fishDataBase/fishDataBase_cruise.csv')
-db.rebase_paths()
+db = fishDataBase.fishDataBase("/home/bgeurten/fishDataBase",'/home/bgeurten/fishDataBase/fishDataBase_cstart.csv')
+#db.rebase_paths()
 
 
 multiFileFolder = '/home/bgeurten/cstart_experiments/sufge1/'
