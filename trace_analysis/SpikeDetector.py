@@ -30,6 +30,9 @@ class SpikeDetector:
         
     separate_M_units()
         Separates the detected spikes into Mauthner and other categories based on their amplitudes.
+    
+    get_timing_from_keyboard()
+        Retrieves the time stamp (in seconds) when the user activated the stimulus and triggered the experiment.
 
     main(noise_factor=1.5)
         Runs the spike detection process and returns the DataFrame containing the detected spikes and their properties.
@@ -138,6 +141,52 @@ class SpikeDetector:
         self.spike_train_df['spike_category'] = 'Other'
         self.spike_train_df.loc[self.spike_train_df.amplitude_muV.abs() > 7.5,'spike_category'] = 'Mauthner'
     
+    def get_timing_from_keyboard(self):
+        """
+        Retrieves the time stamp (in seconds) when the user activated the stimulus
+        and triggered the experiment.
+
+        Returns
+        -------
+        stimulus_time_stamps : pd.Index
+            The time stamps (in seconds) corresponding to the stimulus activation.
+        """
+        self.stimulus_occurence_s = self.df_signal.index[self.df_signal.Keyboard]
+       
+    
+    def calculate_latency(self):
+        """
+        Calculates the latency between the stimulus occurrence and the first Mauthner spike,
+        and the latency between the stimulus occurrence and the first other spike.
+        Spikes that occur before the minimal latencies are ignored.
+
+        Returns
+        -------
+        mauthner_latency : float
+            The latency between the stimulus occurrence and the first Mauthner spike.
+        other_latency : float
+            The latency between the stimulus occurrence and the first other spike.
+        """
+        mauthner_latency = self.df_signal.index[-1]
+        other_latency = self.df_signal.index[-1]
+
+        for stimulus_time in self.stimulus_occurence_s:
+            mauthner_candidates = self.spike_train_df[(self.spike_train_df.spike_category == "Mauthner") &
+                                                    (self.spike_train_df.spike_peak_s >= stimulus_time + self.min_latency_s)]
+            other_candidates = self.spike_train_df[(self.spike_train_df.spike_category == "Other") &
+                                                    (self.spike_train_df.spike_peak_s >= stimulus_time + self.min_latency_s)]
+
+            if not mauthner_candidates.empty:
+                first_mauthner_spike = mauthner_candidates.iloc[0]
+                mauthner_latency = first_mauthner_spike.spike_peak_s - stimulus_time
+
+            if not other_candidates.empty:
+                first_other_spike = other_candidates.iloc[0]
+                other_latency = first_other_spike.spike_peak_s - stimulus_time
+
+        return mauthner_latency, other_latency
+
+    
     def main(self, noise_factor=1.5):
         """
         Runs the spike detection process and returns the DataFrame containing the detected spikes and their properties.
@@ -161,4 +210,10 @@ class SpikeDetector:
         instant_freq = np.insert(instant_freq, 0, 0)
         # Add instantaneous frequencies to the spike_train_df DataFrame
         self.spike_train_df['instant_freq'] = instant_freq
+        # Get Stimulus occurence
+        self.get_timing_from_keyboard()
+        # Calculate latendy to spikes
+        mauthner_latency, other_latency = self.calculate_latency()
+
         return self.spike_train_df
+    
