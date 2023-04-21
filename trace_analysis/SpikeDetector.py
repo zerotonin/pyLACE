@@ -203,7 +203,8 @@ class SpikeDetector:
         quantify_dict = {'m_cell_spikes': spike_counts['Mauthner'],
                         'other_spikes': spike_counts['Other'],
                         'latency_to_m_cell': mauthner_latency,
-                        'latency_to_others': other_latency}
+                        'latency_to_others': other_latency,
+                        'median_spike_instFreq_Hz': self.spike_train_df.instant_freq.median()}
         
         return quantify_dict
 
