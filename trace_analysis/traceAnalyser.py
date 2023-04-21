@@ -55,7 +55,8 @@ class traceAnalyser():
             self.arenaCoords_pix = traceCorrectorObj.boxCoords 
             self.sortCoordsArenaPix()
             self.makeInterpolator()
-            #self.trace_mm
+            self.yaw = traceCorrectorObj.matLabLoader.trace[:,2]
+            
         else:
             self.trace_mm = traceCorrectorObj.matLabLoader.trace
         self.zoneMargins  = np.array([[40,11.5],[163,31.5]])
@@ -187,6 +188,34 @@ class traceAnalyser():
         self.tail_mm    = self.interpolate2mm(self.tail_pix) 
         self.contour_mm = [self.interpolate2mm(x) for x in self.contour_pix] 
         self.midLine_mm = [self.interpolate2mm(x) for x in self.midLine_pix] 
+
+        if self.mm_tra_available == False:
+            self.create_trace_mm_denovo()
+            self.mm_tra_available = True
+            
+    def create_trace_mm_denovo(self):
+        """
+        Create the trace_mm array by averaging the head_mm and tail_mm arrays, and including yaw and speeds.
+        The result is stored in the self.trace_mm attribute.
+        """
+        # Calculate the midpoint between head_mm and tail_mm
+        trace_mm = (self.head_mm + self.tail_mm) / 2.0
+
+        # Reshape the yaw array and concatenate it with trace_mm
+        yaw = self.yaw.reshape(-1, 1)
+        trace_mm = np.hstack((trace_mm, yaw))
+
+        # Calculate the speeds by differentiating trace_mm along the first axis and multiplying by fps
+        speeds = np.diff(trace_mm, axis=0) * self.fps
+
+        # Add a row of NaNs at the end of the speeds array
+        speeds = np.vstack((speeds, np.full((1, 3), np.nan)))
+
+        # Concatenate trace_mm and speeds arrays
+        trace_mm = np.hstack((trace_mm, speeds))
+
+        # Store the result in self.trace_mm
+        self.trace_mm = trace_mm
 
     def calculateSpatialHistogram(self,bins=[16,8]):
         """
