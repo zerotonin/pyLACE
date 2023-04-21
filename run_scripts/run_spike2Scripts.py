@@ -22,16 +22,3 @@ spike_train_df = sd.main()
 
 
 
-df['camMon'] = df['camMon'].astype(int)
-df['Pico Pum'] = df['Pico Pum'].astype(int)
-df['Keyboard'] = df['Keyboard'].astype(int)
-
-
-df['Signal stream 0'].plot()
-#df['camMon'].plot()
-#df['Pico Pum'].plot()
-df['Keyboard'].plot()
-df['Signal stream 0'].std()
-plt.show()
-
-
