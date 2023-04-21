@@ -83,7 +83,7 @@ class fishDataBase():
                     fRAobj.correctionAnalysis()
                     database_entry = fRAobj.saveDataFrames()
                     self.addDataBase(database_entry)
-                    #self.saveDataBase()
+                    self.saveDataBase()
                 except:
                     print('The following directory could not be analysed: '+ data_dictionary['anaMat'])
 
