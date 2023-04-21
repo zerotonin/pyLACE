@@ -131,7 +131,7 @@ class fishRecAnalysis():
             self.traCor.calibrateTracking()
         self.traCor.close_figure()
         # do pixel to mm conversion if nescessary
-        self.traAna = traceAnalyser.traceAnalyser(self.traCor)
+        self.traAna = traceAnalyser(self.traCor)
         if self.traCor.mmTraceAvailable == False:
             self.traAna.pixelTrajectories2mmTrajectories()
         # check if coordinates are in arena
