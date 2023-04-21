@@ -331,15 +331,40 @@ class fishRecAnalysis():
         self.dataDict['path2_'+tag] = filePosition
     
     def save3DMatrix(self,dataListEntry):
+        """
+        Saves a 3D matrix from the dataListEntry to a text fileby first reshaping it to a 2D matrix.
+
+        Args:
+            dataListEntry (list): The list containing the tag and the 3D matrix to be saved.
+        """
+
         temp = deepcopy(dataListEntry)
         temp[1] = temp[1].reshape(temp[1].shape[0], -1)
         print(temp.shape)
         self.save2DMatrix(temp)
     
     def load2DMatrix(self,filePosition):
+        """
+        Loads a 2D matrix from a text file.
+        Args:
+            filePosition (str): The path to the text file containing the 2D matrix.
+
+        Returns:
+            np.array: The loaded 2D matrix.
+        """
         return np.loadtxt(filePosition)
     
     def load3DMatrix(self,filePosition):
+        """
+        Loads a 3D matrix from a text file by first loading it as a 2D matrix
+        and then reshaping it back to its original 3D shape.
+        
+        Args:
+            filePosition (str): The path to the text file containing the 3D matrix.
+
+        Returns:
+            np.array: The loaded 3D matrix.
+        """
         temp = self.load2DMatrix(filePosition)
         return temp.reshape(temp.shape[0], temp.shape[1] // temp.shape[2], temp.shape[2])
 
@@ -358,30 +383,36 @@ class fishRecAnalysis():
 
     
     def wrong_arena_dlg(self,expected_size,default_answer='x'):
-        print('===============================================================================')
+        """
+        Displays a dialog to the user when the trace coordinates are outside the
+        expected arena size, and takes appropriate action based on user input.
+
+        Args:
+            expected_size (tuple): The expected arena size (y, x).
+            default_answer (str, optional): The default answer for the user prompt. Defaults to 'x'.
+        """
+        print("=" * 79)
         print('| The current file has trajectory coordinates outside the experimental setup! |')
-        print('===============================================================================')
-        print(' ')
-        print('analysed MatLab file: ', self.dataDict['anaMat'])
-        print('experiment string: ', self.expStr, ' | expected arena size (y,x): ', expected_size)
-        print('found maximal coordinates (y,x):', (np.max(self.traAna.trace_mm[:,0]),np.max(self.traAna.trace_mm[:,1])))
+        print("=" * 79)
+        print(f"\nAnalysed MatLab file: {self.dataDict['anaMat']}")
+        print(f"Experiment string: {self.expStr} | Expected arena size (y, x): {expected_size}")
+        print(f"Found maximal coordinates (y, x): ({np.max(self.traAna.trace_mm[:, 0])}, {np.max(self.traAna.trace_mm[:, 1])})")
 
         while default_answer not in 'ACTSN':
             default_answer = input('Which arena was WRONGLY used? (A)bort, (C)ounter current, cruise (T)ank, C-(S)tart, or (N)one all is fine: ')
             default_answer = default_answer.upper()
 
         if default_answer == 'A':
-            raise ValueError('Aborted file due to user input: ' + self.dataDict['anaMat'])
+            raise ValueError(f"Aborted file due to user input: {self.dataDict['anaMat']}")
         elif default_answer == 'C':
-            self.interp_trace_mm(expected_size[0],expected_size[1],self.arena_sizes['counter_current'][0],self.arena_sizes['counter_current'][1])
+            self.interp_trace_mm(expected_size[0], expected_size[1], self.arena_sizes['counter_current'][0], self.arena_sizes['counter_current'][1])
         elif default_answer == 'T':
-            self.interp_trace_mm(expected_size[0],expected_size[1],self.arena_sizes['cruise'][0],self.arena_sizes['cruise'][1])
+            self.interp_trace_mm(expected_size[0], expected_size[1], self.arena_sizes['cruise'][0], self.arena_sizes['cruise'][1])
         elif default_answer == 'S':
-            self.interp_trace_mm(expected_size[0],expected_size[1],self.arena_sizes['c_start'][0],self.arena_sizes['c_start'][1])
+            self.interp_trace_mm(expected_size[0], expected_size[1], self.arena_sizes['c_start'][0], self.arena_sizes['c_start'][1])
         else:
-            print('Nothing was changed')
+            print("Nothing was changed")
 
-        pass
     
     def interp_trace_mm(self,y_length,x_length,y_old,x_old):
         """ If the user entered the wrong dimensions of the arena and therefore
