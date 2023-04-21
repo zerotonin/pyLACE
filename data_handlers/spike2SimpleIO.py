@@ -126,7 +126,7 @@ class segmentSaver():
         self.s2sr     = spike2SimplerReaderobject
         self.savePos  = savePos
     
-    def main(self):
+    def main(self, save_mode = False):
         """This is the main function that will split the reader object
         into dataframes which hold the data of each segment. Optionally
         all segment-dataframes are returned in a list.
@@ -143,7 +143,8 @@ class segmentSaver():
             # add events
             df = self.eventDict2Pandas(segment,df)
             #save to savePos
-            df.to_csv(self.savePos[:-4]+f'_{c}_{segNum}'+self.savePos[-4::])
+            if save_mode:
+                df.to_csv(self.savePos[:-4]+f'_{c}_{segNum}'+self.savePos[-4::])
             c+=1
             dataframeList.append(df)
         return dataframeList
