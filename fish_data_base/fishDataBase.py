@@ -79,11 +79,11 @@ class fishDataBase():
             data_dictionary = file_dictionary[key]
             if os.path.basename(data_dictionary['anaMat']) not in allready_analysed_filenames:
                 try:
-                    fRAobj= fishRecAnalysis.fishRecAnalysis(data_dictionary,gene_name,experiment_str,birth_date)
+                    fRAobj= fishRecAnalysis.fishRecAnalysis(data_dictionary,gene_name,experiment_str,birth_date,self.database_path)
                     fRAobj.correctionAnalysis()
                     database_entry = fRAobj.saveDataFrames()
                     self.addDataBase(database_entry)
-                    self.saveDataBase()
+                    #self.saveDataBase()
                 except:
                     print('The following directory could not be analysed: '+ data_dictionary['anaMat'])
 

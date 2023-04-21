@@ -9,7 +9,7 @@ class traceAnalyser():
     data to compute various parameters related to the fish's movements, position, and other characteristics.
     """
 
-    def __init__(self,traceCorrectorObj):
+    def __init__(self,traceCorrectorObj,default_arena_size):
         """
         Initializes the traceAnalyser object with given traceCorrectorObj and initializes various attributes.
 
@@ -45,10 +45,13 @@ class traceAnalyser():
         self.genotype = traceCorrectorObj.dataDict['genotype'] 
         self.sex      = traceCorrectorObj.dataDict['sex']
         self.animalNo = traceCorrectorObj.dataDict['animalNo']
+        self.arena_size_by_experiment = default_arena_size
 
         # arena coordinates 
         if self.mm_tra_available == False:
-            self.arenaCoords_mm  = np.array([[0,0],[162,0],[162,43],[0,43]])
+            self.arenaCoords_mm  = np.array([[0,0],[self.arena_size_by_experiment[1],0],
+                                             [self.arena_size_by_experiment[1],self.arena_size_by_experiment[0]],
+                                             [0,self.arena_size_by_experiment[1]]])
             self.arenaCoords_pix = traceCorrectorObj.boxCoords 
             self.sortCoordsArenaPix()
             self.makeInterpolator()
