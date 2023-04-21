@@ -4,6 +4,10 @@ import numpy as np
 from scipy.interpolate import LinearNDInterpolator, interp1d
 
 class traceAnalyser():
+    """
+    A class for analyzing fish trace data from movies. The class takes traceCorrectorObj as input and processes the
+    data to compute various parameters related to the fish's movements, position, and other characteristics.
+    """
 
     def __init__(self,traceCorrectorObj):
         """
