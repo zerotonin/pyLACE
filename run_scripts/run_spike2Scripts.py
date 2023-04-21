@@ -8,12 +8,15 @@ import data_handlers.spike2SimpleIO as spike2SimpleIO
 import seaborn as sns
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks
+import trace_analysis.SpikeDetector as SpikeDetector
 
-fN = '/home/bgeurten/cstart_trials_rei/Homozygous/Male/movie2/rei_cstHmM2_11-2019R.smr/HmM10 II.smr'
+fN = r'/home/bgeurten/cstart_experiments/sufge1/Homozygous/male/movie9/HmM10 II.smr'
 s2sr = spike2SimpleIO.spike2SimpleReader(fN)
 s2sr.main()
 segSav = spike2SimpleIO.segmentSaver(s2sr,'./testPanda.csv')
 df = segSav.main()[0]
+sd = SpikeDetector.SpikeDetector(df)
+spike_train_df = sd.main()
 
 
 
