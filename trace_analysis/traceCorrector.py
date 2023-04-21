@@ -6,6 +6,12 @@ from fishPlot import frameOverlay
 class traceCorrector:
 
     def __init__(self,dataDict):
+        """
+        Initializes the traceCorrector with the provided data dictionary.
+
+        Args:
+            dataDict (dict): A dictionary containing metadata and file positions.
+        """
         # dictionary with the meta data and file positions
         self.dataDict = dataDict
 
@@ -59,21 +65,39 @@ class traceCorrector:
         self.fig.canvas.mpl_connect('key_press_event', self.on_press)
 
     def close_figure(self):
+        """
+        Closes the current figure displayed by the traceCorrector.
+        """
         plt.close(self.fig)
 
     def calculateCoordShift(self,bufferShift):
+        """
+        Calculates the coordinate shift based on the provided buffer shift value.
+
+        Args:
+            bufferShift (float): The buffer shift value.
+
+        Returns:
+            numpy.ndarray: The calculated coordinate shift.
+        """
         imageWidth = self.mH.imageWidth # shorthand
         xShift = int(bufferShift%imageWidth)  # modulo
         yShift = bufferShift//imageWidth # integer division
         return np.array([xShift,yShift])
 
     def shiftFrameCoords(self):
+        """
+        Applies the calculated coordinate shift to the tracking data.
+        """
         self.head    = self.head    + self.coordShift
         self.tail    = self.tail    + self.coordShift
         self.contour = [x + self.coordShift for x in self.contour]
         self.midLine = [x + self.coordShift for x in self.midLine]
 
     def plotFrameOverlay(self):
+        """
+        Plots the current frame with the tracking data overlayed.
+        """
         frameOverlay(self.ax, self.currentFrame, self.contour[self.frameI],
                      self.midLine[self.frameI], self.head[self.frameI,:], 
                      self.tail[self.frameI,:], self.boxCoords)
@@ -85,6 +109,15 @@ class traceCorrector:
         plt.draw()
 
     def getFrameNo4Norpix(self,correctionShift):
+        """
+        Returns the corrected frame number for Norpix files.
+
+        Args:
+            correctionShift (int): The correction shift value.
+
+        Returns:
+            int: The corrected frame number.
+        """
         # negative shifts are set as a positive shift with AllocatedFrame - shift
         if correctionShift < 0:
             correctionShift = self.allocated_frames + correctionShift
@@ -92,9 +125,24 @@ class traceCorrector:
         return int(np.abs(((self.frameI+self.originFrame+correctionShift)%self.allocated_frames)))
 
     def loadNorPixFrame(self,frameShift):
+        """
+        Loads the frame from the Norpix file based on the provided frame shift value.
+
+        Args:
+            frameShift (int): The frame shift value.
+
+        Returns:
+            numpy.ndarray: The loaded frame.
+        """
         return self.mH.getFrame(self.getFrameNo4Norpix(frameShift))
 
     def on_press(self,event):
+        """
+        Handles key press events for the user interface.
+
+        Args:
+            event (matplotlib.backend_bases.KeyEvent): The key press event.
+        """
             shiftCoord = False 
             loadNewImg = False
             if event.key == 'a':
@@ -143,6 +191,13 @@ class traceCorrector:
 
 
     def refreshImage(self, newImgFlag):
+        """
+        Refreshes the displayed image, either by loading a new frame or by redrawing
+        the existing frame with updated tracking data.
+
+        Args:
+            newImgFlag (bool): True if a new frame should be loaded, False otherwise.
+        """
         if newImgFlag:
             self.currentFrame = self.loadNorPixFrame(self.frameShift)
         plt.cla()
@@ -150,6 +205,10 @@ class traceCorrector:
         self.fig.canvas.draw()
 
     def calibrateTracking(self):
+        """
+        Calibrates the tracking data by displaying an interactive interface for the user
+        to adjust frame and coordinate shifts.
+        """
         # set up figure
         self.frameI = 0
         self.calibrationOngoing = True
@@ -157,6 +216,12 @@ class traceCorrector:
         plt.show()
     
     def runTest(self,lengthInFrames =100):
+        """
+        Runs a test by displaying a series of frames with the tracking data overlayed.
+
+        Args:
+            lengthInFrames (int, optional): The number of frames to display during the test. Defaults to 100.
+        """
         self.fig,self.ax = plt.subplots()
         plt.ion()
         for frameI in np.linspace(0,self.allocated_frames-1,lengthInFrames, dtype=int ):
