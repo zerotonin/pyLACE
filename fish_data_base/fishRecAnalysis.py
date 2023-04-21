@@ -369,6 +369,15 @@ class fishRecAnalysis():
         return temp.reshape(temp.shape[0], temp.shape[1] // temp.shape[2], temp.shape[2])
 
     def check_mm_trace(self,default_answer='x'):
+        """
+        Checks if the maximal coordinates of the trace are within the expected arena size
+        for the given experiment type.
+
+        Args:
+            default_answer (str, optional): The default answer for the user prompt if the
+                                            coordinates are outside the expected arena size.
+                                            Defaults to 'x'.
+        """
         if self.expStr == 'CCur':
             if np.max(self.traAna.trace_mm[:,0]) > self.arena_sizes['counter_current'][0] or np.max(self.traAna.trace_mm[:,1]) > self.arena_sizes['counter_current'][1]:
                 self.wrong_arena_dlg(self.arena_sizes['counter_current'],default_answer)
