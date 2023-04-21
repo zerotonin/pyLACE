@@ -1,7 +1,7 @@
 
 # PyLace
 
-PyLace is a Python library designed to create and manage a database for storing simple values and paths to complex data, such as spike properties, velocities, traces, and spike trains. The primary goal of PyLace is to provide an easy-to-use and efficient solution for organizing and accessing various types of data in neuroscience research. It is coded as a  follow up to LACE \textbf{L}imbless \textbf{A}nimal tra\textbf{C}k\textbf{E}r
+PyLace is a Python library designed to create and manage a database for storing simple values and paths to complex data, such as spike properties, velocities, traces, and spike trains. The primary goal of PyLace is to provide an easy-to-use and efficient solution for organizing and accessing various types of data in neuroscience research. It is coded as a  follow up to LACE **L**imbless **A**nimal tra**C**k**E**r
 https://github.com/zerotonin/LACE
 
 ## Features
