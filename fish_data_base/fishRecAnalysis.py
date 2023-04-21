@@ -448,3 +448,25 @@ class fishRecAnalysis():
         self.traAna.trace_mm[:,4]=self.traAna.trace_mm[:,4]*mix_factor
 
         self.traAna.medMaxVelocities[:,0:2] = self.traAna.medMaxVelocities[:,0:2]*mix_factor
+        
+    def get_arena_size_by_experiment_tag(self):
+        """
+        Returns the appropriate arena size based on the experiment tag.
+
+        Args:
+            None
+
+        Returns:
+            numpy.ndarray: The arena size corresponding to the experiment tag.
+
+        Raises:
+            ValueError: If the experiment tag is not recognized.
+        """
+        if self.expStr == 'CCur':
+            return self.arena_sizes['counter_current']
+        elif self.expStr == 'Ta' or self.expStr == 'Unt' :
+            return self.arena_sizes['cruise']
+        elif self.expStr == 'cst':
+           return self.arena_sizes['c_start']
+        else:
+            raise ValueError(f'fishRecAnalysis:get_arena_size_by_experiment_tag: Unknown experiment string: {self.expStr}')
