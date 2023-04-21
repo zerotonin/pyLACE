@@ -143,51 +143,51 @@ class traceCorrector:
         Args:
             event (matplotlib.backend_bases.KeyEvent): The key press event.
         """
-            shiftCoord = False 
-            loadNewImg = False
-            if event.key == 'a':
-                self.frameShift -=1
-                loadNewImg = True
-            elif event.key == 'd':
-                self.frameShift +=1
-                loadNewImg = True
-            elif event.key == 'A':
-                self.frameShift -=10
-                loadNewImg = True
-            elif event.key == 'D':
-                self.frameShift +=10
-                loadNewImg = True
-            elif event.key =='w':
-                self.frameShift = self.originFrame*-1
-                loadNewImg = True
-            elif event.key =='e':
-                self.frameShift = 0
-                loadNewImg = True
-            elif event.key == 'q' or event.key == 'Q':
-                self.calibrationOngoing = False
-            elif event.key == 'right':
-                self.coordShift = np.array([1,0])
-                self.pixelOffset[0] +=1
-                shiftCoord = True
-            elif event.key == 'left':
-                self.coordShift = np.array([-1,0])
-                self.pixelOffset[0] -=1
-                shiftCoord = True
-            elif event.key == 'up':
-                self.coordShift = np.array([0,-1])
-                self.pixelOffset[1] -=1
-                shiftCoord = True
-            elif event.key == 'down':
-                self.coordShift = np.array([0,1])
-                self.pixelOffset[1] +=1
-                shiftCoord = True
-            else:
-                shiftCoord = False
+        shiftCoord = False 
+        loadNewImg = False
+        if event.key == 'a':
+            self.frameShift -=1
+            loadNewImg = True
+        elif event.key == 'd':
+            self.frameShift +=1
+            loadNewImg = True
+        elif event.key == 'A':
+            self.frameShift -=10
+            loadNewImg = True
+        elif event.key == 'D':
+            self.frameShift +=10
+            loadNewImg = True
+        elif event.key =='w':
+            self.frameShift = self.originFrame*-1
+            loadNewImg = True
+        elif event.key =='e':
+            self.frameShift = 0
+            loadNewImg = True
+        elif event.key == 'q' or event.key == 'Q':
+            self.calibrationOngoing = False
+        elif event.key == 'right':
+            self.coordShift = np.array([1,0])
+            self.pixelOffset[0] +=1
+            shiftCoord = True
+        elif event.key == 'left':
+            self.coordShift = np.array([-1,0])
+            self.pixelOffset[0] -=1
+            shiftCoord = True
+        elif event.key == 'up':
+            self.coordShift = np.array([0,-1])
+            self.pixelOffset[1] -=1
+            shiftCoord = True
+        elif event.key == 'down':
+            self.coordShift = np.array([0,1])
+            self.pixelOffset[1] +=1
+            shiftCoord = True
+        else:
+            shiftCoord = False
 
-            if shiftCoord:
-                self.shiftFrameCoords()
-            if self.calibrationOngoing:
-                self.refreshImage(loadNewImg)
+        if shiftCoord:
+            self.shiftFrameCoords()
+        if self.calibrationOngoing:
+            self.refreshImage(loadNewImg)
 
 
     def refreshImage(self, newImgFlag):
