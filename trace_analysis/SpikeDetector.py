@@ -38,7 +38,7 @@ class SpikeDetector:
         Runs the spike detection process and returns the DataFrame containing the detected spikes and their properties.
     """
 
-    def __init__(self, df_signal, min_latency_s=0.005):
+    def __init__(self, df_signal, min_latency_s=0.003):
         """
         Initializes the SpikeDetector class with the input DataFrame.
 
@@ -47,7 +47,7 @@ class SpikeDetector:
         df_signal : pd.DataFrame
             The input DataFrame containing the electrophysiology signal.
         min_latency_s : float, optional
-            The minimum latency (in seconds) between the stimulus occurrence and a spike (default is 0.005).
+            The minimum latency (in seconds) between the stimulus occurrence and a spike (default is 0.003).
         """
         self.df_signal = df_signal
         self.min_latency_s = min_latency_s
@@ -184,6 +184,29 @@ class SpikeDetector:
 
         return mauthner_latency, other_latency
 
+    def quantify_spike_properties(self):
+        """
+        Calculates the latency to spikes and returns a dictionary with the spike counts and latencies.
+
+        Returns
+        -------
+        quantify_dict : dict
+            A dictionary containing the spike counts and latencies for Mauthner and other spikes.
+        """
+        # Calculate latency to spikes
+        mauthner_latency, other_latency = self.calculate_latency()
+        
+        # Get spike counts
+        spike_counts = self.spike_train_df.spike_category.value_counts()
+        
+        # Quantification dictionary
+        quantify_dict = {'m_cell_spikes': spike_counts['Mauthner'],
+                        'other_spikes': spike_counts['Other'],
+                        'latency_to_m_cell': mauthner_latency,
+                        'latency_to_others': other_latency}
+        
+        return quantify_dict
+
     
     def main(self, noise_factor=1.5):
         """
@@ -210,8 +233,7 @@ class SpikeDetector:
         self.spike_train_df['instant_freq'] = instant_freq
         # Get Stimulus occurence
         self.get_timing_from_keyboard()
-        # Calculate latendy to spikes
-        mauthner_latency, other_latency = self.calculate_latency()
-
-        return self.spike_train_df
+        # Quantify spike properties
+        spike_properties = self.quantify_spike_properties()
+        return self.spike_train_df, spike_properties
     
