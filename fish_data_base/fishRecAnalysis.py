@@ -158,7 +158,10 @@ class fishRecAnalysis():
         if self.expStr == 'CCur':
             self.traAna.calculateSpatialHistogram()
             self.traAna.inZoneAnalyse()
-        self.traAna.getUniformMidLine()
+        try:
+            self.traAna.getUniformMidLine() 
+        except:
+            self.traAna.midLineUniform_mm = None
         self.traAna.exportMetaDict()
         self.dataList = self.traAna.exportDataList()
     
@@ -169,9 +172,14 @@ class fishRecAnalysis():
         Returns:
             None
         """
-        spike_train_df, spike_properties = self.process_spike_data()
-        self.dataList.append(['spike_train_df',spike_train_df,2])
-        self.dataList.append(['spike_properties',spike_properties,2])
+        try:
+            spike_train_df, spike_properties = self.process_spike_data()
+            self.dataList.append(['spike_train_df',spike_train_df,2])
+            self.dataList.append(['spike_properties',spike_properties,2])
+        except:
+            self.dataList.append(['spike_train_df',None,2])
+            self.dataList.append(['spike_properties',None,2])
+
 
     def main(self, correction_mode= True):
         """
@@ -192,7 +200,7 @@ class fishRecAnalysis():
 
         # in case of the cstart experiments also analyse the Spike2 electrophysiology data
         if self.expStr == 'cst':
-            self.analyse_spiketrain*()
+            self.analyse_spiketrain()
 
     def process_spike_data(self):
         """

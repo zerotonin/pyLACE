@@ -23,7 +23,7 @@ spike_train_df = sd.main()
 """
 
 #%%
-db = fishDataBase.T("/home/bgeurten/fishDataBase",'/home/bgeurten/fishDataBase/fishDataBase_cstart.csv')
+db = fishDataBase.fishDataBase("/home/bgeurten/fishDataBase",'/home/bgeurten/fishDataBase/fishDataBase_cstart.csv')
 #db.rebase_paths()
 
 
