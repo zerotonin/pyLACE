@@ -123,15 +123,18 @@ class fishRecAnalysis():
         os.mkdir(self.savePath)
         #return folderName
 
-    def correctionAnalysis(self,correction_mode = True):
+    def correctionAnalysis(self,correction_mode):
         """
         Performs the correction and analysis of the trace data.
-        """        
+        """
+
         self.traCor = traceCorrector(self.dataDict)
         # calibrate the movie if nescessary
         if self.traCor.mmTraceAvailable == False and correction_mode == True:
             self.traCor.calibrateTracking()
         self.traCor.close_figure()
+
+    def analyse_trajectory(self):   
         # do pixel to mm conversion if nescessary
         self.traAna = traceAnalyser(self.traCor,self.get_arena_size_by_experiment_tag())
         if self.traCor.mmTraceAvailable == False:
@@ -145,10 +148,23 @@ class fishRecAnalysis():
         self.traAna.getUniformMidLine()
         self.traAna.exportMetaDict()
         self.dataList = self.traAna.exportDataList()
-        if self.expStr == 'cst':
+    
+    def analyse_spiketrain(self):
             spike_train_df, spike_properties = self.process_spike_data()
             self.dataList.append(['spike_train_df',spike_train_df,2])
             self.dataList.append(['spike_properties',spike_properties,2])
+    
+    def main(self, correction_mode= True):
+        
+        # check if the trajectory has an offeset between the frames and detection
+        self.correctionAnalysis(correction_mode)
+
+        # analyse kinematic data and posture of the trajectory
+        self.analyse_trajectory()
+
+        # in case of the cstart experiments also analyse the Spike2 electrophysiology data
+        if self.expStr == 'cst':
+            self.analyse_spiketrain*()
 
     def process_spike_data(self):
         """
