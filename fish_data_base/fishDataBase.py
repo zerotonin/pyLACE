@@ -73,7 +73,7 @@ class fishDataBase():
             birth_date (str): The birth date of the fish associated with the trace files.
             start_at (int): The index at which to start analyzing the trace files.
         """
-        mff = sortMultiFileFolder(folder_position,experiment_str) 
+        mff = sortMultiFileFolder(folder_position,experiment_str,gui_correction=True) 
         file_dictionary = mff.__main__()
         keys = [k for k in file_dictionary.keys()] 
         allready_analysed_filenames = [os.path.basename(x) for x in self.database.path2_anaMat]
@@ -83,7 +83,7 @@ class fishDataBase():
             if os.path.basename(data_dictionary['anaMat']) not in allready_analysed_filenames:
                 #try:
                 fRAobj= fishRecAnalysis.fishRecAnalysis(data_dictionary,gene_name,experiment_str,birth_date,self.database_path)
-                fRAobj.main()
+                fRAobj.main(correction_mode=gui_correction)
                 database_entry = fRAobj.saveDataFrames()
                 self.addDataBase(database_entry)
                 self.saveDataBase()
