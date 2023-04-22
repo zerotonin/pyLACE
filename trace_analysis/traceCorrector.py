@@ -68,10 +68,7 @@ class traceCorrector:
         """
         Closes the current figure displayed by the traceCorrector.
         """
-        try:
-            plt.close(self.fig)
-        except:
-            pass
+        plt.close(self.fig)
 
     def calculateCoordShift(self,bufferShift):
         """

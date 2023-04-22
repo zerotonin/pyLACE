@@ -147,7 +147,10 @@ class fishRecAnalysis():
         # calibrate the movie if nescessary
         if matlab_files_loaded and self.traCor.mmTraceAvailable == False and correction_mode == True:
             self.traCor.calibrateTracking()
+        try:
             self.traCor.close_figure()
+        except:
+            pass
 
     def analyse_trajectory(self): 
         """

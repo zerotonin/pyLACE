@@ -82,7 +82,7 @@ class fishDataBase():
         keys = [k for k in file_dictionary.keys()]
 
         # Get a list of filenames that have already been analyzed
-        allready_analysed_filenames = [os.path.basename(x) for x in self.database.path2_anaMat]
+        allready_analysed_filenames = [os.path.basename(x) for x in self.database.path2_anaMat if type(x) == str]
 
         # Iterate through the files and analyze them if they have not been analyzed yet
         for key in tqdm(keys[start_at::], desc='analyse files'):
