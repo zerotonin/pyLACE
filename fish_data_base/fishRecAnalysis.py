@@ -112,6 +112,9 @@ class fishRecAnalysis():
 
         # self known arena sizes experiment type key tuple is (y,x)
         self.arena_sizes = {'cruise':(114,248),'c_start':(40,80),'counter_current':(45,167)}
+
+
+        self.dataList = list()
     
     def makeSaveFolder(self):
         """
@@ -384,21 +387,18 @@ class fishRecAnalysis():
             dict: The dictionary containing the database entry.
         """
         dbEntry = self.dataDict.copy()
-        del dbEntry['movieFrameIDX']
-        del dbEntry['probDensity_xCenters']
-        del dbEntry['probDensity_yCenters']
-        dbEntry['path2_smr'] = dbEntry['smr']
-        dbEntry['path2_s2r'] = dbEntry['s2r']
-        dbEntry['path2_seq'] = dbEntry['seq']
-        dbEntry['path2_csv'] = dbEntry['csv']
-        dbEntry['path2_mat'] = dbEntry['mat']
-        dbEntry['path2_anaMat'] = dbEntry['anaMat']
-        del dbEntry['smr']
-        del dbEntry['s2r']
-        del dbEntry['seq']
-        del dbEntry['csv']
-        del dbEntry['mat']
-        del dbEntry['anaMat']
+        # delete obsolete entries
+        for tag in ['movieFrameIDX','probDensity_xCenters','probDensity_yCenters']:
+            if tag in dbEntry.keys():
+                del dbEntry[tag]
+        # rename entries
+        for tag in[('path2_smr','smr'),('path2_s2r','s2r'),('path2_seq','seq'),('path2_csv','csv'),('path2_mat','mat'),('path2_anaMat','anaMat')]:
+            if tag[1] in dbEntry.keys():
+                dbEntry[tag[0]] = dbEntry[tag[1]]
+                del dbEntry[tag[1]]
+            else:
+                dbEntry[tag[0]] = None
+        # special entries for c-start
         if self.expStr == 'cst':
             spike_properties = self.dataList[-1][1]
             if spike_properties is not None:
