@@ -134,11 +134,17 @@ class fishRecAnalysis():
             None
         """
 
-        self.traCor = traceCorrector(self.dataDict)
+        matlab_files_loaded = True
+        try:
+            self.traCor = traceCorrector(self.dataDict)
+        except:
+            matlab_files_loaded = False
+            self.traCor = None
+
         # calibrate the movie if nescessary
-        if self.traCor.mmTraceAvailable == False and correction_mode == True:
+        if matlab_files_loaded and self.traCor.mmTraceAvailable == False and correction_mode == True:
             self.traCor.calibrateTracking()
-        self.traCor.close_figure()
+            self.traCor.close_figure()
 
     def analyse_trajectory(self): 
         """
@@ -153,7 +159,7 @@ class fishRecAnalysis():
         if self.traCor.mmTraceAvailable == False:
             self.traAna.pixelTrajectories2mmTrajectories()
         # check if coordinates are in arena
-        self.check_mm_trace(default_answer='x')
+        #self.check_mm_trace(default_answer='x')
         # analysis depending on experiment type
         if self.expStr == 'CCur':
             self.traAna.calculateSpatialHistogram()
@@ -196,7 +202,8 @@ class fishRecAnalysis():
         self.correctionAnalysis(correction_mode)
 
         # analyse kinematic data and posture of the trajectory
-        self.analyse_trajectory()
+        if self.traCor is not None:
+            self.analyse_trajectory()
 
         # in case of the cstart experiments also analyse the Spike2 electrophysiology data
         if self.expStr == 'cst':
@@ -394,7 +401,8 @@ class fishRecAnalysis():
         del dbEntry['anaMat']
         if self.expStr == 'cst':
             spike_properties = self.dataList[-1][1]
-            dbEntry = {**dbEntry, **spike_properties}
+            if spike_properties is not None:
+                dbEntry = {**dbEntry, **spike_properties}
         return dbEntry
 
     def save2DMatrix(self,dataListEntry):

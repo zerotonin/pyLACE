@@ -62,7 +62,7 @@ class fishDataBase():
         self.database.to_csv(self.database_file_position)
         self.saveDataBase()
     
-    def run_multi_trace_folder(self, folder_position, gene_name, experiment_str, birth_date, start_at=0, gui_correction=True):
+    def run_multi_trace_folder(self, folder_position, gene_name, experiment_str, birth_date, start_at=0, gui_correction=True,default_wrong_arena = ''):
         """
         Analyzes multiple trace files in a given folder and adds the data to the database.
 
