@@ -183,13 +183,24 @@ class traceAnalyser():
         Returns:
             dict: A dictionary containing metadata of the analyzed trace.
         """
-        
-        self.head_mm    = self.interpolate2mm(self.head_pix) 
-        self.tail_mm    = self.interpolate2mm(self.tail_pix) 
-        self.contour_mm = [self.interpolate2mm(x) for x in self.contour_pix] 
-        self.midLine_mm = [self.interpolate2mm(x) for x in self.midLine_pix] 
+        try:
+            self.head_mm    = self.interpolate2mm(self.head_pix) 
+        except:
+            self.head_mm    =  None
+        try:
+            self.tail_mm    = self.interpolate2mm(self.tail_pix) 
+        except:
+            self.tail_mm    =  None
+        try:
+            self.contour_mm = [self.interpolate2mm(x) for x in self.contour_pix] 
+        except:
+            self.contour_mm    =  None
+        try:
+            self.midLine_mm = [self.interpolate2mm(x) for x in self.midLine_pix] 
+        except:
+            self.midLine_mm    =  None
 
-        if self.mm_tra_available == False:
+        if self.mm_tra_available == False and self.head_mm and self.tail_mm:
             self.create_trace_mm_denovo()
             self.mm_tra_available = True
             
