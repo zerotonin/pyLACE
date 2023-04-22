@@ -46,6 +46,7 @@ class traceAnalyser():
         self.sex      = traceCorrectorObj.dataDict['sex']
         self.animalNo = traceCorrectorObj.dataDict['animalNo']
         self.arena_size_by_experiment = default_arena_size
+        self.dataList = list()
 
         # arena coordinates 
         if self.mm_tra_available == False:
@@ -111,7 +112,6 @@ class traceAnalyser():
         Returns:
             dict: A dictionary containing metadata of the analyzed trace.
         """
-        self.dataList = list()
         if not isinstance(self.inZoneBendability,type(None)):
             self.dataList.append(['inZoneBendability', self.inZoneBendability,3])
         if not isinstance(self.midLineUniform_mm,type(None)):
