@@ -123,7 +123,7 @@ class fishRecAnalysis():
         os.mkdir(self.savePath)
         #return folderName
 
-    def correctionAnalysis(self,correction_mode = False):
+    def correctionAnalysis(self,correction_mode = True):
         """
         Performs the correction and analysis of the trace data.
         """        
@@ -131,7 +131,7 @@ class fishRecAnalysis():
         # calibrate the movie if nescessary
         if self.traCor.mmTraceAvailable == False and correction_mode == True:
             self.traCor.calibrateTracking()
-            self.traCor.close_figure()
+        self.traCor.close_figure()
         # do pixel to mm conversion if nescessary
         self.traAna = traceAnalyser(self.traCor,self.get_arena_size_by_experiment_tag())
         if self.traCor.mmTraceAvailable == False:
