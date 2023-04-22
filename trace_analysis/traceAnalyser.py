@@ -200,7 +200,7 @@ class traceAnalyser():
         except:
             self.midLine_mm    =  None
 
-        if self.mm_tra_available == False and self.head_mm and self.tail_mm:
+        if not self.mm_tra_available and self.head_mm is not None and self.tail_mm is not None:
             self.create_trace_mm_denovo()
             self.mm_tra_available = True
             
