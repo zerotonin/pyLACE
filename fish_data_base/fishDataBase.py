@@ -62,33 +62,43 @@ class fishDataBase():
         self.database.to_csv(self.database_file_position)
         self.saveDataBase()
     
-    def run_multi_trace_folder(self,folder_position,gene_name,experiment_str,birth_date,start_at=0):
+    def run_multi_trace_folder(self, folder_position, gene_name, experiment_str, birth_date, start_at=0, gui_correction=True):
         """
         Analyzes multiple trace files in a given folder and adds the data to the database.
-        
+
         Args:
             folder_position (str): The path to the folder containing the trace files.
             gene_name (str): The gene name associated with the trace files.
             experiment_str (str): The name of the experiment associated with the trace files.
             birth_date (str): The birth date of the fish associated with the trace files.
-            start_at (int): The index at which to start analyzing the trace files.
+            start_at (int, optional): The index at which to start analyzing the trace files. Defaults to 0.
+            gui_correction (bool, optional): Whether to apply GUI-based correction during analysis. Defaults to True.
         """
-        mff = sortMultiFileFolder(folder_position,experiment_str,gui_correction=True) 
+        # Sort and organize the files in the folder
+        mff = sortMultiFileFolder(folder_position, experiment_str)
         file_dictionary = mff.__main__()
-        keys = [k for k in file_dictionary.keys()] 
+
+        # Get a list of file keys
+        keys = [k for k in file_dictionary.keys()]
+
+        # Get a list of filenames that have already been analyzed
         allready_analysed_filenames = [os.path.basename(x) for x in self.database.path2_anaMat]
 
-        for key in tqdm(keys[start_at::],desc='analyse files'):
+        # Iterate through the files and analyze them if they have not been analyzed yet
+        for key in tqdm(keys[start_at::], desc='analyse files'):
             data_dictionary = file_dictionary[key]
             if os.path.basename(data_dictionary['anaMat']) not in allready_analysed_filenames:
-                #try:
-                fRAobj= fishRecAnalysis.fishRecAnalysis(data_dictionary,gene_name,experiment_str,birth_date,self.database_path)
+                # Perform the analysis on the current file
+                fRAobj = fishRecAnalysis.fishRecAnalysis(data_dictionary, gene_name, experiment_str, birth_date, self.database_path)
                 fRAobj.main(correction_mode=gui_correction)
+
+                # Add the analysis result to the database
                 database_entry = fRAobj.saveDataFrames()
                 self.addDataBase(database_entry)
+
+                # Save the updated database
                 self.saveDataBase()
-                #except:
-                #    print('The following directory could not be analysed: '+ data_dictionary['anaMat'])
+
 
 
     def addDataBase(self,database_entry):

@@ -29,6 +29,6 @@ db = fishDataBase.fishDataBase("/home/bgeurten/fishDataBase",'/home/bgeurten/fis
 
 multiFileFolder = '/home/bgeurten/cstart_experiments/rei/'
 # Experiment types CCur couynter current , Ta tapped, Unt untapped, cst, c-startz
-db.run_multi_trace_folder(multiFileFolder,'rei','cst','08-2019',start_at=0)
+db.run_multi_trace_folder(multiFileFolder,'rei','cst','08-2019',start_at=0,gui_correction=False)
 
 
