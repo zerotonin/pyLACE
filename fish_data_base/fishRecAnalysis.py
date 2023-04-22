@@ -126,6 +126,12 @@ class fishRecAnalysis():
     def correctionAnalysis(self,correction_mode):
         """
         Performs the correction and analysis of the trace data.
+
+        Args:
+            correction_mode (bool): If True, calibrates the tracking if necessary.
+
+        Returns:
+            None
         """
 
         self.traCor = traceCorrector(self.dataDict)
@@ -134,7 +140,14 @@ class fishRecAnalysis():
             self.traCor.calibrateTracking()
         self.traCor.close_figure()
 
-    def analyse_trajectory(self):   
+    def analyse_trajectory(self): 
+        """
+        Converts pixel trajectories to mm trajectories, checks if coordinates are in the arena,
+        and performs analysis depending on the experiment type.
+
+        Returns:
+            None
+        """  
         # do pixel to mm conversion if nescessary
         self.traAna = traceAnalyser(self.traCor,self.get_arena_size_by_experiment_tag())
         if self.traCor.mmTraceAvailable == False:
@@ -150,11 +163,26 @@ class fishRecAnalysis():
         self.dataList = self.traAna.exportDataList()
     
     def analyse_spiketrain(self):
-            spike_train_df, spike_properties = self.process_spike_data()
-            self.dataList.append(['spike_train_df',spike_train_df,2])
-            self.dataList.append(['spike_properties',spike_properties,2])
-    
+        """
+        Processes and analyzes the spike train data, appending the results to the dataList.
+
+        Returns:
+            None
+        """
+        spike_train_df, spike_properties = self.process_spike_data()
+        self.dataList.append(['spike_train_df',spike_train_df,2])
+        self.dataList.append(['spike_properties',spike_properties,2])
+
     def main(self, correction_mode= True):
+        """
+        Orchestrates the analysis of the trajectory and spike train data.
+
+        Args:
+            correction_mode (bool, optional): If True, performs the correction and analysis of the trace data. Defaults to True.
+
+        Returns:
+            None
+        """
         
         # check if the trajectory has an offeset between the frames and detection
         self.correctionAnalysis(correction_mode)
