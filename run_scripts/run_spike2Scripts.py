@@ -26,9 +26,9 @@ spike_train_df = sd.main()
 db = fishDataBase.fishDataBase("/home/bgeurten/fishDataBase",'/home/bgeurten/fishDataBase/fishDataBase_cstart.csv')
 #db.rebase_paths()
 
-
-multiFileFolder = '/home/bgeurten/cstart_experiments/sufge1/'
-# Experiment types CCur couynter current , Ta tapped, Unt untapped, cst, c-startz
-db.run_multi_trace_folder(multiFileFolder,'sufge1','cst','08-2019',start_at=0,gui_correction=False)
+for tag in ('rei','sufge1'):
+    multiFileFolder = f'/home/bgeurten/cstart_experiments/{tag}/'
+    # Experiment types CCur couynter current , Ta tapped, Unt untapped, cst, c-startz
+    db.run_multi_trace_folder(multiFileFolder,tag,'cst','08-2019',start_at=0,gui_correction=False)
 
 

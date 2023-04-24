@@ -15,17 +15,20 @@ import trace_analysis.CurvatureAnalyser as CurvatureAnalyser
 # Experiment types CCur counter current , Ta tapped, Unt untapped, cst, c-startz
 #db.runMultiTraceFolder(multiFileFolder,'rei','CCur','11-2018',start_at=0)
 #%%
-db = fishDataBase.fishDataBase("/home/bgeurten/fishDataBase",'/home/bgeurten/fishDataBase/fishDataBase_cruise.csv')
+db = fishDataBase.fishDataBase("/home/bgeurten/fishDataBase",'/home/bgeurten/fishDataBase/fishDataBase_counter_current.csv')
 db.rebase_paths()
 df = db.database
 curv_list = list()
 for i,row in tqdm(df.iterrows()):
     if isinstance(row.path2_midLineUniform_pix,str):
-        midline_df = pd.read_csv(row.path2_midLineUniform_pix)
-        ca = CurvatureAnalyser.CurvatureAnalyser(midline_df)
-        curv_list.append(ca.get_total_curvature_amps())
+        try:
+            midline_df = pd.read_csv(row.path2_midLineUniform_pix)
+            ca = CurvatureAnalyser.CurvatureAnalyser(midline_df)
+            curv_list.append(ca.get_total_curvature_amps())
+        except:
+            print(f'!! {row.path2_midLineUniform_pix} did not produce output')
 curv_df = pd.concat([df[['genotype', 'sex', 'animalNo', 'expType', 'birthDate']],pd.DataFrame(curv_list)],axis=1)
-curv_df.to_csv("/home/bgeurten/PyProjects/reRandomStats/Data/rei_curvature_data.csv", index=False)
+curv_df.to_csv("/home/bgeurten/PyProjects/reRandomStats/Data/rei_curvature_ccur_data.csv", index=False)
 
 
 import seaborn as sns
