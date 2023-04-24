@@ -139,12 +139,14 @@ class SpikeDetector:
 
         In the experiments, the fish were stimulated with a startle stimulus (an air blast from a micro injection pump),
         which triggers a flight reaction controlled by two giant fibers in the zebrafish spinal chord, called Mauthner neurons
-        or M-cells. These spikes are much larger and usually above 7.5 microVolts in amplitude. This function subdivides spikes
-        into Mauthner and other categories.
+        or M-cells. These spikes are much larger and usually above 7.5 microVolts in amplitude. They spike amplitude is also dependent
+        on the distance between electrodes and fish and the orientatio of the fish. Therefore we categorise Mauthner spikes not by
+        a fixed threshold nut by anamplitude that is at least four times higher than the median amplitude. This function subdivides
+        spikes into Mauthner and other categories.
         """
 
         self.spike_train_df['spike_category'] = 'Other'
-        self.spike_train_df.loc[self.spike_train_df.amplitude_muV.abs() > 7.5,'spike_category'] = 'Mauthner'
+        self.spike_train_df.loc[self.spike_train_df.amplitude_muV.abs() > self.spike_train_df.amplitude_muV.abs().median()*4,'spike_category'] = 'Mauthner'
     
     def get_timing_from_keyboard(self):
         """
