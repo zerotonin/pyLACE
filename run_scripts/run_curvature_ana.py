@@ -15,8 +15,8 @@ import trace_analysis.CurvatureAnalyser as CurvatureAnalyser
 # Experiment types CCur counter current , Ta tapped, Unt untapped, cst, c-startz
 #db.runMultiTraceFolder(multiFileFolder,'rei','CCur','11-2018',start_at=0)
 #%%
-db = fishDataBase.fishDataBase("/home/bgeurten/fishDataBase",'/home/bgeurten/fishDataBase/fishDataBase_counter_current.csv')
-db.rebase_paths()
+db = fishDataBase.fishDataBase("/home/bgeurten/fishDataBase",'/home/bgeurten/fishDataBase/fishDataBase_cstart.csv')
+#db.rebase_paths()
 df = db.database
 curv_list = list()
 for i,row in tqdm(df.iterrows()):
@@ -27,12 +27,11 @@ for i,row in tqdm(df.iterrows()):
             curv_list.append(ca.get_total_curvature_amps())
         except:
             print(f'!! {row.path2_midLineUniform_pix} did not produce output')
-curv_df = pd.concat([df[['genotype', 'sex', 'animalNo', 'expType', 'birthDate']],pd.DataFrame(curv_list)],axis=1)
-curv_df.to_csv("/home/bgeurten/PyProjects/reRandomStats/Data/rei_curvature_ccur_data.csv", index=False)
-
-
+#curv_df = pd.concat([df[['genotype', 'sex', 'animalNo', 'expType', 'birthDate']],pd.DataFrame(curv_list)],axis=1)
+#curv_df.to_csv("/home/bgeurten/PyProjects/reRandomStats/Data/rei_curvature_c-start_data.csv", index=False)
+df = pd.concat([df,pd.DataFrame(curv_list)],axis=1)
 import seaborn as sns
-for expType in [('Ta','motivated swimming'),('Unt','free swimming')]:
+for expType in [('cst','c-start'),('Unt','free swimming')]:
     for parameter in ['median_curv_amp', 'mean_curv_amp', 'max_curv_amp']:
         f= plt.figure()
         sns.boxplot(x="genotype", y=parameter, order=['rei-INT', 'rei-HT', 'rei-HM'],
