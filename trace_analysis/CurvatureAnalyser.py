@@ -97,8 +97,12 @@ class CurvatureAnalyser:
         """
         total_curv = self.calculate_total_curvature()  # Calculate total curvature
         total_curv_amps = self.find_peak_amplitudes(total_curv, prominence_threshold)  # Find peak amplitudes
-        median_curv_amp = np.median(total_curv_amps)  # Calculate the median amplitude
-        mean_curv_amp = np.mean(total_curv_amps)  # Calculate the mean amplitude
-        max_curv_amp = np.max(total_curv_amps)  # Calculate the maximum amplitude
+        median_curv_amp = np.nanmedian(total_curv_amps)  # Calculate the median amplitude
+        mean_curv_amp = np.nanmean(total_curv_amps)  # Calculate the mean amplitude
+        max_curv_amp = np.nanmax(total_curv_amps)  # Calculate the maximum amplitude
+        max_curv_amp_index = np.nanargmax(total_curv_amps) # Find the index of the maximum amplitude
 
-        return {'median_curv_amp': median_curv_amp, 'mean_curv_amp': mean_curv_amp, 'max_curv_amp': max_curv_amp}
+
+
+        return {'median_curv_amp': median_curv_amp, 'mean_curv_amp': mean_curv_amp, 
+                'max_curv_amp': max_curv_amp,'max_curv_amp_index': max_curv_amp_index}
