@@ -11,6 +11,9 @@ class cStartPlotter:
     A class for plotting the contours, spike occurrences, and two parameters in a single figure.
     Used for Garag et al 2023 A and B
     """
+    def __init__(self) -> None:
+         pass
+         
     def create_vertical_axes(self):
         """
         Create a figure with three vertically arranged axes (ax1, ax2, ax3), and a colorbar axis (cax1)
@@ -61,7 +64,7 @@ class cStartPlotter:
         ax.set_ylabel('Spike Occurrences')
         ax.set_yticks([])  # Remove y-axis ticks as they are not relevant in this plot
 
-    def plot_two_parameters(self, fig, ax, timeAx, param1, param2, param1_label, param2_label):
+    def plot_two_parameters(self, fig, ax, time_ax, param1, param2, param1_label, param2_label):
         """
         Plot two parameters on a single plot with two y-axes.
 
@@ -83,7 +86,7 @@ class cStartPlotter:
             The label for the second parameter data.
         """
         color = 'tab:blue'
-        ax.plot(timeAx, param1, color=color)
+        ax.plot(time_ax, param1, color=color)
         ax.set_xlabel('time, s')
         ax.set_ylabel(param1_label, color=color)
         ax.tick_params(axis='y', labelcolor=color)
@@ -91,7 +94,7 @@ class cStartPlotter:
         ax2 = ax.twinx()
 
         color = 'xkcd:sky blue'
-        ax2.plot(timeAx, param2, color=color)
+        ax2.plot(time_ax, param2, color=color)
         ax2.set_ylabel(param2_label, color=color)
         ax2.tick_params(axis='y', labelcolor=color)
 
@@ -181,7 +184,10 @@ class cStartPlotter:
 
         Returns
         -------
-        None
+        f : matplotlib.figure.Figure
+            The Figure object.
+        ax1, cax1, ax2, ax3 : tuple of matplotlib.axes.Axes
+            The Axes objects for the created subplots.
         """
 
         f, ax_list = self.create_vertical_axes()
@@ -190,5 +196,4 @@ class cStartPlotter:
                                  'thrust, m/s', 'instant. spike frequency, Hz')
         self.plot_contours(ax_list[0], ax_list[1], traceContour, fps, num_contours=200, colormap='viridis', alpha=0.5)
 
-        f.tight_layout()
-        plt.show()
+        return f,ax_list
