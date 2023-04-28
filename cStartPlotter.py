@@ -92,10 +92,12 @@ class cStartPlotter:
         ax.tick_params(axis='y', labelcolor=color)
         ax.set_xlim((time_ax[0],time_ax[-1]))
         ax2 = ax.twinx()
+        ax.set_yscale('log')
 
         color = 'xkcd:sky blue'
         ax2.plot(time_ax, param2, color=color)
         ax2.set_ylabel(param2_label, color=color)
+        ax2.set_ylim((0,2.5))
         ax2.tick_params(axis='y', labelcolor=color)
 
     def plot_contours(self, ax, cax, traceContour, fps, num_contours=200, colormap='viridis', alpha=0.5, outline=True):
@@ -150,12 +152,9 @@ class cStartPlotter:
             )
             ax.add_patch(polygon)
 
-            # Update axis limits
-            min_x, min_y = np.minimum((min_x, min_y), contour.min(axis=0))
-            max_x, max_y = np.maximum((max_x, max_y), contour.max(axis=0))
 
-        ax.set_xlim(min_x, max_x)
-        ax.set_ylim(min_y, max_y)
+        ax.set_xlim(0, 300)
+        ax.set_ylim(0, 130)
         ax.set_aspect('equal')
 
         # Add colorbar
@@ -192,8 +191,8 @@ class cStartPlotter:
 
         f, ax_list = self.create_vertical_axes()
         self.plot_spike_occurrences(spike_df, ax_list[3])
-        self.plot_two_parameters(f, ax_list[2], time_ax, np.abs(trace[:, 3]), interp_instant_freq,
-                                 'thrust, m/s', 'instant. spike frequency, Hz')
+        self.plot_two_parameters(f, ax_list[2], time_ax, interp_instant_freq, np.abs(trace[:, 3]),
+                                  'instant. spike frequency, Hz', 'thrust, m/s')
         self.plot_contours(ax_list[0], ax_list[1], traceContour, fps, num_contours=200, colormap='viridis', alpha=0.5)
 
         return f,ax_list

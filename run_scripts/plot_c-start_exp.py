@@ -6,6 +6,7 @@ import seaborn as sns
 from data_handlers import matLabResultLoader
 import fishPlot,cStartPlotter
 import matplotlib.widgets as widgets
+import glob
 
 def on_button_save(event, fig, save_filename):
     fig.savefig(save_filename)
@@ -21,10 +22,11 @@ df = db.database
 cs_plotter = cStartPlotter.cStartPlotter()
 #%%
 for i,row in df.iterrows():
-    if i > 83:
-        mlr = matLabResultLoader.matLabResultLoader(row['path2_anaMat'])
-        traceInfo, traceContour, traceMidline, traceHead, traceTail, trace, bendability, binnedBend, saccs, trigAveSacc, medMaxVelocities =mlr.getData()
+    if i > 0:
         try:
+            mlr = matLabResultLoader.matLabResultLoader(row['path2_anaMat'])
+            raceInfo, traceContour, traceMidline, traceHead, traceTail, trace, bendability, binnedBend, saccs, trigAveSacc, medMaxVelocities =mlr.getData()
+        
             spike_df = pd.read_csv(row.path2_spike_train_df)
 
             time_ax = fishPlot.makeTimeAxis(trace.shape[0],row.fps)
@@ -52,3 +54,32 @@ for i,row in df.iterrows():
             print(i)
         except:
             pass
+
+#%%
+
+
+directory = "./"
+svg_files = glob.glob(f"{directory}/*.svg")
+
+good_trials = [int(x.split('_')[0].split('/')[1]) for x in svg_files]
+
+for i,row in df.iterrows():
+    if i  in good_trials:
+        mlr = matLabResultLoader.matLabResultLoader(row['path2_anaMat'])
+        raceInfo, traceContour, traceMidline, traceHead, traceTail, trace, bendability, binnedBend, saccs, trigAveSacc, medMaxVelocities =mlr.getData()
+    
+        spike_df = pd.read_csv(row.path2_spike_train_df)
+
+        time_ax = fishPlot.makeTimeAxis(trace.shape[0],row.fps)
+        # Assuming spike_df is a pandas DataFrame with columns 'spike_peak_s' and 'instant_freq'
+        spike_peak_s = spike_df['spike_peak_s'].to_numpy()
+        instant_freq = spike_df['instant_freq'].to_numpy()
+        interp_instant_freq = np.interp(time_ax, spike_peak_s, instant_freq)
+
+        f,ax_list = cs_plotter.create_final_plot(spike_df, time_ax, trace, interp_instant_freq, traceContour, row.fps)
+        ax_list[0].set_title(f'{row.genotype} {row.sex} ')
+        f.tight_layout()
+        save_filename = f'./{i}_{row.genotype}_{row.sex}.svg'
+        f.savefig(save_filename)
+        
+
