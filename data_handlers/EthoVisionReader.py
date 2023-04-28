@@ -41,12 +41,15 @@ class EthoVisionReader:
         Returns:
             DataFrame: A DataFrame containing the trajectory data.
         """
-        column_heads = sheet_data.iloc[35,:].to_list()
-        column_units = sheet_data.iloc[36,:].to_list()
+
+        # Find the index of the 'Trial time' in the 1st column
+        index = (sheet_data.iloc[:,0] == 'Trial time').idxmax()
+        column_heads = sheet_data.iloc[index,:].to_list()
+        column_units = sheet_data.iloc[index+1,:].to_list()
         col_combi = list(zip(column_heads, column_units))
         column_names = [f'{x[0]}_{x[1]}'.replace(' ','_') for x in col_combi]
 
-        return pd.DataFrame(sheet_data.iloc[37::,:].to_numpy(), columns=column_names)
+        return pd.DataFrame(sheet_data.iloc[index+2::,:].to_numpy(), columns=column_names)
 
     def get_meta_data(self, sheet_data, df):
         """
