@@ -73,8 +73,6 @@ def create_database(db_name):
 
 # Specify the folder to search for .xlsx files
 folder = "/media/bgeurten/TOSHIBA_EXT/alex/raw_data/"
-# Specify the folder to search for .xlsx files
-folder = "path/to/folder"
 
 # Get a list of all .xlsx files in the folder and its subdirectories
 xlsx_files = get_all_xlsx_files(folder)
