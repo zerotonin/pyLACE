@@ -55,7 +55,7 @@ def read_all_ethovision_files_to_sql(xlsx_files, db_connection):
         None
     """
     for file in  tqdm(xlsx_files,desc='reading files'):
-        etho_vision_reader = EthoVisionReader(file)
+        etho_vision_reader = EthoVisionReader(file,correction_mode=True)
         file_data = etho_vision_reader.main()
         file_data.to_sql('ethovision_data', db_connection, if_exists='append', index=False)
 
