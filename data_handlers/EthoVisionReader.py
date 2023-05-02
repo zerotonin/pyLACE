@@ -12,7 +12,8 @@ class EthoVisionReader:
     Date: 28th April 2023
     """
 
-    def __init__(self, filename):
+
+    def __init__(self, filename, correction_mode = False, correction_factor = 1/38.9683801):
         """
         Constructs the EthoVisionReader object with the given filename.
 
@@ -21,6 +22,40 @@ class EthoVisionReader:
         """
         self.filename = filename
         self.excel_data = self.read_file()
+        self.correction_mode = correction_mode
+        self.correction_factor = correction_factor
+        self.set_tank_corner_coordinates()
+
+    def set_tank_corner_coordinates(self):
+        """
+        Sets the corner coordinates for each tank to be used for converting
+        the EthoVision coordinate system to a tank coordinate system.
+
+        The tank coordinate system has its origin in the lower left corner,
+        and the Y-axis pointing upwards.
+
+        The corner coordinates are stored as a list of dictionaries in the
+        attribute `self.tank_coordinates`. Each dictionary represents a tank
+        and contains the following keys: 'lower left', 'upper left', 'upper right', 
+        and 'lower right'. The values are tuples with the X and Y coordinates.
+
+        For example:
+        self.tank_coordinates = [
+            {'lower left': (-43.35, -22.5), 'upper left': (-43.28, -2.14), ...},
+            {'lower left': (-20.57, -22.9), 'upper left': (-20.78, -6.02), ...},
+            ...
+        ]
+
+        This function is called in the __init__ method of the EthoVisionReader class.
+
+        Returns:
+            None
+        """
+        tank_0 = {'lower left':(-43.35,-22.5),'upper left':(-43.28,-2.14),'upper right':(-20.91,-5.94),'lower right':(-20.98,-22.02)}
+        tank_1 = {'lower left':(-20.57,-22.9),'upper left':(-20.78,-6.02),'upper right':(0.21,-6.02),'lower right':(0.21,-22.02)}
+        tank_2 = {'lower left':(0.76,-22.02),'upper left':(0.69,-6.14),'upper right':(21.47,-6.14),'lower right':(-21.56,-21.95)}
+        tank_3 = {'lower left':(22.02,-29.95),'upper left':(22.02,-6.14),'upper right':(44.11,-6.28),'lower right':(43.83,-22.98)}
+        self.tank_coordinates = [tank_0,tank_1,tank_2,tank_3]
 
     def read_file(self):
         """
@@ -69,6 +104,26 @@ class EthoVisionReader:
             df[key.replace(' ', '_')] = value[0] if len(value) > 0 else None
 
         return df
+   
+    def apply_correction_factor(self, df):
+        """
+        Applies the correction factor to the 'X_center_cm' and 'Y_center_cm' columns
+        in the given DataFrame if the correction mode is set to true.
+
+        Args:
+            df (pd.DataFrame): A DataFrame containing 'X_center_cm' and 'Y_center_cm' columns.
+        
+        Returns:
+            pd.DataFrame: A DataFrame with the corrected 'X_center_cm' and 'Y_center_cm' columns.
+        """
+        if self.correction_mode:
+            df['X_center_cm']    = df['X_center_cm'].astype(float) * self.correction_factor
+            df['Y_center_cm']    = df['Y_center_cm'].astype(float) * self.correction_factor
+            df['Area_cm²']       = df['Area_cm²'].astype(float) * self.correction_factor
+            df['Areachange_cm²'] = df['Areachange_cm²'].astype(float) * self.correction_factor
+            df['Distance_moved_cm'] = df['Distance_moved_cm'].astype(float) * self.correction_factor
+
+        return df
 
     def main(self):
         """
@@ -82,6 +137,7 @@ class EthoVisionReader:
         for sheet_name, sheet_data in self.excel_data.items():
             if sheet_data.iloc[-1, 0] != 'No samples logged for this track!':
                 df_trajectory = self.get_trajectory(sheet_data)
+                df_trajectory = self.apply_correction_factor(df_trajectory)  # Apply the correction factor
                 df_meta_data = self.get_meta_data(sheet_data, df_trajectory)
                 df_list.append(df_meta_data)
 
