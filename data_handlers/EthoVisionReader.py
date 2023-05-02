@@ -1,4 +1,6 @@
 import pandas as pd
+import numpy as np
+from scipy.interpolate import griddata
 
 class EthoVisionReader:
     """
@@ -13,17 +15,23 @@ class EthoVisionReader:
     """
 
 
-    def __init__(self, filename, correction_mode = False, correction_factor = 1/38.9683801):
+    def __init__(self, filename, tank_height = 20.5, tank_width = 20.5, correction_mode = False, correction_factor = 1/38.9683801):
         """
         Constructs the EthoVisionReader object with the given filename.
 
         Args:
             filename (str): The filename of the Excel file to read.
+            tank_width (float): The width of the tank.
+            tank_height (float): The height of the tank.
         """
         self.filename = filename
         self.excel_data = self.read_file()
+        
         self.correction_mode = correction_mode
         self.correction_factor = correction_factor
+
+        self.tank_height = tank_height
+        self.tank_width = tank_width
         self.set_tank_corner_coordinates()
 
     def set_tank_corner_coordinates(self):
@@ -52,7 +60,7 @@ class EthoVisionReader:
             None
         """
         tank_0 = {'lower left':(-43.35,-22.5),'upper left':(-43.28,-2.14),'upper right':(-20.91,-5.94),'lower right':(-20.98,-22.02)}
-        tank_1 = {'lower left':(-20.57,-22.9),'upper left':(-20.78,-6.02),'upper right':(0.21,-6.02),'lower right':(0.21,-22.02)}
+        tank_1 = {'lower left':(-20.57,-22.09),'upper left':(-20.78,-6.02),'upper right':(0.21,-6.02),'lower right':(0.21,-22.02)}
         tank_2 = {'lower left':(0.76,-22.02),'upper left':(0.69,-6.14),'upper right':(21.47,-6.14),'lower right':(-21.56,-21.95)}
         tank_3 = {'lower left':(22.02,-29.95),'upper left':(22.02,-6.14),'upper right':(44.11,-6.28),'lower right':(43.83,-22.98)}
         self.tank_coordinates = [tank_0,tank_1,tank_2,tank_3]
@@ -121,9 +129,44 @@ class EthoVisionReader:
             df['Y_center_cm']    = df['Y_center_cm'].astype(float) * self.correction_factor
             df['Area_cm²']       = df['Area_cm²'].astype(float) * self.correction_factor
             df['Areachange_cm²'] = df['Areachange_cm²'].astype(float) * self.correction_factor
-            df['Distance_moved_cm'] = df['Distance_moved_cm'].astype(float) * self.correction_factor
+            df['Distance_moved_cm'] = df['Distance_moved_cm'].replace('-', 0).astype(float) * self.correction_factor
 
         return df
+
+    
+    def interpolate_coordinates(self, meta_data):
+        """
+        Interpolates the 'X_center_cm' and 'Y_center_cm' coordinates in df_trajectory,
+        using the given tank_coordinates, to new coordinates based on a tank with the
+        specified tank_width and tank_height.
+
+        Args:
+            meta_data (pd.DataFrame): A DataFrame containing the metadata.
+        Returns:
+            pd.DataFrame: A DataFrame with the interpolated 'X_center_cm' and 'Y_center_cm' coordinates.
+        """
+
+        # Get the arena number from the metadata
+        arena_ID = int(meta_data['Arena_ID'].iloc[0])
+
+        # Get the tank corners for the corresponding tank_number
+        corners = self.tank_coordinates[arena_ID]
+
+        # Define the tank corners for the new coordinate system
+        new_corners = np.array([(0, 0), (0, self.tank_height), ( self.tank_width,  self.tank_height), ( self.tank_width, 0)])
+
+        # Prepare the points for interpolation
+        source_points = np.array([corners['lower left'], corners['upper left'], corners['upper right'], corners['lower right']])
+        target_points = np.array(meta_data[['X_center_cm', 'Y_center_cm']])
+
+        # Perform the interpolation
+        interpolated_points = griddata(source_points, new_corners, target_points)
+
+        # Update the 'X_center_cm' and 'Y_center_cm' columns with the interpolated coordinates
+        meta_data['X_center_cm'] = interpolated_points[:, 0]
+        meta_data['Y_center_cm'] = interpolated_points[:, 1]
+
+        return meta_data
 
     def main(self):
         """
@@ -136,9 +179,15 @@ class EthoVisionReader:
 
         for sheet_name, sheet_data in self.excel_data.items():
             if sheet_data.iloc[-1, 0] != 'No samples logged for this track!':
+                # get trajectory data
                 df_trajectory = self.get_trajectory(sheet_data)
-                df_trajectory = self.apply_correction_factor(df_trajectory)  # Apply the correction factor
+                # Apply the correction factor
+                df_trajectory = self.apply_correction_factor(df_trajectory) 
+                # combine trajectory with important meta data
                 df_meta_data = self.get_meta_data(sheet_data, df_trajectory)
+                #interpolate to tank coordinates
+                df_meta_data = self.interpolate_coordinates(df_meta_data)
+                #save
                 df_list.append(df_meta_data)
 
         final_data = pd.concat(df_list)
@@ -146,6 +195,6 @@ class EthoVisionReader:
 
 # Example usage:
 # filename = "/home/bgeurten/Downloads/Raw_data-2023_setup-Trial1.xlsx"
-# etho_vision_reader = EthoVisionReader(filename)
+# etho_vision_reader = EthoVisionReader(filename,correction_mode=True)
 # final_data = etho_vision_reader.main()
 # print(final_data)
