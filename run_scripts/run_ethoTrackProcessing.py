@@ -26,12 +26,3 @@ else:
     print("Could not open the database")
 
 
-subject_df.speed_cmPs.hist(bins=np.linspace(0,5,50)) 
-plt.show()
-
-speed_meds = list()
-for i in subject_df.Day_number.unique():
-    speed_meds.append(np.nanmedian(subject_df.loc[subject_df.Day_number == i,'speed_cmPs']))
-
-plt.plot(speed_meds)
-plt.show()
