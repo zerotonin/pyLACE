@@ -250,6 +250,29 @@ def side_tigmotaxis(subject_df):
     active_side_rows = subject_df.loc[(subject_df['activity']) & (subject_df['in_left_margin'] | subject_df['in_right_margin'])]
     return len(active_side_rows)
 
+def side_zonening(subject_df):
+    """
+    Calculate the total number of transitions in the zone map between the lateral zones.
+    This represents the etho-vision version of the tigmotaxis analysis.
+
+    Args:
+        subject_df (pd.DataFrame): A DataFrame containing 'zone_map' column.
+
+    Returns:
+        int: The total number of transitions between the specified zones.
+    """
+    transitions = 0
+    target_transitions = [(1, 4), (4, 1), (4, 7), (7, 4), (9, 6), (6, 9), (6, 3), (3, 6)]
+    
+    for i in range(len(subject_df) - 1):
+        current_zone = subject_df['zone_map'].iloc[i]
+        next_zone = subject_df['zone_map'].iloc[i + 1]
+        
+        if (current_zone, next_zone) in target_transitions:
+            transitions += 1
+            
+    return transitions
+
 
 def get_speed_and_duration_stats(subject_df, speed_threshold):
     """
