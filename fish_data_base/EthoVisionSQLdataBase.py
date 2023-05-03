@@ -273,6 +273,20 @@ def side_zonening(subject_df):
             
     return transitions
 
+def true_freezing(subject_df):
+    """
+    Calculate the total count of rows where in_bottom_margin is True and activity is False.
+    Thereby we quantify "true" freezing in which the fish sits on the bottom in rigor.
+
+    Args:
+        subject_df (pd.DataFrame): A DataFrame containing 'activity' and 'in_bottom_margin' columns.
+
+    Returns:
+        int: The total count of rows where in_bottom_margin is True and activity is False.
+    """
+    freezing_rows = subject_df.loc[(~subject_df['activity']) & (subject_df['in_bottom_margin'])]
+    return len(freezing_rows)
+
 
 def get_speed_and_duration_stats(subject_df, speed_threshold):
     """
