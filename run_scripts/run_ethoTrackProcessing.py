@@ -17,7 +17,9 @@ if ev_db.db_connection:
     tank_numbers,id_val = unique_fish.iloc[50,:]
     subject_df = ev_db.get_data_for_subject(tank_numbers,id_val )
     print(subject_df)
-
+    ev_dp = EthovisionDataProcessor(subject_df)
+    result_df = ev_dp.process_data()
+    print(result_df)
     # Close the SQLite database connection
     ev_db.close_connection()
 else:
