@@ -179,7 +179,7 @@ class EthoVisionReader:
 
 
 
-    def interpolate_coordinates(self, meta_data, plot_mode = True):
+    def interpolate_coordinates(self, meta_data, plot_mode = False):
         """
         Interpolates the 'X_center_cm' and 'Y_center_cm' coordinates in df_trajectory,
         using the given tank_coordinates, to new coordinates based on a tank with the
@@ -190,7 +190,7 @@ class EthoVisionReader:
             plot_mode (bool, optional): If True, plots the original tank corners,
                                         source points, new tank corners, and interpolated
                                         points using the plot_interpolated_coordinates function.
-                                        Defaults to True.
+                                        Defaults to False.
         Returns:
             pd.DataFrame: A DataFrame with the interpolated 'X_center_cm' and 'Y_center_cm' coordinates.
         """
