@@ -149,7 +149,7 @@ class EthovisionDataProcessor:
         and either in_left_margin or in_right_margin is True. This column represents a direct measure
         of tigmotaxis in the fish.
         """
-        self.subject_df['tigmo_taxis'] = self.subject_df.loc[(self.subject_df['activity']) & (self.subject_df['in_left_margin'] | self.subject_df['in_right_margin'])]
+        self.subject_df['tigmo_taxis'] = (self.subject_df['activity']) & (self.subject_df['in_left_margin'] | self.subject_df['in_right_margin'])
 
     def true_freezing(self):
         """
@@ -157,7 +157,7 @@ class EthovisionDataProcessor:
         True and activity is False. This column quantifies "true" freezing, in which the fish sits on the
         bottom in rigor.
         """
-        self.subject_df['freezing'] = self.subject_df.loc[(~self.subject_df['activity']) & (self.subject_df['in_bottom_margin'])]
+        self.subject_df['freezing'] = (~self.subject_df['activity']) & (self.subject_df['in_bottom_margin'])
 
     
     def latency_to_top(self,day_data):
@@ -167,7 +167,7 @@ class EthovisionDataProcessor:
         Returns:
             float: The index when the fish first enters the top zone.
         """
-        first_top_entry = self.subject_df.loc[day_data['in_top_margin']].index[0]
+        first_top_entry = day_data.loc[day_data['in_top_margin']].index[0]
         return first_top_entry/self.fps
 
     def side_zonening(self,day_data):
