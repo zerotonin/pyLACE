@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from scipy.interpolate import griddata
+import matplotlib.pyplot as plt
 
 class EthoVisionReader:
     """
@@ -59,10 +60,10 @@ class EthoVisionReader:
         Returns:
             None
         """
-        tank_0 = {'lower left':(-43.35,-22.5),'upper left':(-43.28,-2.14),'upper right':(-20.91,-5.94),'lower right':(-20.98,-22.02)}
+        tank_0 = {'lower left':(-43.35,-22.5),'upper left':(-43.28,-5.87),'upper right':(-20.91,-5.94),'lower right':(-20.98,-22.02)}
         tank_1 = {'lower left':(-20.57,-22.09),'upper left':(-20.78,-6.02),'upper right':(0.21,-6.02),'lower right':(0.21,-22.02)}
-        tank_2 = {'lower left':(0.76,-22.02),'upper left':(0.69,-6.14),'upper right':(21.47,-6.14),'lower right':(-21.56,-21.95)}
-        tank_3 = {'lower left':(22.02,-29.95),'upper left':(22.02,-6.14),'upper right':(44.11,-6.28),'lower right':(43.83,-22.98)}
+        tank_2 = {'lower left':(0.76,-22.02),'upper left':(0.69,-6.14),'upper right':(21.47,-6.14),'lower right':(21.56,-21.95)}
+        tank_3 = {'lower left':(22.02,-22.02),'upper left':(22.02,-6.14),'upper right':(44.11,-6.28),'lower right':(43.83,-22.98)}
         self.tank_coordinates = [tank_0,tank_1,tank_2,tank_3]
 
     def read_file(self):
@@ -112,6 +113,7 @@ class EthoVisionReader:
             df[key.replace(' ', '_')] = value[0] if len(value) > 0 else None
 
         return df
+    
    
     def apply_correction_factor(self, df):
         """
@@ -125,16 +127,59 @@ class EthoVisionReader:
             pd.DataFrame: A DataFrame with the corrected 'X_center_cm' and 'Y_center_cm' columns.
         """
         if self.correction_mode:
-            df['X_center_cm']    = df['X_center_cm'].astype(float) * self.correction_factor
-            df['Y_center_cm']    = df['Y_center_cm'].astype(float) * self.correction_factor
-            df['Area_cm²']       = df['Area_cm²'].astype(float) * self.correction_factor
-            df['Areachange_cm²'] = df['Areachange_cm²'].astype(float) * self.correction_factor
-            df['Distance_moved_cm'] = df['Distance_moved_cm'].replace('-', 0).astype(float) * self.correction_factor
+            df['X_center_cm']       = df['X_center_cm'].replace('-', np.nan).apply(lambda x: float(x) * self.correction_factor)
+            df['Y_center_cm']       = df['Y_center_cm'].replace('-', np.nan).apply(lambda x: float(x) * self.correction_factor)
+            df['Area_cm²']          = df['Area_cm²'].replace('-', np.nan).apply(lambda x: float(x) * self.correction_factor)
+            df['Areachange_cm²']    = df['Areachange_cm²'].replace('-', np.nan).apply(lambda x: float(x) * self.correction_factor)
+            df['Distance_moved_cm'] = df['Distance_moved_cm'].replace('-', np.nan).apply(lambda x: float(x) * self.correction_factor)
 
         return df
 
-    
-    def interpolate_coordinates(self, meta_data):
+
+    def plot_interpolated_coordinates(self,meta_data, original_corners, new_corners, interpolated_points):
+        """
+        Plots a figure with two subplots. The first subplot shows the original tank corners
+        and source points, and the second subplot shows the new tank corners and
+        interpolated points.
+
+        Args:
+            meta_data (pd.DataFrame): A DataFrame containing the metadata.
+            original_corners (numpy.ndarray): A 2D numpy array containing the coordinates
+                                              of the original tank corners.
+            new_corners (numpy.ndarray): A 2D numpy array containing the coordinates
+                                         of the new tank corners.
+            interpolated_points (numpy.ndarray): A 2D numpy array containing the
+                                                 interpolated coordinates.
+        """
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
+
+        # Plot the original tank corners and source points
+        ax1.plot(np.append(original_corners[:, 0], original_corners[0, 0]), 
+                np.append(original_corners[:, 1], original_corners[0, 1]), 'g-o', label='Original corners')
+        ax1.scatter(meta_data['X_center_cm'], meta_data['Y_center_cm'], label='Source points', alpha=0.5)
+        corner_labels = ['lower left', 'upper left', 'upper right', 'lower right']
+        for i, txt in enumerate(corner_labels):
+            ax1.annotate(txt, (original_corners[i, 0], original_corners[i, 1]))
+        ax1.set_title('Original tank corners and source points')
+        ax1.legend()
+        ax1.set_aspect('equal')
+
+        # Plot the new tank corners and interpolated points
+        ax2.plot(np.append(new_corners[:, 0], new_corners[0, 0]), 
+                np.append(new_corners[:, 1], new_corners[0, 1]), 'g-o', label='New corners')
+        ax2.scatter(interpolated_points[:, 0], interpolated_points[:, 1], label='Interpolated points', alpha=0.5)
+        for i, txt in enumerate(corner_labels):
+            ax2.annotate(txt, (new_corners[i, 0], new_corners[i, 1]))
+        ax2.set_title('New tank corners and interpolated points')
+        ax2.legend()
+        ax2.set_aspect('equal')
+
+        plt.show()
+
+
+
+
+    def interpolate_coordinates(self, meta_data, plot_mode = True):
         """
         Interpolates the 'X_center_cm' and 'Y_center_cm' coordinates in df_trajectory,
         using the given tank_coordinates, to new coordinates based on a tank with the
@@ -142,9 +187,14 @@ class EthoVisionReader:
 
         Args:
             meta_data (pd.DataFrame): A DataFrame containing the metadata.
+            plot_mode (bool, optional): If True, plots the original tank corners,
+                                        source points, new tank corners, and interpolated
+                                        points using the plot_interpolated_coordinates function.
+                                        Defaults to True.
         Returns:
             pd.DataFrame: A DataFrame with the interpolated 'X_center_cm' and 'Y_center_cm' coordinates.
         """
+
 
         # Get the arena number from the metadata
         arena_ID = int(meta_data['Arena_ID'].iloc[0])
@@ -161,6 +211,10 @@ class EthoVisionReader:
 
         # Perform the interpolation
         interpolated_points = griddata(source_points, new_corners, target_points)
+
+        # Plot optional
+        if plot_mode:
+            self.plot_interpolated_coordinates(meta_data, source_points, new_corners, interpolated_points)
 
         # Update the 'X_center_cm' and 'Y_center_cm' columns with the interpolated coordinates
         meta_data['X_center_cm'] = interpolated_points[:, 0]
