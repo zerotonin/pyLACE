@@ -79,3 +79,6 @@ class EthoVisionSQLdataBase:
         sorted_df = df.sort_values(by=['Start_time', 'Recording_time_s'])
 
         return sorted_df
+    
+    def close_connection(self):
+        self.db_connection.close()
