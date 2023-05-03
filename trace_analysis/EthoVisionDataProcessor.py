@@ -241,11 +241,20 @@ class EthovisionDataProcessor:
     def process_data(self, tank_width, tank_height, num_bins_2D_hist=10):
         """
         Process the subject data and compute various metrics for each day, such as median speed,
-        median activity bout duration, activity fraction, median freezing bout duration, freezing fraction,
-        median tigmotaxis bout duration, tigmotaxis fraction, tigmotaxis transitions, and latency to top.
+        gross speed, median activity bout duration, activity fraction, median freezing bout duration, 
+        freezing fraction, median top duration, top fraction, median bottom duration, bottom fraction,
+        median tigmotaxis bout duration, tigmotaxis fraction, tigmotaxis transitions, latency to top,
+        distance travelled, and positional 2D histograms.
+
+        Args:
+            tank_width (float): The width of the tank in centimeters.
+            tank_height (float): The height of the tank in centimeters.
+            num_bins_2D_hist (int, optional): The number of bins along each axis for the 2D histogram.
+                Default is 10.
 
         Returns:
             stats_df (pd.DataFrame): A DataFrame containing the computed metrics for each day.
+            histograms (np.ndarray): A 3D numpy array containing the 2D histograms for each day.
         """
         self.add_day_number()
         self.calculate_speed()
