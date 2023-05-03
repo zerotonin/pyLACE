@@ -221,6 +221,22 @@ def map_zones_to_integers(subject_df):
     return subject_df
 
 
+def latency_to_top(subject_df, fps):
+    """
+    Calculate the latency until the fish first enters the top zone.
+
+    Args:
+        subject_df (pd.DataFrame): A DataFrame containing 'in_top_margin' column.
+        fps (int): Frames per second of the recorded data.
+
+    Returns:
+        float: The latency in seconds until the fish first enters the top zone.
+    """
+    first_top_entry = subject_df.loc[subject_df['in_top_margin']].index[0]
+    latency = first_top_entry / fps
+    return latency
+
+
 
 def get_speed_and_duration_stats(subject_df, speed_threshold):
     """
