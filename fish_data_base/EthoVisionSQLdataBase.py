@@ -238,6 +238,9 @@ def get_speed_and_duration_stats(subject_df, speed_threshold):
     # Calculate speed and add it to the DataFrame
     subject_df = calculate_speed(subject_df)
 
+    # Set activity status based on speed_threshold
+    set_activity_status(subject_df, speed_threshold)
+
     median_speeds              = list()
     median_bout_duration_above = list()
     median_bout_duration_below = list()
@@ -247,24 +250,20 @@ def get_speed_and_duration_stats(subject_df, speed_threshold):
     for i in subject_df.Day_number.unique():
         day_data = subject_df.loc[subject_df.Day_number == i]
 
-        # Calculate speed
-        day_data = calculate_speed(day_data)
-
         # Calculate median speed above threshold
-        speed_above_threshold = day_data.loc[day_data['speed_cmPs'] > speed_threshold, 'speed_cmPs']
+        speed_above_threshold = day_data.loc[day_data['activity'], 'speed_cmPs']
         median_speeds.append(np.nanmedian(speed_above_threshold))
 
         # Calculate bout durations above and below threshold
-        day_data['above_threshold'] = day_data['speed_cmPs'] > speed_threshold
-        bouts = day_data.groupby((day_data['above_threshold'].shift() != day_data['above_threshold']).cumsum())
+        bouts = day_data.groupby((day_data['activity'].shift() != day_data['activity']).cumsum())
         bout_durations = bouts['Recording_time_s'].agg(np.ptp)
 
         # Calculate median bout duration above and below threshold
-        median_bout_duration_above.append(np.nanmedian(bout_durations[bouts['above_threshold'].first()]))
-        median_bout_duration_below.append(np.nanmedian(bout_durations[~bouts['above_threshold'].first()]))
+        median_bout_duration_above.append(np.nanmedian(bout_durations[bouts['activity'].first()]))
+        median_bout_duration_below.append(np.nanmedian(bout_durations[~bouts['activity'].first()]))
 
         # Calculate total duration below threshold
-        total_duration_below.append(bout_durations[~bouts['above_threshold'].first()].sum())
+        total_duration_below.append(bout_durations[~bouts['activity'].first()].sum())
 
         # trial numbers
         trial_list.append(i)
