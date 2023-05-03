@@ -236,6 +236,19 @@ def latency_to_top(subject_df, fps):
     latency = first_top_entry / fps
     return latency
 
+def side_tigmotaxis(subject_df):
+    """
+    Calculate the total count of rows where activity is True and either in_left_margin or in_right_margin is True.
+    Thereby it is a direct major of tigmotaxis in the fish.
+
+    Args:
+        subject_df (pd.DataFrame): A DataFrame containing 'activity', 'in_left_margin', and 'in_right_margin' columns.
+
+    Returns:
+        int: The total count of rows where activity and (in_left_margin or in_right_margin) are True.
+    """
+    active_side_rows = subject_df.loc[(subject_df['activity']) & (subject_df['in_left_margin'] | subject_df['in_right_margin'])]
+    return len(active_side_rows)
 
 
 def get_speed_and_duration_stats(subject_df, speed_threshold):
