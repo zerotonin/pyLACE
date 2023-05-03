@@ -237,6 +237,59 @@ class EthovisionDataProcessor:
         hist_2d, _, _ = np.histogram2d(day_data.X_center_cm, day_data.Y_center_cm, bins=[x_bin_edges, y_bin_edges])
 
         return hist_2d
+    
+    def calculate_bout_metrics_for_day(self, day_data, total_time):
+        """
+        Calculate all bout metrics for a given day.
+
+        Args:
+            day_data (pd.DataFrame): A DataFrame containing the data for a single day.
+            total_time (float): The total recording time for the day in seconds.
+
+        Returns:
+            bout_metrics (dict): A dictionary containing median duration and fraction for each bout type.
+        """
+        bout_metrics = {}
+        for bout_type in ['activity', 'freezing', 'in_top_margin', 'in_bottom_margin', 'tigmo_taxis']:
+            median_duration, fraction = self.calculate_bout_metrics(day_data, bout_type, total_time)
+            bout_metrics[f'Median_{bout_type}_duration_s'] = median_duration
+            bout_metrics[f'{bout_type}_fraction'] = fraction
+        return bout_metrics
+
+    def calculate_latency_and_transitions_for_day(self, day_data):
+        """
+        Calculate latency to the top of the tank and tigmotaxis transitions for a given day.
+
+        Args:
+            day_data (pd.DataFrame): A DataFrame containing the data for a single day.
+
+        Returns:
+            latency_and_transitions (dict): A dictionary containing latency to the top and tigmotaxis transitions.
+        """
+        return {
+            'Latency_to_top_s': self.latency_to_top(day_data),
+            'Tigmotaxis_transitions': self.side_zonening(day_data)
+        }
+
+    def calculate_distance_and_histogram_for_day(self, day_data, tank_width, tank_height, num_bins_2D_hist):
+        """
+        Calculate the distance travelled and the 2D histogram for a given day.
+
+        Args:
+            day_data (pd.DataFrame): A DataFrame containing the data for a single day.
+            tank_width (float): The width of the tank in centimeters.
+            tank_height (float): The height of the tank in centimeters.
+            num_bins_2D_hist (int): The number of linearly spaced bins along the tank width and height for the 2D histogram.
+
+        Returns:
+            distance (float): The distance travelled in centimeters.
+            histogram (np.ndarray): A 2D histogram of the subject's position in the tank.
+        """
+        distance = (day_data.speed_cmPs / self.fps).sum()
+        histogram = self.calculate_2d_histogram(day_data, tank_width, tank_height, num_bins_2D_hist)
+        return distance, histogram
+
+
 
     def process_data(self, tank_width, tank_height, num_bins_2D_hist=10):
         """
@@ -285,53 +338,33 @@ class EthovisionDataProcessor:
             day_data = self.subject_df.loc[self.subject_df.Day_number == day]
             total_time = day_data['Recording_time_s'].iloc[-1]
 
-            # Median speed
-            median_speed = day_data.loc[day_data['activity'], 'speed_cmPs'].median()
-            median_speeds.append(median_speed)
+            # Median and gross speeds
+            median_speeds.append(day_data.loc[day_data['activity'], 'speed_cmPs'].median())
+            gross_speeds.append(day_data.speed_cmPs.median())
 
-            # Median speed
-            gross_speed = day_data.speed_cmPs.median()
-            gross_speeds.append(gross_speed)
+            # Bout metrics
+            bout_metrics = self.calculate_bout_metrics_for_day(day_data, total_time)
+            median_activity_durations.append(bout_metrics['Median_activity_duration_s'])
+            activity_fractions.append(bout_metrics['activity_fraction'])
+            median_freezing_durations.append(bout_metrics['Median_freezing_duration_s'])
+            freezing_fractions.append(bout_metrics['freezing_fraction'])
+            median_top_durations.append(bout_metrics['Median_in_top_margin_duration_s'])
+            top_fractions.append(bout_metrics['in_top_margin_fraction'])
+            median_bottom_durations.append(bout_metrics['Median_in_bottom_margin_duration_s'])
+            bottom_fractions.append(bout_metrics['in_bottom_margin_fraction'])
+            median_tigmotaxis_durations.append(bout_metrics['Median_tigmo_taxis_duration_s'])
+            tigmotaxis_fractions.append(bout_metrics['tigmo_taxis_fraction'])
 
-            # Activity bout metrics
-            median_activity_duration, activity_fraction = self.calculate_bout_metrics(day_data, 'activity', total_time)
-            median_activity_durations.append(median_activity_duration)
-            activity_fractions.append(activity_fraction)
+            # Latency and transitions
+            latency_and_transitions = self.calculate_latency_and_transitions_for_day(day_data)
+            time_to_top.append(latency_and_transitions['Latency_to_top_s'])
+            tigmotaxis_transitions.append(latency_and_transitions['Tigmotaxis_transitions'])
 
-            # Freezing bout metrics
-            median_freezing_duration, freezing_fraction = self.calculate_bout_metrics(day_data, 'freezing', total_time)
-            median_freezing_durations.append(median_freezing_duration)
-            freezing_fractions.append(freezing_fraction)
-
-            # Top bout metrics
-            median_top_duration, top_fraction = self.calculate_bout_metrics(day_data, 'in_top_margin', total_time)
-            median_top_durations.append(median_top_duration)
-            top_fractions.append(top_fraction)
-
-            # Bottom bout metrics
-            median_bottom_duration, bottom_fraction = self.calculate_bout_metrics(day_data, 'in_top_margin', total_time)
-            median_bottom_durations.append(median_bottom_duration)
-            bottom_fractions.append(bottom_fraction)
-
-
-            # Tigmo taxis bout metrics
-            median_tigmotaxis_duration, tigmotaxis_fraction = self.calculate_bout_metrics(day_data, 'tigmo_taxis', total_time)
-            median_tigmotaxis_durations.append(median_tigmotaxis_duration)
-            tigmotaxis_fractions.append(tigmotaxis_fraction)
-
-            # latency to go to top of the tank
-            time_to_top.append(self.latency_to_top(day_data))
-
-            # calculate tigmo_tactic_transitions
-            tigmotaxis_transitions.append(self.side_zonening(day_data))
-
-            # Distance travelled
-            distance = (day_data.speed_cmPs / self.fps).sum()
+            # Distance travelled and 2D histogram
+            distance, histogram = self.calculate_distance_and_histogram_for_day(day_data, tank_width, tank_height, num_bins_2D_hist)
             distance_travelled.append(distance)
-
-            # Make positional 2D histogram
-            histograms.append(self.calculate_2d_histogram(day_data, tank_width, tank_height, num_bins_2D_hist))
-
+            histograms.append(histogram)
+        
         stats_df = pd.DataFrame({   'Day_number': self.subject_df.Day_number.unique(),
             'Median_speed_cmPs': median_speeds,
             'Gross_speed_cmPs': gross_speeds,
