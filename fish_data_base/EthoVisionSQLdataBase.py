@@ -142,6 +142,86 @@ def calculate_speed(df):
 
     return df
 
+def set_activity_status(subject_df, speed_threshold=0.02):
+    """
+    Adds an 'activity' column to the input DataFrame, indicating whether the
+    subject's speed is greater than the given speed_threshold.
+
+    Args:
+        subject_df (pd.DataFrame): A DataFrame containing subject data.
+        speed_threshold (float, optional): The threshold for considering a subject
+                                           active. Defaults to 0.02.
+    """
+
+    subject_df['activity'] = subject_df.speed_cmPs > speed_threshold
+
+def compute_zones(subject_df, left_margin, right_margin, bottom_margin, top_margin):
+    """
+    Calculates the boolean values for each zone (left, right, bottom, top) and
+    adds them as new columns to the input DataFrame.
+
+    Args:
+        subject_df (pd.DataFrame): A DataFrame containing subject data.
+        left_margin (float): The boundary value for the left margin.
+        right_margin (float): The boundary value for the right margin.
+        bottom_margin (float): The boundary value for the bottom margin.
+        top_margin (float): The boundary value for the top margin.
+    
+    Returns:
+        pd.DataFrame: The input DataFrame with added columns for each zone.
+    """
+
+    subject_df['in_left_margin'] = subject_df.X_center_cm < left_margin
+    subject_df['in_right_margin'] = subject_df.X_center_cm > right_margin
+    subject_df['in_bottom_margin'] = subject_df.Y_center_cm < bottom_margin
+    subject_df['in_top_margin'] = subject_df.Y_center_cm > top_margin
+    return subject_df
+
+def map_zones_to_integers(subject_df):
+    """
+    Maps the boolean zone values in the input DataFrame to corresponding
+    integers (similar to a numeric keypad layout) and adds a new column named
+    'zone_map' to the DataFrame.
+
+    Args:
+        subject_df (pd.DataFrame): A DataFrame containing subject data with
+                                   boolean columns for each zone.
+    
+    Returns:
+        pd.DataFrame: The input DataFrame with an added 'zone_map' column
+                      containing integer values representing zones.
+    """
+
+    num_pad_direction = list()
+
+    for i, row in subject_df.iterrows():
+        if row['in_bottom_margin']:
+            if row['in_left_margin']:
+                num_pad_direction.append(1)
+            elif row['in_right_margin']:
+                num_pad_direction.append(3)
+            else:
+                num_pad_direction.append(2)
+        elif row['in_top_margin']:
+            if row['in_left_margin']:
+                num_pad_direction.append(7)
+            elif row['in_right_margin']:
+                num_pad_direction.append(9)
+            else:
+                num_pad_direction.append(8)
+        else:
+            if row['in_left_margin']:
+                num_pad_direction.append(4)
+            elif row['in_right_margin']:
+                num_pad_direction.append(6)
+            else:
+                num_pad_direction.append(5)
+
+    subject_df['zone_map'] = num_pad_direction
+    return subject_df
+
+
+
 def get_speed_and_duration_stats(subject_df, speed_threshold):
     """
     Calculate the median speed above the given threshold, median bout duration above
@@ -216,6 +296,7 @@ if db_connection:
     subject_df = get_data_for_subject(db_connection,tank_numbers,id_val )
     subject_df = add_day_number(subject_df)
     subject_df = sort_dataframe(subject_df)
+    subject_df = set_activity_threshold(subject_df)
     result = get_speed_and_duration_stats(subject_df,25)
     print(subject_df)
 
@@ -225,7 +306,7 @@ else:
     print("Could not open the database")
 
 
-subject_df.speed_cmPs.hist(bins=np.linspace(0,750,750)) 
+subject_df.speed_cmPs.hist(bins=np.linspace(0,5,50)) 
 plt.show()
 
 speed_meds = list()
