@@ -3,6 +3,22 @@ import numpy as np
 
 
 class EthovisionDataProcessor:
+    """
+    EthovisionDataProcessor is a class for processing and analyzing behavioral data
+    from Ethovision tracking software. It takes a subject DataFrame and computes various
+    metrics related to the subject's movement, including speed, activity, freezing,
+    tigmotaxis, and more.
+
+    Attributes:
+    subject_df (pd.DataFrame): The input DataFrame containing the subject's data.
+    speed_threshold (float): The speed threshold for considering a subject active.
+    Defaults to 0.02.
+    fps (int): The frames per second of the recording. Defaults to 25.
+    left_margin (float): The boundary value for the left margin.
+    right_margin (float): The boundary value for the right margin.
+    bottom_margin (float): The boundary value for the bottom margin.
+    top_margin (float): The boundary value for the top margin.
+    """
     def __init__(self, subject_df, speed_threshold=0.02, fps=25, margins = (5,15,5,15)):
         self.subject_df = subject_df
         self.speed_threshold = speed_threshold
