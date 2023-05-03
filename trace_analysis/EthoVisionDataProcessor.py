@@ -213,8 +213,32 @@ class EthovisionDataProcessor:
         fraction = bout_durations[boolean_value].sum() / total_time
 
         return median_bout_duration, fraction
+    
+    def calculate_2d_histogram(self, day_data, tank_width, tank_height, num_bins):
+        """
+        Calculates a 2D histogram for day_data.X_center_cm and day_data.Y_center_cm using
+        linearly spaced bins along the input variables tank_width and tank_height.
 
-    def process_data(self):
+        Args:
+            day_data (pd.DataFrame): A DataFrame containing the X_center_cm and Y_center_cm columns.
+            tank_width (float): The width of the tank.
+            tank_height (float): The height of the tank.
+            num_bins (int, optional): The number of linearly spaced bins.
+
+        Returns:
+            numpy.ndarray: A 2D histogram (10x10 numpy array) of X_center_cm and Y_center_cm values.
+        """
+
+        # Define bin edges for X_center_cm and Y_center_cm
+        x_bin_edges = np.linspace(0, tank_width, num_bins + 1)
+        y_bin_edges = np.linspace(0, tank_height, num_bins + 1)
+
+        # Calculate the 2D histogram
+        hist_2d, _, _ = np.histogram2d(day_data.X_center_cm, day_data.Y_center_cm, bins=[x_bin_edges, y_bin_edges])
+
+        return hist_2d
+
+    def process_data(self, tank_width, tank_height, num_bins_2D_hist=10):
         """
         Process the subject data and compute various metrics for each day, such as median speed,
         median activity bout duration, activity fraction, median freezing bout duration, freezing fraction,
@@ -246,6 +270,7 @@ class EthovisionDataProcessor:
         tigmotaxis_transitions      = list()
         time_to_top                 = list()
         distance_travelled          = list()
+        histograms                  = list()
 
         for day in self.subject_df.Day_number.unique():
             day_data = self.subject_df.loc[self.subject_df.Day_number == day]
@@ -295,6 +320,9 @@ class EthovisionDataProcessor:
             distance = (day_data.speed_cmPs / self.fps).sum()
             distance_travelled.append(distance)
 
+            # Make positional 2D histogram
+            histograms.append(self.calculate_2d_histogram(day_data, tank_width, tank_height, num_bins_2D_hist))
+
         stats_df = pd.DataFrame({   'Day_number': self.subject_df.Day_number.unique(),
             'Median_speed_cmPs': median_speeds,
             'Gross_speed_cmPs': gross_speeds,
@@ -312,5 +340,8 @@ class EthovisionDataProcessor:
             'Latency_to_top_s': time_to_top,
             'Distance_travelled_cm': distance_travelled
         })
+        
+        # Combine the list of 2D histograms into a single 3D numpy array
+        histograms = np.stack(histograms, axis=0)
 
-        return stats_df
+        return stats_df,histograms
