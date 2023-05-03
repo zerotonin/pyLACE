@@ -236,6 +236,10 @@ class EthovisionDataProcessor:
         activity_fractions          = list()
         median_freezing_durations   = list()
         freezing_fractions          = list()
+        median_top_durations        = list()
+        top_fractions               = list()
+        median_bottom_durations     = list()
+        bottom_fractions            = list()
         median_tigmotaxis_durations = list()
         tigmotaxis_fractions        = list()
         tigmotaxis_transitions      = list()
@@ -259,6 +263,17 @@ class EthovisionDataProcessor:
             median_freezing_durations.append(median_freezing_duration)
             freezing_fractions.append(freezing_fraction)
 
+            # Top bout metrics
+            median_top_duration, top_fraction = self.calculate_bout_metrics(day_data, 'in_top_margin', total_time)
+            median_top_durations.append(median_top_duration)
+            top_fractions.append(top_fraction)
+
+            # Bottom bout metrics
+            median_bottom_duration, bottom_fraction = self.calculate_bout_metrics(day_data, 'in_top_margin', total_time)
+            median_bottom_durations.append(median_bottom_duration)
+            bottom_fractions.append(bottom_fraction)
+
+
             # Tigmo taxis bout metrics
             median_tigmotaxis_duration, tigmotaxis_fraction = self.calculate_bout_metrics(day_data, 'tigmo_taxis', total_time)
             median_tigmotaxis_durations.append(median_tigmotaxis_duration)
@@ -277,10 +292,14 @@ class EthovisionDataProcessor:
             'Activity_fraction': activity_fractions,
             'Median_freezing_duration_s': median_freezing_durations,
             'Freezing_fraction': freezing_fractions,
+            'Median_top_duration_s': median_top_durations,
+            'Top_fraction': top_fractions,
+            'Median_bottom_duration_s': median_bottom_durations,
+            'Bottom_fraction': bottom_fractions,
             'Median_tigmotaxis_duration_s': median_tigmotaxis_durations,
             'Tigmotaxis_fraction': tigmotaxis_fractions,
-            'tigmotaxis_transitions': tigmotaxis_transitions,
-            'latency_to_top_s': time_to_top
+            'Tigmotaxis_transitions': tigmotaxis_transitions,
+            'Latency_to_top_s': time_to_top
         })
 
         return stats_df
