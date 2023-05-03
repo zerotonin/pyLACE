@@ -232,6 +232,7 @@ class EthovisionDataProcessor:
         self.true_freezing()
 
         median_speeds               = list()
+        gross_speeds                = list()
         median_activity_durations   = list()
         activity_fractions          = list()
         median_freezing_durations   = list()
@@ -244,6 +245,7 @@ class EthovisionDataProcessor:
         tigmotaxis_fractions        = list()
         tigmotaxis_transitions      = list()
         time_to_top                 = list()
+        distance_travelled          = list()
 
         for day in self.subject_df.Day_number.unique():
             day_data = self.subject_df.loc[self.subject_df.Day_number == day]
@@ -252,6 +254,10 @@ class EthovisionDataProcessor:
             # Median speed
             median_speed = day_data.loc[day_data['activity'], 'speed_cmPs'].median()
             median_speeds.append(median_speed)
+
+            # Median speed
+            gross_speed = day_data.speed_cmPs.median()
+            gross_speeds.append(gross_speed)
 
             # Activity bout metrics
             median_activity_duration, activity_fraction = self.calculate_bout_metrics(day_data, 'activity', total_time)
@@ -285,9 +291,13 @@ class EthovisionDataProcessor:
             # calculate tigmo_tactic_transitions
             tigmotaxis_transitions.append(self.side_zonening(day_data))
 
-        stats_df = pd.DataFrame({
-            'Day_number': self.subject_df.Day_number.unique(),
+            # Distance travelled
+            distance = (day_data.speed_cmPs / self.fps).sum()
+            distance_travelled.append(distance)
+
+        stats_df = pd.DataFrame({   'Day_number': self.subject_df.Day_number.unique(),
             'Median_speed_cmPs': median_speeds,
+            'Gross_speed_cmPs': gross_speeds,
             'Median_activity_duration_s': median_activity_durations,
             'Activity_fraction': activity_fractions,
             'Median_freezing_duration_s': median_freezing_durations,
@@ -299,7 +309,8 @@ class EthovisionDataProcessor:
             'Median_tigmotaxis_duration_s': median_tigmotaxis_durations,
             'Tigmotaxis_fraction': tigmotaxis_fractions,
             'Tigmotaxis_transitions': tigmotaxis_transitions,
-            'Latency_to_top_s': time_to_top
+            'Latency_to_top_s': time_to_top,
+            'Distance_travelled_cm': distance_travelled
         })
 
         return stats_df
