@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 from fish_data_base.EthoVisionSQLdataBase import EthoVisionSQLdataBase
 from trace_analysis.EthoVisionDataProcessor import EthovisionDataProcessor
-
+import pandas as pd
 
 # Open an existing SQLite database
 db_name = "/home/bgeurten/fishDataBase/alex_ethovision_data.db"
@@ -26,3 +26,4 @@ else:
     print("Could not open the database")
 
 
+result_df.columns
