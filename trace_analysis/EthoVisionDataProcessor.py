@@ -168,7 +168,7 @@ class EthovisionDataProcessor:
             float: The index when the fish first enters the top zone.
         """
         first_top_entry = day_data.loc[day_data['in_top_margin']].index[0]
-        return first_top_entry/self.fps
+        return (first_top_entry-day_data.index[0])/self.fps
 
     def side_zonening(self,day_data):
         """
