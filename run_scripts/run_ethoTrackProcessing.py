@@ -1,4 +1,4 @@
-from fish_data_base.EthoVisionExperimentSeries import EthoVisionExperimentSeries
+from data_base_analyser.EthoVisionExperimentSeries import EthoVisionExperimentSeries
 import os
 import numpy as np
 
