@@ -289,7 +289,25 @@ class EthovisionDataProcessor:
         histogram = self.calculate_2d_histogram(day_data, tank_width, tank_height, num_bins_2D_hist)
         return distance, histogram
 
-
+    def add_subject_info(self, stats_df):
+        """
+        Adds subject information (Sex, Tank_number, and ID) to the result DataFrame.
+        
+        Parameters
+        ----------
+        stats_df : pd.DataFrame
+            The DataFrame containing the results data to be updated.
+            
+        Returns
+        -------
+        stats_df : pd.DataFrame
+            The updated result DataFrame containing the added subject information.
+        """
+        stats_df["Sex"] = self.subject_df.Sex.iloc[0]
+        stats_df["Tank_number"] = self.subject_df.Tank_number.iloc[0]
+        stats_df["ID"] = self.subject_df.ID.iloc[0]
+        
+        return stats_df
 
     def process_data(self, tank_width, tank_height, num_bins_2D_hist=10):
         """
@@ -382,7 +400,9 @@ class EthovisionDataProcessor:
             'Latency_to_top_s': time_to_top,
             'Distance_travelled_cm': distance_travelled
         })
-        
+        # add subject information
+        stats_df =  self.add_subject_info(stats_df)
+
         # Combine the list of 2D histograms into a single 3D numpy array
         histograms = np.stack(histograms, axis=0)
 
