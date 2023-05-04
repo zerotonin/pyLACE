@@ -103,7 +103,7 @@ class EthoVisionExperimentSeries:
             result_list = list()
             with tqdm(total=unique_fish.shape[0], desc='individual analysis') as pbar:
                 for i, row in unique_fish.iterrows():
-                    pbar.set_description(f"Run: {i}, Tank: {row.Tank_number}, ID: {row.ID}")
+                    pbar.set_description(f"Tank: {row.Tank_number}, ID: {row.ID}")
                     
                     # Get subject data
                     subject_df = self.ev_db.get_data_for_subject(row.Tank_number, row.ID)
