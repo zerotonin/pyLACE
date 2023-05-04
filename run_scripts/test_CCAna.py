@@ -2,10 +2,10 @@ from importlib import reload
 import numpy as np
 import pandas as pd
 from data_handlers.mediaHandler import mediaHandler
-from traceCorrector import traceCorrector
+from trace_analysis.traceCorrector import traceCorrector
 from fish_data_base.counterCurrentAna import sortMultiFileFolder
-import traceAnalyser
-import fishPlot
+import trace_analysis.traceAnalyser import trace_analysis
+import plotting.fishPlot as fishPlot
 import matplotlib.pyplot as plt
 import fish_data_base.fishRecAnalysis as fishRecAnalysis
 import fish_data_base.fishDataBase as fishDataBase
