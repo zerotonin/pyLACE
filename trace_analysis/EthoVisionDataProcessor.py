@@ -19,7 +19,7 @@ class EthovisionDataProcessor:
     bottom_margin (float): The boundary value for the bottom margin.
     top_margin (float): The boundary value for the top margin.
     """
-    def __init__(self, subject_df, speed_threshold=0.02, fps=25, margins = (5,15,5,15)):
+    def __init__(self, subject_df, speed_threshold=0.02, fps=25, margins = (6.94,13.91,5.36,10.67)):
         self.subject_df = subject_df
         self.speed_threshold = speed_threshold
         self.fps = fps
