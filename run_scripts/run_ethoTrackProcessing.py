@@ -54,7 +54,25 @@ def load_npy_file(file_path):
     """
     return np.load(file_path)
 
+def normalise_histograms(histogram):
+    return histogram/histogram.sum(axis=(1,2), keepdims=True)
 
+def load_normed_histograms(histogram_file_positions,max_days=21):
+    fishes = list()
+    histograms = list()
+    for file_position in histogram_file_positions:   
+
+        hist = load_npy_file(file_position)
+        hist = normalise_histograms(hist)
+        fishID = extract_fishID_tanknumber(file_position)
+
+        fishes.append(fishID)
+        histograms.append(hist)
+
+    histograms = np.stack(histograms,axis=3)
+    return fishes,histograms
+
+#[print(x.shape) for x in histograms]
 # Usage
 tag = 'habituation2023'
 parent_directory = '/home/bgeurten/ethoVision_database/'
@@ -68,8 +86,4 @@ df = pd.read_csv(db_position)
 
 histogram_file_positions = find_npy_files(parent_directory)
 
-for file_position in histogram_file_positions:
-    pass
-
-hist = load_npy_file(file_position)
-fishID = extract_fishID_tanknumber(file_position)
+fishID, hists = load_normed_histograms(histogram_file_positions)
