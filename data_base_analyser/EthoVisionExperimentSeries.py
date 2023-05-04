@@ -101,33 +101,36 @@ class EthoVisionExperimentSeries:
             # Get the unique combinations of 'Tank_number', 'Sex', and 'Subject ID' values
             unique_fish = self.ev_db.get_unique_subjects()
             result_list = list()
-            for i, row in tqdm(unique_fish.iterrows(), desc='individual analysis', total=unique_fish.shape[0]):
+            with tqdm(total=unique_fish.shape[0], desc='individual analysis') as pbar:
+                for i, row in unique_fish.iterrows():
+                    pbar.set_description(f"Run: {i}, Tank: {row.Tank_number}, ID: {row.ID}")
+                    
+                    # Get subject data
+                    subject_df = self.ev_db.get_data_for_subject(row.Tank_number, row.ID)
+
+                    # process data
+                    evp = EthovisionDataProcessor(subject_df)
+                    result_df, histograms = evp.process_data(tank_height=20.5, tank_width=20.5)
+                    subject_df = evp.subject_df
+
+                    # produce figures
+                    reporter = IndividualAnalysisReportEthoVision(result_df, histograms)
+                    rep_figs = reporter.report()
+
+                    # save output
+                    subject_directory = self.make_subject_directory_string(row.Tank_number, row.ID)
+                    self.save_report_figures(rep_figs, subject_directory)
+                    self.save_numpy_array(histograms, os.path.join(subject_directory, 'spatial_histograms.npy'))
+                    self.save_dataframe(result_df, os.path.join(subject_directory, 'collated_data.csv'))
+                    self.save_dataframe(subject_df, os.path.join(subject_directory, 'trajectory_data.csv'))
+                    result_list.append(result_df)
+
+                    # Close all figures
+                    plt.close('all')
+                    
+                    pbar.update(1)            
                 
-                #print out for debugging
-                print(f" started run number: {i} tank number: {row.Tank_number} id: {row.ID}")
 
-                # Get subject data
-                subject_df = self.ev_db.get_data_for_subject(row.Tank_number, row.ID)
-
-                # process data
-                evp = EthovisionDataProcessor(subject_df)
-                result_df, histograms = evp.process_data(tank_height=20.5, tank_width=20.5)
-                subject_df = evp.subject_df
-
-                # produce figures
-                reporter = IndividualAnalysisReportEthoVision(result_df, histograms)
-                rep_figs = reporter.report()
-
-                # save output
-                subject_directory = self.make_subject_directory_string(row.Tank_number, row.ID)
-                self.save_report_figures(rep_figs, subject_directory)
-                self.save_numpy_array(histograms, os.path.join(subject_directory, 'spatial_histograms.npy'))
-                self.save_dataframe(result_df, os.path.join(subject_directory, 'collated_data.csv'))
-                self.save_dataframe(subject_df, os.path.join(subject_directory, 'trajectory_data.csv'))
-                result_list.append(result_df)
-
-                # Close all figures
-                plt.close('all')
 
             
             #Save out results
