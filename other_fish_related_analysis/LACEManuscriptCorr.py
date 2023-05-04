@@ -4,7 +4,7 @@ import data_handlers.matLabResultLoader as matLabResultLoader
 from importlib import reload
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-import fishPlot,os
+import plotting.fishPlot as fishPlot,os
 import numpy as np
 from tqdm import tqdm
 import pandas as pd

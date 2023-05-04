@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from data_handlers.matLabResultLoader import matLabResultLoader
 from data_handlers.mediaHandler import mediaHandler
-from fishPlot import frameOverlay
+from plotting.fishPlot import frameOverlay
 class traceCorrector:
 
     def __init__(self,dataDict):
