@@ -101,7 +101,10 @@ class EthoVisionExperimentSeries:
             # Get the unique combinations of 'Tank_number', 'Sex', and 'Subject ID' values
             unique_fish = self.ev_db.get_unique_subjects()
             result_list = list()
-            for i, row in tqdm(unique_fish.iterrows(),desc='individual analysis'):
+            for i, row in tqdm(unique_fish.iterrows(), desc='individual analysis', total=unique_fish.shape[0]):
+                
+                #print out for debugging
+                print(i,row.Tank_number, row.ID)
 
                 # Get subject data
                 subject_df = self.ev_db.get_data_for_subject(row.Tank_number, row.ID)
@@ -125,6 +128,7 @@ class EthoVisionExperimentSeries:
 
                 # Close all figures
                 plt.close('all')
+
             
             #Save out results
             result_list = pd.concat(result_list)
