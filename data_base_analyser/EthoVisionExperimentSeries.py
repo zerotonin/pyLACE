@@ -5,6 +5,7 @@ import pandas as pd
 from fish_data_base.EthoVisionSQLdataBase import EthoVisionSQLdataBase
 from trace_analysis.EthoVisionDataProcessor import EthovisionDataProcessor
 from plotting.IndividualAnalysisReportEthoVision import IndividualAnalysisReportEthoVision
+from tqdm import tqdm
 
 
 class EthoVisionExperimentSeries:
@@ -100,7 +101,7 @@ class EthoVisionExperimentSeries:
             # Get the unique combinations of 'Tank_number', 'Sex', and 'Subject ID' values
             unique_fish = self.ev_db.get_unique_subjects()
             result_list = list()
-            for i, row in unique_fish.iterrows():
+            for i, row in tqdm(unique_fish.iterrows(),desc='individual analysis'):
 
                 # Get subject data
                 subject_df = self.ev_db.get_data_for_subject(row.Tank_number, row.ID)
