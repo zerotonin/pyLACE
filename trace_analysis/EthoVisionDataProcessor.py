@@ -209,11 +209,14 @@ class EthovisionDataProcessor:
         bout_durations = bouts['Recording_time_s'].agg(np.ptp)
         boolean_value = bouts[column_name].first()
 
-        median_bout_duration = bout_durations[boolean_value].median()
+        # Filter out zero values before calculating the median bout duration
+        non_zero_bout_durations = bout_durations[boolean_value][bout_durations[boolean_value] > 0]
+
+        median_bout_duration = non_zero_bout_durations.median()
         fraction = bout_durations[boolean_value].sum() / total_time
 
         return median_bout_duration, fraction
-    
+
     def calculate_2d_histogram(self, day_data, tank_width, tank_height, num_bins):
         """
         Calculates a 2D histogram for day_data.X_center_cm and day_data.Y_center_cm using
