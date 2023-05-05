@@ -3,8 +3,92 @@ import os
 import pandas as pd
 import numpy as np
 import seaborn as sns
-import os
 import glob
+import matplotlib.pyplot as plt
+import scipy.ndimage
+from matplotlib.colors import LogNorm
+import matplotlib.cm as cm
+
+def get_day_data(data_3d, day):
+    return data_3d[day - 1]
+
+def plot_histogram(ax, data, cmap, norm, day):
+    data_smooth = scipy.ndimage.zoom(data, 3)
+    sns.heatmap(
+        data=data_smooth,
+        cmap=cmap,
+        norm=norm,
+        ax=ax,
+    )
+    ax.set_title(f'Day {day}')
+    ax.set_axis_off()
+
+def create_daywise_histograms(data_3d):
+    """Create a 4x6 grid of plots for each day's histogram."""
+    # Calculate global color axis limits
+    vmin, vmax = np.nanmin(data_3d[data_3d > 0]), np.nanmax(data_3d)
+    
+    # Create a colormap
+    cmap = "viridis"
+    norm = LogNorm(vmin=vmin if vmin > 0 else 0.01, vmax=vmax)  # Ensure vmin is strictly positive
+    
+    # Create a 4x6 subplot grid
+    fig, axes = plt.subplots(4, 6, figsize=(24, 16), sharex=True, sharey=True, facecolor='white')
+    axes = axes.flatten()  # Flatten the 2D list to 1D for easier iteration
+    
+    # Set a dark background
+    plt.style.use('dark_background')
+    
+    # Plot histograms
+    for day, ax in enumerate(axes):
+        if day < data_3d.shape[0]:  # Check that we have data for this day
+            day_data = data_3d[day]
+            plot_histogram(ax, day_data, cmap, norm, day+1)
+            if day == 18:  # For 19th plot (index 18), add labels
+                ax.set_xlabel('X (cm)')
+                ax.set_ylabel('Y (cm)')
+        else:
+            ax.axis('off')  # If there's no data for this day, hide the axis
+
+      # Create a colorbar in a separate figure
+    fig_cbar = plt.figure(figsize=(3, 8), facecolor='white')
+    cbar_ax = fig_cbar.add_axes([0.1, 0.2, 0.3, 0.6])
+    cbar = plt.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), cax=cbar_ax, shrink=0.8)
+    cbar.ax.tick_params(labelsize=14, colors='black')
+    return fig,fig_cbar
+
+
+def create_vertical_box_stripplot(df, x_col, y_col, hue_col=None, hue_order=None):
+    """
+    Creates a vertical box and strip plot for the specified DataFrame and columns.
+
+    Args:
+        df (pandas.DataFrame): The DataFrame to use for plotting.
+        x_col (str): The name of the column to use as the x-axis.
+        y_col (str): The name of the column to use as the y-axis.
+        hue_col (str, optional): The name of the column to use for the hue. Defaults to None.
+        hue_order (list, optional): The order to use for the hue categories. Defaults to None.
+    """
+    sns.set_theme(style="ticks")
+
+    # Initialize the figure with a logarithmic y axis
+    f, ax = plt.subplots(figsize=(7, 6))
+    #ax.set_yscale("log")
+
+    # Plot the data with vertical boxes
+    sns.boxplot(x=x_col, y=y_col, hue=hue_col, hue_order=hue_order, data=df, whis=[0, 100], width=.6, palette="vlag")
+    
+    # Add in points to show each observation
+    sns.stripplot(x=x_col, y=y_col, hue=hue_col, hue_order=hue_order, data=df, size=4, color=".3", linewidth=0)
+    
+    # Tweak the visual presentation
+    ax.yaxis.grid(True)
+    ax.set(xlabel="")
+    sns.despine(trim=True, left=True)
+    
+    plt.show()
+
+
 
 def find_npy_files(directory):
     """
@@ -84,9 +168,7 @@ def normalise_histograms(histogram):
         raise ValueError("The input histogram should be a 3D numpy array.")
 
     return histogram / histogram.sum(axis=(1, 2), keepdims=True)
-    return histogram/histogram.sum(axis=(1,2), keepdims=True)
-
-import numpy as np
+    
 
 def adjust_histogram_shape(hist, max_days):
     """
@@ -112,7 +194,7 @@ def adjust_histogram_shape(hist, max_days):
     else:
         return hist
 
-def load_normed_histograms(histogram_file_positions, max_days=21):
+def load_normed_histograms(histogram_file_positions, max_days=22):
     """
     Loads the normalized histograms from the provided file positions. 
 
@@ -149,6 +231,41 @@ def load_normed_histograms(histogram_file_positions, max_days=21):
     histograms = np.stack(histograms, axis=3)
     return fishes, histograms
 
+def sort_hists_by_sex(hists, fishID, df):
+    """
+    Sorts histograms into two arrays for male and female fish based on the sex information in the DataFrame.
+
+    Args:
+        hists (numpy.ndarray): A 4D numpy array of histograms.
+        fishID (list): A list of tuples where each tuple contains fishID and tanknumber.
+        df (pandas.DataFrame): A DataFrame containing the sex information for each fish.
+
+    Returns:
+        tuple: A tuple containing:
+            - numpy.ndarray: A 4D numpy array of histograms for male fish.
+            - numpy.ndarray: A 4D numpy array of histograms for female fish.
+    """
+    # Map each fish ID and tank number to its sex using the DataFrame
+    sex_map = {}
+    for i, row in df.iterrows():
+        sex_map[(row['Tank_number'], row['ID'])] = row['Sex']
+
+    # Initialize empty arrays for male and female histograms
+    male_hists   =list()
+    female_hists = list()
+
+    # Sort the histograms into male and female arrays based on the sex of the fish
+    for i, (tank_num, fish_id) in enumerate(fishID):
+        sex = sex_map.get((tank_num, fish_id))
+        if sex == 'M':
+            male_hists.append(hists[:,:,:,i])
+        elif sex == 'F':
+            female_hists.append(hists[:,:,:,i])
+
+    male_hists = np.stack(male_hists, axis=3)
+    female_hists = np.stack(female_hists, axis=3)
+
+    return male_hists, female_hists
 
 #[print(x.shape) for x in histograms]
 # Usage
@@ -165,3 +282,65 @@ df = pd.read_csv(db_position)
 histogram_file_positions = find_npy_files(parent_directory)
 
 fishID, hists = load_normed_histograms(histogram_file_positions)
+
+
+male_hists,female_hists = sort_hists_by_sex(hists,fishID,df)
+male_hists = normalise_histograms(np.nanmedian(male_hists,axis=3))
+female_hists = normalise_histograms(np.nanmedian(female_hists,axis=3))
+
+create_daywise_histograms(male_hists)
+create_daywise_histograms(female_hists)
+
+for topic in ['Median_speed_cmPs', 'Gross_speed_cmPs',
+       'Median_activity_duration_s', 'Activity_fraction',
+       'Median_freezing_duration_s', 'Freezing_fraction',
+       'Median_top_duration_s', 'Top_fraction', 'Median_bottom_duration_s',
+       'Bottom_fraction', 'Median_tigmotaxis_duration_s',
+       'Tigmotaxis_fraction', 'Tigmotaxis_transitions', 'Latency_to_top_s',
+       'Distance_travelled_cm']:
+    
+    create_vertical_box_stripplot(df,'Day_number',topic,'Sex',('M','F'))
+    plt.show()
+
+
+create_vertical_box_stripplot(df,'Day_number','Top_fraction','Sex',('M','F'))
+plt.show()
+
+
+
+def create_top_fraction_lineplot(df,measure):
+    """
+    Creates a line plot for the Top_fraction over Day_number for each fish separately,
+    with individual males in blue and females in red, based on the Tank_number, ID, and Sex columns in the DataFrame df.
+
+    Args:
+        df (pandas.DataFrame): The DataFrame to use for plotting.
+    """
+    # Group the data by Tank_number, ID, and Sex
+    groups = df.groupby(["Tank_number", "ID", "Sex"])
+
+    # Loop through the groups and plot the lines with the corresponding colors and markers
+    for (tank_num, fish_id, sex), group in groups:
+        color = "blue" if sex == "M" else "red"
+        marker = "o" if group[measure].iloc[0] >= 0.4 else "x"
+        label = f"{tank_num}, {fish_id}"
+
+        # Create the plot
+        fig, ax = plt.subplots()
+        ax.plot(group["Day_number"], group[measure], color=color, label=label, marker=marker)
+
+        # Add labels and title
+        ax.set_xlabel("Day number")
+        ax.set_ylabel(measure)
+        ax.set_title(f"Fish ID: {fish_id}, Tank number: {tank_num}")
+        ax.set_ylim((0,500))
+
+        # Add legend and markers
+        ax.legend()
+        ax.axhline(y=0.4, color="gray", linestyle="--")
+        ax.plot([], [], color=color, marker=marker, label="Fraction above 0.4")
+
+        # Show the plot
+        plt.show()
+
+create_top_fraction_lineplot(df,'Tigmotaxis_transitions')
