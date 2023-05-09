@@ -149,7 +149,7 @@ class EthovisionDataProcessor:
         and either in_left_margin or in_right_margin is True. This column represents a direct measure
         of tigmotaxis in the fish.
         """
-        self.subject_df['tigmo_taxis'] = (self.subject_df['activity']) & (self.subject_df['in_left_margin'] | self.subject_df['in_right_margin'])
+        self.subject_df['tigmo_taxis'] = (self.subject_df['speed_vert_cmPs'].abs() > self.speed_threshold) & (self.subject_df['in_left_margin'] | self.subject_df['in_right_margin'])
 
     def true_freezing(self):
         """
