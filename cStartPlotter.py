@@ -100,7 +100,7 @@ class cStartPlotter:
         ax2.set_ylim((0,2.5))
         ax2.tick_params(axis='y', labelcolor=color)
 
-    def plot_contours(self, ax, cax, traceContour, fps, num_contours=200, colormap='viridis', alpha=0.5, outline=True):
+    def plot_contours(self, ax, cax, traceContour, fps, num_contours=200, colormap='viridis', alpha=0.5, outline=True, background_image=None):
         """
         Plot the contours with translucent patches.
 
@@ -122,7 +122,14 @@ class cStartPlotter:
             The transparency level for the patches. (default: 0.5)
         outline : bool, optional
             Whether to draw a black outline around the patches. (default: True)
+        background_image : array-like, optional
+            The background image to display behind the contours. (default: None)
         """
+
+        # Display the background image, if provided
+        if background_image is not None:
+            ax.imshow(background_image, zorder=0)
+
         # Generate indices for linearly spaced contours
         contour_indices = np.linspace(0, len(traceContour) - 1, num_contours, dtype=int)
 
@@ -162,7 +169,7 @@ class cStartPlotter:
         cbar = ColorbarBase(cax, cmap=cmap, norm=norm, orientation='vertical')
         cbar.set_label('Time (s)')    
         
-    def create_final_plot(self, spike_df, time_ax, trace, interp_instant_freq, traceContour, fps):
+    def create_final_plot(self, spike_df, time_ax, trace, interp_instant_freq, traceContour, fps,background_image=None):
         """
         Create a final plot that combines spike occurrences, two parameters, and contours in a single figure.
 
@@ -187,12 +194,14 @@ class cStartPlotter:
             The Figure object.
         ax1, cax1, ax2, ax3 : tuple of matplotlib.axes.Axes
             The Axes objects for the created subplots.
+        background_image : array-like, optional
+            The background image to display behind the contours. (default: None)
         """
 
         f, ax_list = self.create_vertical_axes()
         self.plot_spike_occurrences(spike_df, ax_list[3])
         self.plot_two_parameters(f, ax_list[2], time_ax, interp_instant_freq, np.abs(trace[:, 3]),
                                   'instant. spike frequency, Hz', 'thrust, m/s')
-        self.plot_contours(ax_list[0], ax_list[1], traceContour, fps, num_contours=200, colormap='viridis', alpha=0.5)
+        self.plot_contours(ax_list[0], ax_list[1], traceContour, fps, num_contours=200, colormap='viridis', alpha=0.5,background_image=background_image)
 
         return f,ax_list
