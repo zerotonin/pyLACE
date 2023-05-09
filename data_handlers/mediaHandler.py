@@ -5,7 +5,19 @@ import cv2
 
 
 class mediaHandler():
+    """
+    Class for handling media files such as movies, norpix sequences, and image sequences.
+    """
     def __init__(self,filename,modus,fps=0,bufferSize = 2000):
+        """
+        Initializes a mediaHandler object.
+
+        Args:
+            filename (str): Name of the media file.
+            modus (str): Mode of the media file, i.e. 'movie', 'norpix', or 'image'.
+            fps (int, optional): Frames per second of the media file. Defaults to 0.
+            bufferSize (int, optional): Maximum number of frames to buffer. Defaults to 2000.
+        """
         self.activeFrame = []
         self.frameNo = 0
         self.modus = modus
@@ -47,6 +59,9 @@ class mediaHandler():
             print('MediaHandler:unknown modus')
             
     def SR_makeIntParameters(self):
+        """
+        Converts float parameters to integers.
+        """
 
         self.length = int(self.length)
         self.height = int(self.height)
@@ -54,6 +69,15 @@ class mediaHandler():
         self.size   = (self.width,self.height)
 
     def SR_setFrameNoInBounds(self,frameNo):
+        """
+        Sets the frame number within the bounds of the media file.
+
+        Args:
+            frameNo (int): Frame number.
+
+        Returns:
+            int: Frame number within the bounds of the media file.
+        """
         if (frameNo <0):
             frameNo = 0
             #print 'frame No was below zero, now set to zero'
@@ -65,6 +89,15 @@ class mediaHandler():
         return frameNo
 
     def getFrame(self,frameNo):
+        """
+        Returns the frame at the specified frame number.
+
+        Args:
+            frameNo (int): Frame number.
+
+        Returns:
+            numpy.ndarray: Frame at the specified frame number.
+        """
         
         frameNo = self.SR_setFrameNoInBounds(frameNo)
 
@@ -103,9 +136,27 @@ class mediaHandler():
         return self.activeFrame
             
     def get_frameNo(self):
+        """
+        Returns the current frame number.
+
+        Returns:
+            int: Current frame number.
+        """
         return self.frameNo
 
     def getFrameMov(self,frameNo):
+        """
+        Gets a frame from a movie file.
+
+        Args:
+            frameNo (int): Frame number.
+
+        Raises:
+            Exception: If the frame is unreadable.
+
+        Returns:
+            numpy.ndarray: Frame at the specified frame number.
+        """
         self.frameNo     = frameNo
         self.media.set(1,frameNo)
         flag,self.activeFrame = self.media.read(frameNo)   
@@ -115,15 +166,39 @@ class mediaHandler():
         #    self.activeFrame = cv2.cvtColor( self.activeFrame, cv2.COLOR_BGR2RGB)
         
     def getFrameNorpix(self,frameNo):
+        """
+        Gets a frame from a norpix sequence.
+
+        Args:
+            frameNo (int): Frame number.
+
+        Returns:
+            numpy.ndarray: Frame at the specified frame number.
+        """
         self.frameNo     = frameNo
         self.activeFrame = self.media.get_frame(frameNo)   
             
     def getFrameImage(self,frameNo):
+        """
+        Gets a frame from an image sequence.
+
+        Args:
+            frameNo (int): Frame number.
+
+        Returns:
+            numpy.ndarray: Frame at the specified frame number.
+        """
         self.frameNo     = frameNo
         self.activeFrame = self.media.get_frame(frameNo)   
         
     
     def get_time(self):
+        """
+        Returns the time of the current frame.
+
+        Returns:
+            float: Time of the current frame.
+        """
         return self.frameNo/self.fps
     
   
@@ -150,6 +225,14 @@ class mediaHandler():
             print('This function only works with norpix movie files')
     
     def register_movie(self,sourceFile, targetFile, border = 50):
+        """
+        Stabilizes and registers a movie file.
+
+        Args:
+            sourceFile (str): Name of the source movie file.
+            targetFile (str): Name of the target stabilized and registered movie file.
+            border (int, optional): Border size for stabilizing the movie. Defaults to 50.
+        """
         if self.modus == 'movie':
             # Initialize object tracker, stabilizer, 
             object_tracker = cv2.TrackerCSRT_create()
