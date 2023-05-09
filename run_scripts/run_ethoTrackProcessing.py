@@ -1,5 +1,6 @@
 from data_base_analyser.EthoVisionExperimentSeries import EthoVisionExperimentSeries
 from plotting.DaywiseAnalysis import DaywiseAnalysis
+from plotting.FishHabituationProfiler import FishHabituationProfiler
 import os
 import pandas as pd
 import numpy as np
@@ -24,43 +25,10 @@ parent_directory = '/home/bgeurten/ethoVision_database/'
 db_position = f'{parent_directory}{tag}_daywise_analysis.csv'
 df = pd.read_csv(db_position)
 
-dwa= DaywiseAnalysis(df)
-dwa.run()
+dwa= DaywiseAnalysis(df,parent_directory)
+#dwa.create_spatial_histograms()
+#dwa.create_box_strip_plots()
+#plt.show()
 
-
-def create_top_fraction_lineplot(df,measure):
-    """
-    Creates a line plot for the Top_fraction over Day_number for each fish separately,
-    with individual males in blue and females in red, based on the Tank_number, ID, and Sex columns in the DataFrame df.
-
-    Args:
-        df (pandas.DataFrame): The DataFrame to use for plotting.
-    """
-    # Group the data by Tank_number, ID, and Sex
-    groups = df.groupby(["Tank_number", "ID", "Sex"])
-
-    # Loop through the groups and plot the lines with the corresponding colors and markers
-    for (tank_num, fish_id, sex), group in groups:
-        color = "blue" if sex == "M" else "red"
-        marker = "o" if group[measure].iloc[0] >= 0.4 else "x"
-        label = f"{tank_num}, {fish_id}"
-
-        # Create the plot
-        fig, ax = plt.subplots()
-        ax.plot(group["Day_number"], group[measure], color=color, label=label, marker=marker)
-
-        # Add labels and title
-        ax.set_xlabel("Day number")
-        ax.set_ylabel(measure)
-        ax.set_title(f"Fish ID: {fish_id}, Tank number: {tank_num}")
-        ax.set_ylim((0,500))
-
-        # Add legend and markers
-        ax.legend()
-        ax.axhline(y=0.4, color="gray", linestyle="--")
-        ax.plot([], [], color=color, marker=marker, label="Fraction above 0.4")
-
-        # Show the plot
-        plt.show()
-
-create_top_fraction_lineplot(df,'Tigmotaxis_transitions')
+fhp = FishHabituationProfiler(df)
+fhp.check_habituation()
