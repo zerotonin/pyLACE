@@ -24,14 +24,17 @@ class DaywiseAnalysis:
                         creates daywise histogram plots for male and female fish, and generates a boxplot.
     """
     
-    def __init__(self,df):
+    def __init__(self,df,parent_directory):
         """
         Initialize the Back class with the parent_directory and tag.
 
         Args:
             df (pandas.DataFrame): The DataFrame containing the daywise analysis data.
+            parent_directory (str): The path to the parent directory containing the histogram data.
+        
         """
         self.df = df
+        self.parent_directory = parent_directory
         self.histogram_file_positions = self.find_npy_files(self.parent_directory)
         self.fishID, self.hists = self.load_normed_histograms(self.histogram_file_positions)
 
@@ -144,7 +147,7 @@ class DaywiseAnalysis:
         ax.set(xlabel="")
         sns.despine(trim=True, left=True)
         
-        plt.show()
+        return f
 
     def find_npy_files(self,directory):
         """
@@ -287,7 +290,7 @@ class DaywiseAnalysis:
         histograms = np.stack(histograms, axis=3)
         return fishes, histograms
 
-    def sort_hists_by_sex(self, fishID):
+    def sort_hists_by_sex(self):
         """
         Sorts histograms into two arrays for male and female fish based on the sex information in the DataFrame.
 
@@ -311,7 +314,7 @@ class DaywiseAnalysis:
         female_hists = list()
 
         # Sort the histograms into male and female arrays based on the sex of the fish
-        for i, (tank_num, fish_id) in enumerate(fishID):
+        for i, (tank_num, fish_id) in enumerate(self.fishID):
             sex = sex_map.get((tank_num, fish_id))
             if sex == 'M':
                 male_hists.append(self.hists[:,:,:,i])
@@ -322,3 +325,53 @@ class DaywiseAnalysis:
         female_hists = np.stack(female_hists, axis=3)
 
         return male_hists, female_hists
+    
+    def create_spatial_histograms(self):
+        """
+        Create spatial histograms for male and female fish, separated by day, using a 4x6 grid of heatmaps.
+
+        The function first sorts the histograms by sex, then normalizes them by computing the median value
+        across all fish for each day. Finally, it creates daywise heatmaps for both male and female fish.
+
+        Returns:
+            tuple: A tuple containing the following matplotlib objects:
+                - male_figure (matplotlib.figure.Figure): The figure containing the 4x6 grid of heatmaps for male fish.
+                - male_figure_cbar (matplotlib.figure.Figure): The figure containing the colorbar for male fish heatmaps.
+                - female_figure (matplotlib.figure.Figure): The figure containing the 4x6 grid of heatmaps for female fish.
+                - female_figure_cbar (matplotlib.figure.Figure): The figure containing the colorbar for female fish heatmaps.
+        """
+        male_hists, female_hists = self.sort_hists_by_sex()
+        male_hists = self.normalise_histograms(np.nanmedian(male_hists, axis=3))
+        female_hists = self.normalise_histograms(np.nanmedian(female_hists, axis=3))
+
+        male_figure, male_figure_cbar = self.create_daywise_histograms(male_hists)
+        female_figure, female_figure_cbar = self.create_daywise_histograms(female_hists)
+
+        return male_figure, male_figure_cbar, female_figure, female_figure_cbar
+
+    def create_box_strip_plots(self):
+        """
+        Create vertical box and strip plots for various topics related to fish behavior,
+        separated by day and sex, and return a list of figure handles.
+
+        The function iterates through a list of topics and generates a box and strip plot for each one.
+        The plots are created using the create_vertical_box_stripplot helper function. 
+
+        Returns:
+            figure_handles (list): A list of figure handles for the created box and strip plots.
+        """
+        topics = [
+            'Median_speed_cmPs', 'Gross_speed_cmPs',
+            'Median_activity_duration_s', 'Activity_fraction',
+            'Median_freezing_duration_s', 'Freezing_fraction',
+            'Median_top_duration_s', 'Top_fraction', 'Median_bottom_duration_s',
+            'Bottom_fraction', 'Median_tigmotaxis_duration_s',
+            'Tigmotaxis_fraction', 'Tigmotaxis_transition_freq', 'Latency_to_top_s',
+            'Distance_travelled_cm'
+        ]
+        figure_handles = list()
+        for topic in topics:
+           f =  self.create_vertical_box_stripplot('Day_number', topic, 'Sex', ('M', 'F'))
+           figure_handles.append(f)
+        return figure_handles
+        
