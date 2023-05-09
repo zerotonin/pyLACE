@@ -26,6 +26,8 @@ class FishHabituationProfiler:
         # Group the data by Tank_number, ID, and Sex
         groups = self.df.groupby(["Tank_number", "ID", "Sex"])
 
+        figure_handles = list()
+        fish_id_list = list()
         # Loop through the groups and plot the lines with the corresponding colors and markers
         for (tank_num, fish_id, sex), group in groups:
             color = "blue" if sex == "M" else "red"
@@ -40,8 +42,9 @@ class FishHabituationProfiler:
                      self.plot_line_graph(axes[i],group,self.measures[i],color,label,self.y_limits[i],None,None,self.limits[i],self.y_labels[i],self.habituation_direction[i])
 
             # Show the plot
-            plt.show()
-
+            figure_handles.append(fig)
+            fish_id_list.append(f"tankNum_{tank_num}_ID_{fish_id}")
+        return figure_handles, fish_id_list
 
     def plot_line_graph(self, ax, group, measure, color, label, y_limits, fish_id, tank_num, limit, y_label, arrow_down):
         ax.plot(group["Day_number"], group[measure], color=color, label=label, marker='o')

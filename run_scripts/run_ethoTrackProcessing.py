@@ -31,4 +31,11 @@ dwa= DaywiseAnalysis(df,parent_directory)
 #plt.show()
 
 fhp = FishHabituationProfiler(df)
-fhp.check_habituation()
+figs, fishIDs = fhp.check_habituation()
+
+figure_directory = '/home/bgeurten/ethoVision_database/habituation_figs/'
+
+for i in range(len(figs)):
+    figs[i].savefig(f'{figure_directory}/{fishIDs[i]}.svg')
+
+
