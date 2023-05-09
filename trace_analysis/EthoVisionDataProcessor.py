@@ -353,7 +353,7 @@ class EthovisionDataProcessor:
         bottom_fractions            = list()
         median_tigmotaxis_durations = list()
         tigmotaxis_fractions        = list()
-        tigmotaxis_transitions      = list()
+        tigmotaxis_transition_freq  = list()
         time_to_top                 = list()
         distance_travelled          = list()
         histograms                  = list()
@@ -382,7 +382,7 @@ class EthovisionDataProcessor:
             # Latency and transitions
             latency_and_transitions = self.calculate_latency_and_transitions_for_day(day_data)
             time_to_top.append(latency_and_transitions['Latency_to_top_s'])
-            tigmotaxis_transitions.append(latency_and_transitions['Tigmotaxis_transitions'])
+            tigmotaxis_transition_freq.append(latency_and_transitions['Tigmotaxis_transitions']/total_time)
 
             # Distance travelled and 2D histogram
             distance, histogram = self.calculate_distance_and_histogram_for_day(day_data, tank_width, tank_height, num_bins_2D_hist)
@@ -402,7 +402,7 @@ class EthovisionDataProcessor:
             'Bottom_fraction': bottom_fractions,
             'Median_tigmotaxis_duration_s': median_tigmotaxis_durations,
             'Tigmotaxis_fraction': tigmotaxis_fractions,
-            'Tigmotaxis_transitions': tigmotaxis_transitions,
+            'Tigmotaxis_transition_freq': tigmotaxis_transition_freq,
             'Latency_to_top_s': time_to_top,
             'Distance_travelled_cm': distance_travelled
         })
