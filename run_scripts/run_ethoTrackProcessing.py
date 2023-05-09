@@ -38,4 +38,3 @@ figure_directory = '/home/bgeurten/ethoVision_database/habituation_figs/'
 for i in range(len(figs)):
     figs[i].savefig(f'{figure_directory}/{fishIDs[i]}.svg')
 
-
