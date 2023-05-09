@@ -65,20 +65,20 @@ class EthovisionDataProcessor:
             # Calculate the first derivative for the specified columns
             x_diff = day_data['X_center_cm'].diff()
             y_diff = day_data['Y_center_cm'].diff()
-            time_diff = day_data['Recording_time_s'].diff()
+            vertical_speed = y_diff * self.fps
+            horizontal_speed = x_diff * self.fps
 
             # Calculate the norm of the vector
             norm_vector = np.sqrt(x_diff ** 2 + y_diff ** 2)
 
             # Calculate the speed in cm per second
-            speed_cmPs = norm_vector / time_diff
+            speed_cmPs = norm_vector * self.fps
 
-            # Insert a NaN value at the first row
-            speed_cmPs.iloc[0] = np.nan
 
             # Update the 'speed_cmPs' column for the current day
             self.subject_df.loc[self.subject_df['Day_number'] == day_number, 'speed_cmPs'] = speed_cmPs
-
+            self.subject_df.loc[self.subject_df['Day_number'] == day_number, 'speed_vert_cmPs'] = vertical_speed
+            self.subject_df.loc[self.subject_df['Day_number'] == day_number, 'speed_horiz_cmPs'] = horizontal_speed
     def set_activity_status(self, speed_threshold=0.02):
         """
         Adds an 'activity' column to the subject DataFrame, indicating whether the
