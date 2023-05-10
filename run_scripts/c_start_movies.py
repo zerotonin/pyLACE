@@ -23,6 +23,7 @@ svg_files = glob.glob(f"{directory}/*.svg")
 good_trials = [75,164,261,326,345,378]
 offsets = [(0,0),(0,0),(0,0),(-10,0),(-10,0),(-10,0)]
 dfm = df.iloc[good_trials,:]
+c = 0
 for i,row in dfm.iterrows():
     mlr = matLabResultLoader.matLabResultLoader(row['path2_anaMat'])
     raceInfo, traceContour, traceMidline, traceHead, traceTail, trace, bendability, binnedBend, saccs, trigAveSacc, medMaxVelocities =mlr.getData()
@@ -40,5 +41,5 @@ for i,row in dfm.iterrows():
     filename = os.path.basename(row.avi).replace(' ','_')
     animation_filepath = os.path.join("/home/bgeurten/", f'{row.genotype}_{filename}')
     animation = cs_plotter.create_animated_plot(spike_df, time_ax, trace, interp_instant_freq, traceContour, 
-                                                row.fps,row.avi,animation_filepath,contour_offSet=offsets[i])
-    print('done')
+                                                row.fps,row.avi,animation_filepath,contour_offSet=offsets[c])
+    c+=1

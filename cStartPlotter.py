@@ -244,8 +244,8 @@ class cStartPlotter:
 
 
         # Loop over all frames
-        #for frame in tqdm(range(len(time_ax)),desc='Making frames'):
-        for frame in tqdm(range(2000,2100),desc='Making frames'):
+        for frame in tqdm(range(len(time_ax)),desc='Making frames'):
+        #for frame in tqdm(range(2000,2100),desc='Making frames'):
             
             current_frame_index = frame_indices[frame]
             if current_frame_index >= comets_tail:
