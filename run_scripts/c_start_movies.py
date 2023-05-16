@@ -8,6 +8,7 @@ import plotting.fishPlot as fishPlot,cStartPlotter
 import matplotlib.widgets as widgets
 import glob,os
 import data_handlers.mediaHandler as mediaHandler
+from tqdm import tqdm
 
 #%%
 db = fishDataBase.fishDataBase("/home/bgeurten/fishDataBase",'/home/bgeurten/fishDataBase/fishDataBase_cstart.csv')
@@ -22,9 +23,10 @@ svg_files = glob.glob(f"{directory}/*.svg")
 
 good_trials = [75,164,261,326,345,378]
 offsets = [(0,0),(0,0),(0,0),(-10,0),(-10,0),(-10,0)]
-dfm = df.iloc[good_trials,:]
+#dfm = df.iloc[good_trials,:]
+dfm = df[df['genotype'].str.contains('sufge1')]
 c = 0
-for i,row in dfm.iterrows():
+for i,row in tqdm(dfm.iterrows(), total=dfm.shape[0],desc='Still making movies...'):
     mlr = matLabResultLoader.matLabResultLoader(row['path2_anaMat'])
     raceInfo, traceContour, traceMidline, traceHead, traceTail, trace, bendability, binnedBend, saccs, trigAveSacc, medMaxVelocities =mlr.getData()
 
