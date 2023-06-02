@@ -99,12 +99,12 @@ class SpikeDetector:
         spike_df : pd.DataFrame
             A DataFrame containing the peak times and amplitudes of positive and negative spikes.
         """
-        threshold = self.df_signal['Signal stream 0'].std() * noise_std_factor
+        self.threshold = self.df_signal['Signal stream 0'].std() * noise_std_factor
 
-        spike_df_positive = self.find_peaks_in_df(threshold=threshold)
+        spike_df_positive = self.find_peaks_in_df(threshold=self.threshold)
 
         self.df_signal['Signal stream 0'] = self.df_signal['Signal stream 0'] * -1
-        spike_df_negative = self.find_peaks_in_df(threshold=threshold)
+        spike_df_negative = self.find_peaks_in_df(threshold=self.threshold)
         self.df_signal['Signal stream 0'] = self.df_signal['Signal stream 0'] * -1
         spike_df_negative.amplitude_mV = spike_df_negative.amplitude_muV * -1
 
