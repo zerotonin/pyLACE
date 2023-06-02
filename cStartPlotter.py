@@ -225,7 +225,8 @@ class cStartPlotter:
         return f,ax_list
     
     def create_animated_plot(self, spike_df, time_ax, trace, interp_instant_freq, traceContour, 
-                             fps, path_to_mediaFile,animation_file_position, comets_tail = 25, contour_offSet = None):
+                             fps, path_to_mediaFile,animation_file_position, comets_tail = 25, contour_offSet = None,
+                             round_robin_offset = None):
         """
         Create an animated plot with gradual data filling and contour plot for the last 50 frames.
 
@@ -241,6 +242,10 @@ class cStartPlotter:
 
         # Get the frame indices for the movie and contours
         frame_indices = self.get_frame_indices(time_ax, mho.fps)
+        # Get the index to read oput video
+        video_index = frame_indices
+        if round_robin_offset != None:
+            video_index = np.roll(video_index,round_robin_offset)
 
 
         # Loop over all frames
@@ -252,7 +257,7 @@ class cStartPlotter:
                 try:
                     # Prepare Video data
                     current_traceContour = traceContour[current_frame_index-comets_tail:current_frame_index]
-                    current_background_image = mho.getFrame(int(current_frame_index))
+                    current_background_image = mho.getFrame(int(video_index[frame]))
 
                     # Prepare the data for this frame
                     current_spike_df = spike_df[spike_df['spike_peak_s'] <= time_ax[frame]]
