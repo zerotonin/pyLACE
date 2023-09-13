@@ -25,7 +25,7 @@ for i,row in df.iterrows():
     if i > 0:
         try:
             mlr = matLabResultLoader.matLabResultLoader(row['path2_anaMat'])
-            raceInfo, traceContour, traceMidline, traceHead, traceTail, trace, bendability, binnedBend, saccs, trigAveSacc, medMaxVelocities =mlr.getData()
+            traceInfo, traceContour, traceMidline, traceHead, traceTail, trace, bendability, binnedBend, saccs, trigAveSacc, medMaxVelocities =mlr.getData()
         
             spike_df = pd.read_csv(row.path2_spike_train_df)
 
@@ -66,7 +66,7 @@ good_trials = [int(x.split('_')[0].split('/')[1]) for x in svg_files]
 for i,row in df.iterrows():
     if i  in good_trials:
         mlr = matLabResultLoader.matLabResultLoader(row['path2_anaMat'])
-        raceInfo, traceContour, traceMidline, traceHead, traceTail, trace, bendability, binnedBend, saccs, trigAveSacc, medMaxVelocities =mlr.getData()
+        traceInfo, traceContour, traceMidline, traceHead, traceTail, trace, bendability, binnedBend, saccs, trigAveSacc, medMaxVelocities =mlr.getData()
     
         spike_df = pd.read_csv(row.path2_spike_train_df)
 
@@ -83,3 +83,29 @@ for i,row in df.iterrows():
         f.savefig(save_filename)
         
 
+
+
+sns.set_theme(style="ticks")
+ 
+
+for category in ['latency_to_m_cell', 'latency_to_others', 'm_cell_spikes',
+       'median_spike_instFreq_Hz', 'other_spikes']:
+    
+
+    # Initialize the figure with a logarithmic x axis
+    f, ax = plt.subplots(figsize=(7, 6))
+
+    # Plot the orbital period with horizontal boxes
+    sns.boxplot(x="genotype", y=category, data=df, hue='sex',
+                whis=[0, 100], width=.6, palette="vlag",notch=True)
+
+    # Add in points to show each observation
+    sns.stripplot(x="genotype", y=category, data=df, hue='sex',
+                size=4, color=".3", linewidth=0)
+
+    # Tweak the visual presentation
+    ax.xaxis.grid(True)
+    ax.set(ylabel=category)
+    sns.despine(trim=True, left=True)
+
+plt.show()
