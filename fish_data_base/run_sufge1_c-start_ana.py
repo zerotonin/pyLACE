@@ -179,6 +179,7 @@ def get_tortuosity(midline_df, cutoff_freq=None, sampling_rate=None):
 def get_speed(midline_df,trace_df, cutoff_freq=None, sampling_rate=None):
     trace_df.interpolate(inplace=True)
     trace_df['trans_speed_mPs'] = trace_df['thrust_m/s'].abs() + trace_df['slip_m/s'].abs()
+    trace_df['trans_speed_mPs'] = trace_df['trans_speed_mPs']/10000
 
     # Apply low-pass filter if cutoff frequency and sampling rate are provided
     if cutoff_freq is not None and sampling_rate is not None:
