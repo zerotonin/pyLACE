@@ -13,6 +13,48 @@ import seaborn as sns
 from scipy.stats import sem
 from scipy.ndimage import gaussian_filter1d
 
+"""
+Fish Behavior Analysis Script
+
+This script is designed for analyzing fish behavior, particularly focusing on Danio rerio (zebrafish). 
+It encompasses functionalities for data collection, processing, filtering, statistical analysis, and visualization. 
+The script is structured into several functions that together facilitate a complete analysis workflow.
+
+Key Functionalities:
+1. Data Collection: The script collects data from a fish database and external CSV files, 
+   organizing it by fish genotype, sex, and various metrics such as spike frequency, speed, 
+   tortuosity, and Mauthner spike histogram.
+
+2. Data Processing: It includes functions for applying Butterworth and Gaussian low-pass filters 
+   to the data, useful for reducing high-frequency noise and smoothing the data for better analysis.
+
+3. Statistical Analysis: Functions are provided to calculate mean, median, standard error of the mean (SEM), 
+   and confidence intervals for various metrics, enabling detailed statistical insights into the fish behavior.
+
+4. Data Visualization: The script contains functions for plotting the processed data in various formats, 
+   including line plots with shaded confidence intervals and bar graphs for Mauthner cell activity.
+
+5. Data Saving and Loading: It includes functionalities to save processed data to disk for persistence 
+   and to load pre-existing processed data, enhancing efficiency by avoiding redundant data processing.
+
+6. Main Workflow: The 'main' function orchestrates the entire workflow, checking for pre-existing processed data, 
+   collecting and processing new data if necessary, applying statistical replacements, and plotting the final results.
+
+Usage:
+The script is executed by running the 'main' function. Users can customize the file paths for data input and output,
+as well as modify parameters for data processing and visualization according to their specific requirements.
+
+Dependencies:
+- Pandas for data manipulation
+- NumPy for numerical computations
+- Matplotlib and Seaborn for data visualization
+- SciPy for statistical functions and filters
+
+Note:
+This script assumes the presence of a fish database and relies on specific CSV file structures and formats.
+Users should ensure that the required data is properly formatted and accessible to the script.
+"""
+
 def extract_info_from_id_text(identifier_text):
     """
     Extract relevant information from an identifier text.
