@@ -354,48 +354,69 @@ def get_spike_freq(spike_train_df, cutoff_freq=None, sampling_rate=None):
     return (time_series, freq_series)
 
 
-def get_spike_mauthnerHistogram(spike_train_df):
+def get_spike_mauthner_histogram(spike_train_df, normalize=True):
     """
-    Calculate a normalized histogram for Mauthner spike times.
+    Calculate a histogram for Mauthner spike times with an option to normalize.
 
     This function identifies the Mauthner spikes in the spike train data and calculates
-    a normalized histogram of their occurrence times.
+    either a normalized or a raw histogram of their occurrence times, based on the 
+    normalize flag.
 
     Args:
         spike_train_df (pd.DataFrame): DataFrame containing spike train data, 
                                        specifically the 'spike_category' and 'spike_peak_s' columns.
+        normalize (bool, optional): A flag to determine if the histogram should be normalized. 
+                                    Defaults to True.
 
     Returns:
-        ndarray: An array representing the normalized histogram of Mauthner spike times.
+        ndarray: An array representing the histogram of Mauthner spike times. If normalized, 
+                 each bin value is a fraction of the total number of spikes; otherwise, it 
+                 reflects the raw spike count.
     """
+    # Identify indices of Mauthner spikes in the spike train data
     mauthner_idx = spike_train_df[spike_train_df['spike_category'] == 'Mauthner'].index
-    mauthner_times = spike_train_df['spike_peak_s'].iloc[mauthner_idx] - 1  # Adjusting for the one-second difference
-    mauthner_hist = calc_normalised_histogram(mauthner_times.to_numpy())
+    # Extract the Mauthner spike times, adjusting for a one-second offset
+    mauthner_times = spike_train_df['spike_peak_s'].iloc[mauthner_idx] - 1
+
+    # Calculate the histogram (normalized or raw based on the flag)
+    mauthner_hist = calc_histogram(mauthner_times.to_numpy(), normalize=normalize)
     return mauthner_hist
 
-def calc_normalised_histogram(events,bins=np.arange(0, 5.1, 0.01)):
-    """
-    Calculate a normalized histogram for a given set of events.
 
-    This function computes a histogram of the provided events and normalizes it. 
-    It is particularly useful for normalizing distributions of event occurrences, 
-    such as spike times. NaN values in the histogram (resulting from bins with no events) 
-    are replaced with zeros, which is important for cases like fish with no Mauthner spikes.
+def calc_histogram(events, bins=np.arange(0, 5.1, 0.01), normalize=True):
+    """
+    Calculate a histogram for a given set of events, with an option to normalize.
+
+    This function computes a histogram of the provided events. The histogram can be 
+    either normalized or raw based on the normalize flag. Normalization is useful for 
+    converting the histogram values to a fraction of the total number of events. 
+    When normalization is turned off, the histogram reflects the raw count in each bin.
+    NaN values in the histogram are replaced with zeros, which is relevant for cases 
+    like fish with no Mauthner spikes.
 
     Args:
         events (array-like): An array of event occurrences, typically as times or similar measurements.
         bins (array-like, optional): The bin edges, including the rightmost edge, allowing for 
                                      custom bin ranges. Default is set to range from 0 to 5.1 with a 
                                      step of 0.01.
+        normalize (bool, optional): A flag to determine if the histogram should be normalized. 
+                                    Defaults to True.
 
     Returns:
-        np.ndarray: A normalized histogram as a NumPy array, where each bin value is a fraction 
-                    of the total number of events.
+        np.ndarray: A histogram as a NumPy array. If normalized, each bin value is a fraction 
+                    of the total number of events; otherwise, it reflects the raw event count.
     """
-    hist_data = np.histogram(events, bins)
-    hist_data = hist_data[0] / hist_data[0].sum(axis=0, keepdims=True)  # Normalize each individual histogram
-    hist_data[np.isnan(hist_data)] = 0 # replace nans with zeros, as zeros come from fish that had no Mauthner spikes
+    # Calculate histogram from the events
+    hist_data, _ = np.histogram(events, bins)
+
+    # Normalize the histogram if the flag is set
+    if normalize:
+        hist_data = hist_data / hist_data.sum(axis=0, keepdims=True)
+
+    # Replace NaN values with zeros
+    hist_data[np.isnan(hist_data)] = 0 
     return hist_data
+
 
 def butter_lowpass_filter(data, cutoff_freq, sampling_rate, order=4):
     """
