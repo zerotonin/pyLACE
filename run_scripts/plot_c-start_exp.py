@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import fish_data_base.fishDataBase as fishDataBase
 import seaborn as sns
 from data_handlers import matLabResultLoader
-import plotting.fishPlot as fishPlot,cStartPlotter
+import plotting.fishPlot as fishPlot,plotting.cStartPlotter as cStartPlotter
 import matplotlib.widgets as widgets
 import glob
 
