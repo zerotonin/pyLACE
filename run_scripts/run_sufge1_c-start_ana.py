@@ -529,13 +529,13 @@ def collect_data():
             if check_paths_available(fish_df, path_keys):
 
                 # Read all files
-                trace_df, midline_df, spike_train_df =read_all_csv(fish_df)
-                
+                spike_train_df, midline_df, trace_df =read_all_csv(fish_df)
+                print(get_val(fish_df,'path2_spike_train_df'))
                 # Sort data directly into data_dict
                 data_dict[sex][genotype]['spike_frequency'].append(get_spike_freq(spike_train_df,10))
                 data_dict[sex][genotype]['speed'].append(get_speed(midline_df, trace_df,10))
                 data_dict[sex][genotype]['tortuosity'].append(get_tortuosity(midline_df,10))
-                data_dict[sex][genotype]['mauthner_histogram'].append(get_spike_mauthnerHistogram(spike_train_df))
+                data_dict[sex][genotype]['mauthner_histogram'].append(get_spike_mauthner_histogram(spike_train_df))
 
     return data_dict
 
