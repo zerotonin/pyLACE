@@ -738,6 +738,7 @@ def plot_individual_field(ax, data_dict, field, plot_function, xlims=None, new_z
     Plots:
         Graphs for each genotype using the specified plot function, potentially adjusting axes based on xlims and new_zero.
     """
+    palette = sns.color_palette("colorblind")
     for idx, (genotype, genotype_data) in enumerate(data_dict.items()):
         color = palette[idx]
 
@@ -865,6 +866,6 @@ def main():
 
 if __name__ == '__main__':
     # Set up colour-blind-friendly palette
-    # palette = sns.color_palette("colorblind")
+    # 
     main()
 
