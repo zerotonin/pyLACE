@@ -530,7 +530,7 @@ def collect_data():
 
                 # Read all files
                 spike_train_df, midline_df, trace_df =read_all_csv(fish_df)
-                print(get_val(fish_df,'path2_spike_train_df'))
+                
                 # Sort data directly into data_dict
                 data_dict[sex][genotype]['spike_frequency'].append(get_spike_freq(spike_train_df,10))
                 data_dict[sex][genotype]['speed'].append(get_speed(midline_df, trace_df,10))
