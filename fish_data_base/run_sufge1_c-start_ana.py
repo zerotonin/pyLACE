@@ -74,6 +74,18 @@ def get_val(df,field):
 
 
 def calculate_vector_norms(midline_df):
+    """
+    Calculate the sum of vector norms for each row in a DataFrame.
+
+    Each row in the DataFrame represents a series of coordinates, and this function calculates
+    the sum of the Euclidean distances between each consecutive pair of points in a row.
+
+    Args:
+        midline_df (pd.DataFrame): DataFrame containing coordinates.
+
+    Returns:
+        list: A list of sums of vector norms for each row in the DataFrame.
+    """
     vector_norm_sums = []
     
     # Iterate through each row in the DataFrame
@@ -98,9 +110,31 @@ def calculate_vector_norms(midline_df):
 
 
 def filter_by_criteria(df, strain, sex, fish_no):
+    """
+    Filter a DataFrame based on specified criteria for strain, sex, and fish number.
+
+    Args:
+        df (pd.DataFrame): The DataFrame to filter.
+        strain (str): The strain type to filter by.
+        sex (str): The sex to filter by.
+        fish_no (int): The fish number to filter by.
+
+    Returns:
+        pd.DataFrame: A filtered DataFrame based on the given criteria.
+    """
     return df.loc[(df['genotype'] == strain) & (df['sex'] == sex) & (df['animalNo'] == fish_no), :]
 
 def check_paths_available(df, path_keys):
+    """
+    Check if specified paths are available in a DataFrame.
+
+    Args:
+        df (pd.DataFrame): DataFrame containing path information.
+        path_keys (list of str): List of column names to check for paths.
+
+    Returns:
+        bool: True if all paths are available, False otherwise.
+    """
     for path_key in path_keys:
         path = get_val(df, path_key)
         if pd.isna(path):
@@ -109,6 +143,15 @@ def check_paths_available(df, path_keys):
     return True
 
 def calculate_head_tail_norms(midline_df):
+    """
+    Calculate the Euclidean distances between the head and tail coordinates for each row in a DataFrame.
+
+    Args:
+        midline_df (pd.DataFrame): DataFrame containing head and tail coordinates.
+
+    Returns:
+        list: A list of head-tail Euclidean distances for each row in the DataFrame.
+    """
     vector_norm_sums = []
     
     # Iterate through each row in the DataFrame
@@ -130,6 +173,15 @@ def calculate_head_tail_norms(midline_df):
     return vector_norm_sums
 
 def calculate_tortuosity(midline_df):
+    """
+    Calculate tortuosity based on the sum of vector norms and head-tail distance for each row in a DataFrame.
+
+    Args:
+        midline_df (pd.DataFrame): DataFrame containing midline coordinates.
+
+    Returns:
+        pd.DataFrame: Updated DataFrame with a new column 'tortuosity'.
+    """
 
     # Calculate the sum of vector norms for each row and store it in a new DataFrame column
     midline_df['vector_norm_sum'] = calculate_vector_norms(midline_df)
@@ -140,6 +192,16 @@ def calculate_tortuosity(midline_df):
 
 
 def find_tortuosity_peaks(midline_df, threshold=0.66):
+    """
+    Identify peaks in tortuosity above a specified threshold.
+
+    Args:
+        midline_df (pd.DataFrame): DataFrame containing tortuosity data.
+        threshold (float): The threshold value to identify peaks.
+
+    Returns:
+        tuple: Indices of peaks, corresponding time in seconds, and tortuosity values at peaks.
+    """
     # Extract the tortuosity values from the DataFrame
     tortuosity_values = midline_df['tortuosity'].to_numpy()
 
@@ -150,22 +212,80 @@ def find_tortuosity_peaks(midline_df, threshold=0.66):
 
 
 def interpolate_spike_frequencies(spike_train_df, time_range=(0, 8), resolution=0.001):
+    """
+    Interpolate spike frequencies over a specified time range.
+
+    This function interpolates the spike frequencies of a fish over a given time range 
+    with a specified resolution, using the spike peak times and instantaneous frequencies 
+    recorded in the spike_train_df DataFrame.
+
+    Args:
+        spike_train_df (pd.DataFrame): DataFrame containing spike peak times ('spike_peak_s') 
+                                       and instantaneous frequencies ('instant_freq').
+        time_range (tuple): A tuple (start, end) defining the time range for interpolation.
+        resolution (float): The time resolution for interpolation.
+
+    Returns:
+        pd.DataFrame: A DataFrame containing the interpolated spike frequencies 
+                      over the specified time range.
+    """
     time_grid = np.arange(time_range[0], time_range[1], resolution)
     interpolated_frequencies = np.interp(time_grid, spike_train_df['spike_peak_s'] - 1, spike_train_df['instant_freq'], left=0, right=0)
     return pd.DataFrame({'time_sec': time_grid, 'interpolated_instant_freq': interpolated_frequencies})
 
 def read_csv(fish_df,path_field):
-    path = get_val(fish_df,path_field)
+    """
+    Read a CSV file specified by a path in a DataFrame field.
+
+    Args:
+        fish_df (pd.DataFrame): DataFrame containing the path information.
+        path_field (str): The column name in fish_df that contains the path to the CSV file.
+
+    Returns:
+        pd.DataFrame: DataFrame read from the specified CSV file.
+    """
+    # Retrieve the path to the CSV file from the specified field
+    path = get_val(fish_df, path_field)
+
+    # Read and return the CSV file as a DataFrame
     return pd.read_csv(path)
 
 def read_all_csv(fish_df):
-    spike_train_df =  read_csv(fish_df, 'path2_spike_train_df')
-    midline_df =  read_csv(fish_df, 'path2_midLineUniform_pix')
-    trace_df =  read_csv(fish_df, 'path2_trace_mm')
+    """
+    Read multiple CSV files specified in a DataFrame.
 
-    return trace_df, midline_df, spike_train_df
+    This function reads three specific CSV files (spike train data, midline data, and trace data)
+    whose paths are specified in given fields of the fish_df DataFrame.
+
+    Args:
+        fish_df (pd.DataFrame): DataFrame containing the path information for each CSV file.
+
+    Returns:
+        tuple: A tuple of DataFrames read from the specified CSV files (spike_train_df, midline_df, trace_df).
+    """
+    # Read each CSV file specified in the given fields of fish_df
+    spike_train_df = read_csv(fish_df, 'path2_spike_train_df')
+    midline_df = read_csv(fish_df, 'path2_midLineUniform_pix')
+    trace_df = read_csv(fish_df, 'path2_trace_mm')
+
+    return spike_train_df, midline_df, trace_df
 
 def get_tortuosity(midline_df, cutoff_freq=None, sampling_rate=None):
+    """
+    Calculate tortuosity and optionally apply a low-pass filter.
+
+    This function calculates the tortuosity of a fish based on midline data. It also provides
+    the option to apply a low-pass filter to the tortuosity data using either a Butterworth 
+    or Gaussian filter, depending on the provided parameters.
+
+    Args:
+        midline_df (pd.DataFrame): DataFrame containing midline data.
+        cutoff_freq (float, optional): The cutoff frequency for the low-pass filter.
+        sampling_rate (float, optional): The sampling rate, required if using Butterworth filter.
+
+    Returns:
+        tuple: A tuple containing time in seconds and tortuosity values.
+    """
     midline_df = calculate_tortuosity(midline_df)
 
     # Apply low-pass filter if cutoff frequency and sampling rate are provided
@@ -177,6 +297,21 @@ def get_tortuosity(midline_df, cutoff_freq=None, sampling_rate=None):
     return (midline_df['time sec'], midline_df['tortuosity'])
 
 def get_speed(midline_df,trace_df, cutoff_freq=None, sampling_rate=None):
+    """
+    Calculate the speed of a fish and optionally apply a low-pass filter.
+
+    This function calculates the translational speed of a fish from trace data. It also
+    provides the option to apply a low-pass filter to the speed data.
+
+    Args:
+        midline_df (pd.DataFrame): DataFrame containing midline data.
+        trace_df (pd.DataFrame): DataFrame containing trace data.
+        cutoff_freq (float, optional): The cutoff frequency for the low-pass filter.
+        sampling_rate (float, optional): The sampling rate, required if using Butterworth filter.
+
+    Returns:
+        tuple: A tuple containing time in seconds and translational speed values in meters per second.
+    """
     trace_df.interpolate(inplace=True)
     trace_df['trans_speed_mPs'] = trace_df['thrust_m/s'].abs() + trace_df['slip_m/s'].abs()
     trace_df['trans_speed_mPs'] = trace_df['trans_speed_mPs']/10000
@@ -190,6 +325,21 @@ def get_speed(midline_df,trace_df, cutoff_freq=None, sampling_rate=None):
     return (midline_df['time sec'],trace_df['trans_speed_mPs'])
 
 def get_spike_freq(spike_train_df, cutoff_freq=None, sampling_rate=None):
+    """
+    Calculate the speed of a fish and optionally apply a low-pass filter.
+
+    This function calculates the translational speed of a fish from trace data. It also
+    provides the option to apply a low-pass filter to the speed data.
+
+    Args:
+        midline_df (pd.DataFrame): DataFrame containing midline data.
+        trace_df (pd.DataFrame): DataFrame containing trace data.
+        cutoff_freq (float, optional): The cutoff frequency for the low-pass filter.
+        sampling_rate (float, optional): The sampling rate, required if using Butterworth filter.
+
+    Returns:
+        tuple: A tuple containing time in seconds and translational speed values in meters per second.
+    """
     spike_freq_df = interpolate_spike_frequencies(spike_train_df)
     time_series = spike_freq_df['time_sec']
     freq_series = spike_freq_df['interpolated_instant_freq']
@@ -205,12 +355,43 @@ def get_spike_freq(spike_train_df, cutoff_freq=None, sampling_rate=None):
 
 
 def get_spike_mauthnerHistogram(spike_train_df):
+    """
+    Calculate a normalized histogram for Mauthner spike times.
+
+    This function identifies the Mauthner spikes in the spike train data and calculates
+    a normalized histogram of their occurrence times.
+
+    Args:
+        spike_train_df (pd.DataFrame): DataFrame containing spike train data, 
+                                       specifically the 'spike_category' and 'spike_peak_s' columns.
+
+    Returns:
+        ndarray: An array representing the normalized histogram of Mauthner spike times.
+    """
     mauthner_idx = spike_train_df[spike_train_df['spike_category'] == 'Mauthner'].index
     mauthner_times = spike_train_df['spike_peak_s'].iloc[mauthner_idx] - 1  # Adjusting for the one-second difference
     mauthner_hist = calc_normalised_histogram(mauthner_times.to_numpy())
     return mauthner_hist
 
 def calc_normalised_histogram(events,bins=np.arange(0, 5.1, 0.01)):
+    """
+    Calculate a normalized histogram for a given set of events.
+
+    This function computes a histogram of the provided events and normalizes it. 
+    It is particularly useful for normalizing distributions of event occurrences, 
+    such as spike times. NaN values in the histogram (resulting from bins with no events) 
+    are replaced with zeros, which is important for cases like fish with no Mauthner spikes.
+
+    Args:
+        events (array-like): An array of event occurrences, typically as times or similar measurements.
+        bins (array-like, optional): The bin edges, including the rightmost edge, allowing for 
+                                     custom bin ranges. Default is set to range from 0 to 5.1 with a 
+                                     step of 0.01.
+
+    Returns:
+        np.ndarray: A normalized histogram as a NumPy array, where each bin value is a fraction 
+                    of the total number of events.
+    """
     hist_data = np.histogram(events, bins)
     hist_data = hist_data[0] / hist_data[0].sum(axis=0, keepdims=True)  # Normalize each individual histogram
     hist_data[np.isnan(hist_data)] = 0 # replace nans with zeros, as zeros come from fish that had no Mauthner spikes
@@ -383,9 +564,26 @@ def plot_line_with_shade(ax, data, label, color):
     ax.plot(data['central'], label=label, color=color)
     ax.fill_between(data['central'].index, data['lower_bound'], data['upper_bound'], color=color, alpha=0.3)
 
-def plot_mauthner_bars(ax, data, label, color):
-    ax.bar(range(len(data)), data, label=label, color=color, alpha=0.7)
-    ax.set_xlim((95,125))
+def plot_mauthner_bars(ax, data, label, color, off_set = 1.1):
+    # Indices to plot (95 to 125)
+    start_index = 95
+    end_index = 125
+    selected_data = data[start_index:end_index]
+
+    # New x-axis scale from -0.15 to 0.15
+    new_x_scale = np.linspace(-0.15, 0.15, end_index - start_index)
+
+    # Define the width of each bar (adjust as needed)
+    bar_width = (0.30 / (end_index - start_index))  # Width based on the range and number of bars
+
+    # Create the bar plot
+    ax.bar(new_x_scale, selected_data, width=bar_width, label=label, color=color, alpha=0.7)
+
+    # Set the x-axis limits
+    ax.set_xlim(-0.15, 0.15)
+    # x_axis = np.linspace(0,len(data)/100,len(data)+1) - off_set
+    # ax.bar(x_axis[0:len(data)], data, label=label, color=color, alpha=0.7)
+    # ax.set_xlim((x_axis[95],x_axis[125]))
 
 def plot_individual_field(ax, data_dict, field, plot_function, xlims=None, new_zero=None):
     for idx, (genotype, genotype_data) in enumerate(data_dict.items()):
@@ -410,16 +608,25 @@ def plot_data(data_dict):
 
         # Flatten the 2D array to 1D
         axes = axes_2d.ravel()
-        
+
+        meta_data = (('abs. speed, m/s',(0,1.5)),('tortuosity, norm.',(0,0.2)),('inst. spike frequency, Hz',(0,6000)))
+        c = 0
+
         # Plot speed, tortuosity, and spike frequency as line plots
         for ax, field in zip(axes[:-1], [('speed',0.15,0.725), ('tortuosity',0.15,0.75), ('spike_frequency',0.15,1.1)]):
             plot_individual_field(ax, sex_data, field[0], plot_line_with_shade, field[1], field[2])
             ax.set_title(f'{field[0].capitalize()} in {sex}')
             ax.set_xlabel('Time (s)')
+            ax.set_ylabel(meta_data[c][0])
+            ax.set_ylim(meta_data[c][1])
+            c +=1
         
         # Plot mauthner_histogram as bar plot
         plot_individual_field(axes[-1], sex_data, 'mauthner_histogram', plot_mauthner_bars)
         axes[-1].set_title(f'Mauthner cells in {sex}')
+        axes[-1].set_xlabel('Time (s)')
+        axes[-1].set_ylabel('fraction')
+
         
         plt.tight_layout()
     plt.show()
