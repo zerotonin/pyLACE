@@ -463,6 +463,18 @@ def gaussian_lowpass_filter(data, sigma):
 
 
 def collect_data():
+    """
+    Collect and organize data from a fish database and CSV files.
+
+    This function collects data from a fish database and additional CSV files, then organizes it 
+    based on fish genotype, sex, and various metrics (spike frequency, speed, tortuosity, and 
+    Mauthner spike histogram). It uses several other functions to filter data, check availability 
+    of data paths, and calculate different metrics for each fish.
+
+    Returns:
+        defaultdict: A nested dictionary with structure 
+                     data_dict[sex][genotype][metric] containing organized fish data.
+    """
     # Assuming fishDataBase and other necessary modules are imported
     db = fishDataBase.fishDataBase("/home/bgeurten/fishDataBase",'/home/bgeurten/fishDataBase/fishDataBase_cstart.csv')
     df = db.database
@@ -497,6 +509,18 @@ def collect_data():
 
 
 def replace_with_summed_histograms(data_dict):
+    """
+    Collect and organize data from a fish database and CSV files.
+
+    This function collects data from a fish database and additional CSV files, then organizes it 
+    based on fish genotype, sex, and various metrics (spike frequency, speed, tortuosity, and 
+    Mauthner spike histogram). It uses several other functions to filter data, check availability 
+    of data paths, and calculate different metrics for each fish.
+
+    Returns:
+        defaultdict: A nested dictionary with structure 
+                     data_dict[sex][genotype][metric] containing organized fish data.
+    """
     for sex, sex_data in data_dict.items():
         for genotype, genotype_data in sex_data.items():
             all_histograms = genotype_data['mauthner_histogram']
@@ -514,6 +538,24 @@ def replace_with_summed_histograms(data_dict):
 
 
 def calculate_median_and_CI_for_field(all_tuples):
+    """
+    Calculate the median and 95% confidence interval for a given field across multiple datasets.
+
+    This function processes a list of tuples (time series, data series) and computes the median 
+    and 95% confidence interval of the data at each time point. It is useful for statistical 
+    analysis where a median value and its confidence interval are needed for comparison or 
+    visualization.
+
+    Args:
+        all_tuples (list of tuples): A list where each tuple contains two elements: a time series 
+                                     and a corresponding data series.
+
+    Returns:
+        dict: A dictionary containing 'central' (median values), 'lower_bound' (lower bound of the 
+              confidence interval), and 'upper_bound' (upper bound of the confidence interval) 
+              for each time point.
+    """
+
     z_value = norm.ppf(0.975)  # Z-value for 95% confidence interval
 
     # Convert list of tuples into a list of dataframes for easy manipulation
@@ -540,6 +582,21 @@ def calculate_median_and_CI_for_field(all_tuples):
 
 
 def calculate_mean_and_SEM_for_field(all_tuples):
+    """
+    Calculate the mean and Standard Error of the Mean (SEM) for a given field across multiple datasets.
+
+    This function processes a list of tuples (time series, data series) and computes the mean and 
+    SEM of the data at each time point. It is particularly useful for statistical analysis where 
+    the mean value and its standard error are essential for comparison or visualization.
+
+    Args:
+        all_tuples (list of tuples): A list where each tuple contains two elements: a time series 
+                                     and a corresponding data series.
+
+    Returns:
+        dict: A dictionary containing 'central' (mean values), 'lower_bound' (lower bound of the 
+              standard error), and 'upper_bound' (upper bound of the standard error) for each time point.
+    """
     # Convert list of tuples into a list of dataframes for easy manipulation
     #all_dfs = [pd.DataFrame({'time': np.round(tup[0], 4), 'data': tup[1]}) for tup in all_tuples]  # Rounded to the nearest millisecond
     all_dfs = [pd.DataFrame({'time': np.ceil(tup[0] * 1000) / 1000, 'data': tup[1]}) for tup in all_tuples]
@@ -562,13 +619,23 @@ def calculate_mean_and_SEM_for_field(all_tuples):
         'upper_bound': upper_bound
     }
 
-# Example usage
-# all_tuples is a list where each tuple contains (time_series, corresponding_data)
-# e.g., [(time_series1, data1), (time_series2, data2), ...]
-# result = calculate_mean_and_SEM_for_field(all_tuples)
-
 
 def replace_fields_in_dict(data_dict, fields, mode = 'median'):
+    """
+    Replace specified fields in a data dictionary with statistical measures (mean or median).
+
+    This function iterates over a nested dictionary structure and replaces specified fields with 
+    either their mean and SEM or median and confidence interval, based on the selected mode.
+
+    Args:
+        data_dict (dict): The nested dictionary containing the data.
+        fields (list of str): The fields within the dictionary to be replaced with statistical measures.
+        mode (str, optional): The statistical mode to use ('mean' or 'median'). Defaults to 'median'.
+
+    Modifies:
+        The input data_dict is modified in place, replacing specified fields with their 
+        calculated statistical measures.
+    """
     for sex, sex_data in data_dict.items():
         for genotype, genotype_data in sex_data.items():
             for field in fields:
@@ -578,14 +645,38 @@ def replace_fields_in_dict(data_dict, fields, mode = 'median'):
                 elif mode == 'median':
                     genotype_data[field] = calculate_median_and_CI_for_field(all_tuples)
 
-# Set up colour-blind-friendly palette
-palette = sns.color_palette("colorblind")
+
 
 def plot_line_with_shade(ax, data, label, color):
+    """
+    Plot a line graph with shaded confidence interval or error margin.
+
+    Args:
+        ax (matplotlib.axes.Axes): The axes on which to plot.
+        data (dict): A dictionary containing 'central', 'lower_bound', and 'upper_bound' data for plotting.
+        label (str): The label for the line plot.
+        color (str or tuple): The color of the line and shade.
+
+    Plots:
+        A line graph representing 'central' values and a shaded area between 'lower_bound' and 'upper_bound'.
+    """
     ax.plot(data['central'], label=label, color=color)
     ax.fill_between(data['central'].index, data['lower_bound'], data['upper_bound'], color=color, alpha=0.3)
 
 def plot_mauthner_bars(ax, data, label, color, off_set = 1.1):
+    """
+    Plot Mauthner cell activity as a bar graph.
+
+    Args:
+        ax (matplotlib.axes.Axes): The axes on which to plot.
+        data (array-like): The data to plot as a bar graph.
+        label (str): The label for the bar plot.
+        color (str or tuple): The color of the bars.
+        off_set (float, optional): Offset for adjusting the x-axis scale. Defaults to 1.1.
+
+    Plots:
+        A bar graph representing Mauthner cell activity in a specified time range.
+    """
     # Indices to plot (95 to 125)
     start_index = 95
     end_index = 125
@@ -607,6 +698,20 @@ def plot_mauthner_bars(ax, data, label, color, off_set = 1.1):
     # ax.set_xlim((x_axis[95],x_axis[125]))
 
 def plot_individual_field(ax, data_dict, field, plot_function, xlims=None, new_zero=None):
+    """
+    Plot data for an individual field using a specified plot function.
+
+    Args:
+        ax (matplotlib.axes.Axes): The axes on which to plot.
+        data_dict (dict): A nested dictionary containing the data for each genotype.
+        field (str): The field within the data_dict to plot.
+        plot_function (function): The plotting function to use (e.g., plot_line_with_shade).
+        xlims (tuple, optional): The limits for the x-axis. Defaults to None.
+        new_zero (float, optional): A value to shift the x-axis if necessary. Defaults to None.
+
+    Plots:
+        Graphs for each genotype using the specified plot function, potentially adjusting axes based on xlims and new_zero.
+    """
     for idx, (genotype, genotype_data) in enumerate(data_dict.items()):
         color = palette[idx]
 
@@ -624,6 +729,18 @@ def plot_individual_field(ax, data_dict, field, plot_function, xlims=None, new_z
     ax.legend()
 
 def plot_data(data_dict):
+    """
+    Plot multiple fields from a data dictionary, organizing them into a multi-panel figure.
+
+    This function creates a multi-panel figure where each panel visualizes a different metric (e.g., speed,
+    tortuosity, spike frequency, Mauthner cell histogram) for different genotypes and sexes.
+
+    Args:
+        data_dict (dict): A nested dictionary containing the data to plot, organized by sex and genotype.
+
+    Plots:
+        A multi-panel figure where each panel represents a different metric from the data_dict.
+    """
     for sex, sex_data in data_dict.items():
         fig, axes_2d = plt.subplots(2, 2, figsize=(6, 6), sharey=False)
 
@@ -653,14 +770,49 @@ def plot_data(data_dict):
     plt.show()
 
 def save_data_to_disk(data, file_path):
+    """
+    Save data to a file on disk using pickle serialization.
+
+    This function serializes the provided data using pickle and saves it to the specified file path.
+    It's useful for persisting data structures like dictionaries, lists, or custom objects to disk.
+
+    Args:
+        data: The data to be serialized and saved.
+        file_path (str): The path to the file where the serialized data will be stored.
+    """
     with open(file_path, 'wb') as f:
         pickle.dump(data, f)
 
 def load_data_from_disk(file_path):
+    """
+    Load data from a disk file using pickle deserialization.
+
+    This function reads a file from the specified path and deserializes its content using pickle.
+    It's useful for loading previously saved data structures like dictionaries, lists, or custom objects.
+
+    Args:
+        file_path (str): The path to the file from which to load the data.
+
+    Returns:
+        The deserialized data loaded from the file.
+    """
     with open(file_path, 'rb') as f:
         return pickle.load(f)
 
 def main():
+    """
+    Main function to orchestrate data collection, processing, and visualization.
+
+    This function orchestrates the process of data collection, processing, and visualization for 
+    fish behavior analysis. It checks if the preprocessed data is available on disk, loads it, 
+    or otherwise collects and saves the data. It then applies statistical replacements on the data 
+    and plots the results.
+
+    Steps:
+    1. Check for preprocessed data on disk and load it, or collect and save new data.
+    2. Sum the histograms and replace specified fields in the data dictionary.
+    3. Plot the data for visual analysis.
+    """
     file_path = '/home/bgeurten/fishDataBase/c-start_combined_timeData.pkl'  # Replace with your desired file path
     
     # Check if the data_dict file already exists on disk
@@ -686,5 +838,7 @@ def main():
     print("Done")
 
 if __name__ == '__main__':
+    # Set up colour-blind-friendly palette
+    # palette = sns.color_palette("colorblind")
     main()
 
