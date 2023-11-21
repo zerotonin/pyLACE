@@ -57,7 +57,6 @@ def extract_info_from_id_text(identifier_text):
     
     return strain, sex, fish_no
 
-
 def get_val(df,field):
     """
     Retrieve the first value in a specified DataFrame column.
@@ -70,8 +69,6 @@ def get_val(df,field):
         any: The first value in the specified column.
     """
     return  df[field].iloc[0]
-
-
 
 def calculate_vector_norms(midline_df):
     """
@@ -107,7 +104,6 @@ def calculate_vector_norms(midline_df):
         vector_norm_sums.append(norm_sum)
     
     return vector_norm_sums
-
 
 def filter_by_criteria(df, strain, sex, fish_no):
     """
@@ -190,7 +186,6 @@ def calculate_tortuosity(midline_df):
     midline_df['tortuosity'] = (midline_df['vector_norm_sum'] - midline_df['head_tail_dist'])/midline_df['vector_norm_sum'] 
     return midline_df
 
-
 def find_tortuosity_peaks(midline_df, threshold=0.66):
     """
     Identify peaks in tortuosity above a specified threshold.
@@ -209,7 +204,6 @@ def find_tortuosity_peaks(midline_df, threshold=0.66):
     peaks, _ = find_peaks(tortuosity_values, height=threshold)
     
     return  peaks, midline_df['time sec'].iloc[peaks].to_numpy(), tortuosity_values[peaks]
-
 
 def interpolate_spike_frequencies(spike_train_df, time_range=(0, 8), resolution=0.001):
     """
@@ -353,7 +347,6 @@ def get_spike_freq(spike_train_df, cutoff_freq=None, sampling_rate=None):
 
     return (time_series, freq_series)
 
-
 def get_spike_mauthner_histogram(spike_train_df, normalize=True):
     """
     Calculate a histogram for Mauthner spike times with an option to normalize.
@@ -381,7 +374,6 @@ def get_spike_mauthner_histogram(spike_train_df, normalize=True):
     # Calculate the histogram (normalized or raw based on the flag)
     mauthner_hist = calc_histogram(mauthner_times.to_numpy(), normalize=normalize)
     return mauthner_hist
-
 
 def calc_histogram(events, bins=np.arange(0, 5.1, 0.01), normalize=True):
     """
@@ -416,7 +408,6 @@ def calc_histogram(events, bins=np.arange(0, 5.1, 0.01), normalize=True):
     # Replace NaN values with zeros
     hist_data[np.isnan(hist_data)] = 0 
     return hist_data
-
 
 def butter_lowpass_filter(data, cutoff_freq, sampling_rate, order=4):
     """
@@ -460,7 +451,6 @@ def gaussian_lowpass_filter(data, sigma):
     filtered_data = gaussian_filter1d(data, sigma)
     
     return filtered_data
-
 
 def collect_data():
     """
@@ -507,7 +497,6 @@ def collect_data():
 
     return data_dict
 
-
 def replace_with_summed_histograms(data_dict):
     """
     Collect and organize data from a fish database and CSV files.
@@ -535,7 +524,6 @@ def replace_with_summed_histograms(data_dict):
             
             # Replace the 'mauthner_histogram' entry with the new summed histogram
             genotype_data['mauthner_histogram'] = summed_histogram
-
 
 def calculate_median_and_CI_for_field(all_tuples):
     """
@@ -580,7 +568,6 @@ def calculate_median_and_CI_for_field(all_tuples):
         'upper_bound': upper_bound
     }
 
-
 def calculate_mean_and_SEM_for_field(all_tuples):
     """
     Calculate the mean and Standard Error of the Mean (SEM) for a given field across multiple datasets.
@@ -619,7 +606,6 @@ def calculate_mean_and_SEM_for_field(all_tuples):
         'upper_bound': upper_bound
     }
 
-
 def replace_fields_in_dict(data_dict, fields, mode = 'median'):
     """
     Replace specified fields in a data dictionary with statistical measures (mean or median).
@@ -644,8 +630,6 @@ def replace_fields_in_dict(data_dict, fields, mode = 'median'):
                     genotype_data[field] = calculate_mean_and_SEM_for_field(all_tuples)
                 elif mode == 'median':
                     genotype_data[field] = calculate_median_and_CI_for_field(all_tuples)
-
-
 
 def plot_line_with_shade(ax, data, label, color):
     """
