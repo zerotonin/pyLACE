@@ -17,7 +17,12 @@ from pylace.annotator.sidecar import (
     video_sha256,
 )
 from pylace.detect.arena_mask import arena_mask
-from pylace.detect.background import build_max_projection_background
+from pylace.detect.background import (
+    build_max_projection_background,
+    default_background_path,
+    load_background_png,
+    save_background_png,
+)
 from pylace.detect.frame import Detection, detect_blobs_with_mask
 from pylace.tune.frame_loader import sample_preview_frames
 from pylace.tune.overlay import render_overlay
@@ -68,6 +73,7 @@ class TuneWindow(QtWidgets.QMainWindow):
         self._show_contours = False
         self._show_ellipses = True
         self._show_centroids = True
+        self._show_background = False
 
         self.setWindowTitle(f"pylace-tune — {video.name}")
         self._build_ui()
@@ -97,8 +103,22 @@ class TuneWindow(QtWidgets.QMainWindow):
 
     def _initial_load(self) -> None:
         self._sample_frames()
-        self._rebuild_background()
+        self._load_or_compute_background()
         self._render_current()
+
+    def _load_or_compute_background(self) -> None:
+        """Prefer a saved sidecar over a fresh max-projection at startup."""
+        bg_path = default_background_path(self._video)
+        if bg_path.exists():
+            try:
+                self._background = load_background_png(bg_path)
+                self.statusBar().showMessage(
+                    f"Loaded background from {bg_path.name}", 4000,
+                )
+                return
+            except OSError:
+                pass
+        self._rebuild_background()
 
     # ── Layout ─────────────────────────────────────────────────────────
 
@@ -150,10 +170,32 @@ class TuneWindow(QtWidgets.QMainWindow):
         v.addWidget(self._build_stats_group(wrap))
         v.addStretch(1)
 
-        save = QtWidgets.QPushButton("Save params", wrap)
+        button_row = QtWidgets.QHBoxLayout()
+        save = QtWidgets.QPushButton("Save", wrap)
         save.setShortcut(QtGui.QKeySequence("Ctrl+S"))
+        save.setToolTip("Save params to <video>.pylace_detect_params.json (Ctrl+S)")
         save.clicked.connect(self._on_save_params)
-        v.addWidget(save)
+        button_row.addWidget(save)
+
+        save_as = QtWidgets.QPushButton("Save as…", wrap)
+        save_as.setToolTip("Save params to a chosen file as a named preset")
+        save_as.clicked.connect(self._on_save_preset_as)
+        button_row.addWidget(save_as)
+
+        load = QtWidgets.QPushButton("Load preset…", wrap)
+        load.setToolTip("Load a previously-saved preset JSON")
+        load.clicked.connect(self._on_load_preset)
+        button_row.addWidget(load)
+
+        v.addLayout(button_row)
+
+        edit_bg = QtWidgets.QPushButton("Edit background…", wrap)
+        edit_bg.setToolTip(
+            "Paint a mask and smart-fill (cv2.inpaint) — useful for removing "
+            "a stationary fly that the bg model has baked in.",
+        )
+        edit_bg.clicked.connect(self._on_edit_background)
+        v.addWidget(edit_bg)
 
         scroll.setWidget(wrap)
         return scroll
@@ -166,7 +208,12 @@ class TuneWindow(QtWidgets.QMainWindow):
         self._sb_min_area = self._spin(form, "Min area (px)", dp.min_area, 1, 1_000_000)
         self._sb_max_area = self._spin(form, "Max area (px)", dp.max_area, 1, 1_000_000)
         self._sb_morph = self._spin(form, "Morph kernel", dp.morph_kernel, 0, 21)
-        for sb in (self._sb_threshold, self._sb_min_area, self._sb_max_area, self._sb_morph):
+        self._sb_dilate = self._spin(form, "Dilate iters", dp.dilate_iters, 0, 20)
+        self._sb_erode = self._spin(form, "Erode iters", dp.erode_iters, 0, 20)
+        for sb in (
+            self._sb_threshold, self._sb_min_area, self._sb_max_area,
+            self._sb_morph, self._sb_dilate, self._sb_erode,
+        ):
             sb.valueChanged.connect(self._on_detection_changed)
         return box
 
@@ -200,13 +247,14 @@ class TuneWindow(QtWidgets.QMainWindow):
     def _build_display_group(self, parent: QtWidgets.QWidget) -> QtWidgets.QGroupBox:
         box = QtWidgets.QGroupBox("Display", parent)
         v = QtWidgets.QVBoxLayout(box)
+        self._cb_show_bg = self._check(v, "Show background image", self._show_background)
         self._cb_mask = self._check(v, "Foreground mask tint", self._show_mask)
         self._cb_arena = self._check(v, "Arena outline", self._show_arena)
         self._cb_contours = self._check(v, "Contours", self._show_contours)
         self._cb_ellipses = self._check(v, "Ellipses", self._show_ellipses)
         self._cb_centroids = self._check(v, "Centroids", self._show_centroids)
         for cb in (
-            self._cb_mask, self._cb_arena, self._cb_contours,
+            self._cb_show_bg, self._cb_mask, self._cb_arena, self._cb_contours,
             self._cb_ellipses, self._cb_centroids,
         ):
             cb.toggled.connect(self._on_display_toggled)
@@ -263,12 +311,15 @@ class TuneWindow(QtWidgets.QMainWindow):
                 min_area=self._sb_min_area.value(),
                 max_area=self._sb_max_area.value(),
                 morph_kernel=self._sb_morph.value(),
+                dilate_iters=self._sb_dilate.value(),
+                erode_iters=self._sb_erode.value(),
             ),
             background=self._params.background,
         )
         self._render_current()
 
     def _on_display_toggled(self) -> None:
+        self._show_background = self._cb_show_bg.isChecked()
         self._show_mask = self._cb_mask.isChecked()
         self._show_arena = self._cb_arena.isChecked()
         self._show_contours = self._cb_contours.isChecked()
@@ -323,6 +374,89 @@ class TuneWindow(QtWidgets.QMainWindow):
             f"Saved params to {self._params_path.name}", 5000,
         )
 
+    def _on_edit_background(self) -> None:
+        if self._background is None:
+            self.statusBar().showMessage("No background loaded yet.", 3000)
+            return
+        from pylace.tune.bg_editor import BgEditDialog
+
+        dlg = BgEditDialog(self._background, parent=self)
+        if dlg.exec() != QtWidgets.QDialog.DialogCode.Accepted:
+            return
+        edited = dlg.result_bg()
+        self._background = edited
+        try:
+            save_background_png(edited, default_background_path(self._video))
+        except OSError as exc:
+            self.statusBar().showMessage(
+                f"Background edited but could not save: {exc}", 6000,
+            )
+        else:
+            self.statusBar().showMessage(
+                "Background edited and saved.", 4000,
+            )
+        self._render_current()
+
+    def _on_save_preset_as(self) -> None:
+        path_str, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self, "Save preset",
+            str(self._params_path.parent / "preset.pylace_detect_params.json"),
+            "pyLACE preset (*.json);;All files (*)",
+        )
+        if not path_str:
+            return
+        target = Path(path_str)
+        write_params(
+            self._params,
+            video_path=self._video,
+            video_sha256_hex=self._sidecar.video.sha256,
+            out_path=target,
+        )
+        self.statusBar().showMessage(f"Saved preset to {target.name}", 5000)
+
+    def _on_load_preset(self) -> None:
+        path_str, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self, "Load preset",
+            str(self._params_path.parent),
+            "pyLACE preset (*.json);;All files (*)",
+        )
+        if not path_str:
+            return
+        try:
+            params, _ = read_params(Path(path_str))
+        except (TuningParamsSchemaError, ValueError, KeyError, OSError) as exc:
+            self.statusBar().showMessage(f"Cannot load preset: {exc}", 7000)
+            return
+        self._params = params
+        self._sync_widgets_from_params()
+        self._rebuild_background()
+        self._render_current()
+        self.statusBar().showMessage(f"Loaded preset {Path(path_str).name}", 5000)
+
+    def _sync_widgets_from_params(self) -> None:
+        """Push self._params back into the spinboxes without triggering signals."""
+        dp = self._params.detection
+        bp = self._params.background
+        for sb, val in (
+            (self._sb_threshold, dp.threshold),
+            (self._sb_min_area, dp.min_area),
+            (self._sb_max_area, dp.max_area),
+            (self._sb_morph, dp.morph_kernel),
+            (self._sb_dilate, dp.dilate_iters),
+            (self._sb_erode, dp.erode_iters),
+            (self._sb_bg_n, bp.n_frames),
+        ):
+            sb.blockSignals(True)
+            sb.setValue(int(val))
+            sb.blockSignals(False)
+        for sb, val in (
+            (self._sb_bg_start, bp.start_frac),
+            (self._sb_bg_end, bp.end_frac),
+        ):
+            sb.blockSignals(True)
+            sb.setValue(float(val))
+            sb.blockSignals(False)
+
     # ── Compute / render ───────────────────────────────────────────────
 
     def _sample_frames(self) -> None:
@@ -346,9 +480,24 @@ class TuneWindow(QtWidgets.QMainWindow):
             self._video, n_frames=bp.n_frames,
             start_frac=bp.start_frac, end_frac=bp.end_frac,
         )
+        try:
+            save_background_png(
+                self._background, default_background_path(self._video),
+            )
+        except OSError as exc:
+            self.statusBar().showMessage(f"Could not save background: {exc}", 5000)
 
     def _render_current(self) -> None:
         if not self._frames or self._background is None:
+            return
+        if self._show_background:
+            overlay = render_overlay(
+                self._background, self._sidecar.arena, [],
+                show_arena=self._show_arena,
+                show_contours=False, show_ellipses=False, show_centroids=False,
+            )
+            self._set_pixmap(overlay)
+            self._update_stats(detections=[], showing_bg=True)
             return
         frame = self._frames[self._current]
         dp = self._params.detection
@@ -356,6 +505,7 @@ class TuneWindow(QtWidgets.QMainWindow):
             frame, self._background, self._mask,
             threshold=dp.threshold, min_area=dp.min_area,
             max_area=dp.max_area, morph_kernel=dp.morph_kernel,
+            dilate_iters=dp.dilate_iters, erode_iters=dp.erode_iters,
         )
         overlay = render_overlay(
             frame, self._sidecar.arena, detections,
@@ -384,7 +534,9 @@ class TuneWindow(QtWidgets.QMainWindow):
             )
         )
 
-    def _update_stats(self, detections: list[Detection]) -> None:
+    def _update_stats(
+        self, detections: list[Detection], *, showing_bg: bool = False,
+    ) -> None:
         if not self._frames:
             return
         idx = self._frame_indices[self._current] if self._frame_indices else -1
@@ -392,7 +544,10 @@ class TuneWindow(QtWidgets.QMainWindow):
         self._lbl_frame.setText(
             f"Frame: {self._current + 1} / {len(self._frames)}  (source idx {idx})",
         )
-        self._lbl_this.setText(f"This frame: {len(detections)} detections")
+        if showing_bg:
+            self._lbl_this.setText("Showing background image")
+        else:
+            self._lbl_this.setText(f"This frame: {len(detections)} detections")
         counts = self._counts_across_sample()
         if counts:
             self._lbl_agg.setText(self._summarise_counts(counts))
@@ -407,6 +562,7 @@ class TuneWindow(QtWidgets.QMainWindow):
                 frame, self._background, self._mask,
                 threshold=dp.threshold, min_area=dp.min_area,
                 max_area=dp.max_area, morph_kernel=dp.morph_kernel,
+                dilate_iters=dp.dilate_iters, erode_iters=dp.erode_iters,
                 keep_contour=False,
             )
             out.append(len(dets))
