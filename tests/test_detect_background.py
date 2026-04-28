@@ -62,3 +62,69 @@ def test_missing_video_raises(tmp_path: Path) -> None:
     pytest.importorskip("cv2")
     with pytest.raises(OSError):
         build_max_projection_background(tmp_path / "does-not-exist.mp4")
+
+
+def test_save_load_background_round_trip(tmp_path: Path) -> None:
+    from pylace.detect.background import (
+        load_background_png,
+        save_background_png,
+    )
+
+    bg = np.full((40, 40), 200, dtype=np.uint8)
+    bg[10:20, 10:20] = 50
+    out = tmp_path / "bg.png"
+    save_background_png(bg, out)
+
+    loaded = load_background_png(out)
+    assert loaded.shape == bg.shape
+    assert loaded.dtype == np.uint8
+    assert np.array_equal(loaded, bg)
+
+
+def test_load_or_build_uses_sidecar_when_present(tmp_path: Path) -> None:
+    from pylace.detect.background import (
+        default_background_path,
+        load_or_build_background,
+        save_background_png,
+    )
+
+    video = tmp_path / "v.mp4"
+    h, w = 32, 32
+    bright = np.full((h, w, 3), 220, dtype=np.uint8)
+    _write_video(video, [bright] * 3)
+
+    # Pre-stage a deliberately distinctive saved background.
+    fake_bg = np.full((h, w), 99, dtype=np.uint8)
+    save_background_png(fake_bg, default_background_path(video))
+
+    bg, source = load_or_build_background(video)
+    assert source == "sidecar"
+    assert np.array_equal(bg, fake_bg)
+
+
+def test_load_or_build_force_rebuild_overwrites_sidecar(tmp_path: Path) -> None:
+    from pylace.detect.background import (
+        default_background_path,
+        load_or_build_background,
+        save_background_png,
+    )
+
+    video = tmp_path / "v.mp4"
+    h, w = 32, 32
+    bright = np.full((h, w, 3), 220, dtype=np.uint8)
+    _write_video(video, [bright] * 5)
+
+    fake_bg = np.full((h, w), 99, dtype=np.uint8)
+    save_background_png(fake_bg, default_background_path(video))
+
+    bg, source = load_or_build_background(video, force_rebuild=True)
+    assert source == "computed"
+    assert not np.array_equal(bg, fake_bg)
+    # Sidecar overwritten with the freshly computed bg.
+    on_disk = np.array(
+        __import__("cv2").imread(
+            str(default_background_path(video)),
+            __import__("cv2").IMREAD_GRAYSCALE,
+        )
+    )
+    assert np.array_equal(on_disk, bg)

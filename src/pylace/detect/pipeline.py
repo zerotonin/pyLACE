@@ -15,6 +15,8 @@ from pylace.annotator.sidecar import Sidecar
 from pylace.detect.arena_mask import arena_mask
 from pylace.detect.background import build_max_projection_background
 from pylace.detect.frame import (
+    DEFAULT_DILATE_ITERS,
+    DEFAULT_ERODE_ITERS,
     DEFAULT_MAX_AREA,
     DEFAULT_MIN_AREA,
     DEFAULT_MORPH_KERNEL,
@@ -46,6 +48,8 @@ def run_detection(
     min_area: int = DEFAULT_MIN_AREA,
     max_area: int = DEFAULT_MAX_AREA,
     morph_kernel: int = DEFAULT_MORPH_KERNEL,
+    dilate_iters: int = DEFAULT_DILATE_ITERS,
+    erode_iters: int = DEFAULT_ERODE_ITERS,
     every: int = 1,
     max_frames: int | None = None,
     start_frame: int = 0,
@@ -97,7 +101,9 @@ def run_detection(
         yield from _iter_frames(
             cap=cap, bg=bg, mask=mask,
             threshold=threshold, min_area=min_area, max_area=max_area,
-            morph_kernel=morph_kernel, every=every, max_frames=max_frames,
+            morph_kernel=morph_kernel,
+            dilate_iters=dilate_iters, erode_iters=erode_iters,
+            every=every, max_frames=max_frames,
             start_frame=start_frame, end_frame=end_frame,
         )
     finally:
@@ -107,6 +113,7 @@ def run_detection(
 def _iter_frames(
     *, cap: cv2.VideoCapture, bg: np.ndarray, mask: np.ndarray,
     threshold: int, min_area: int, max_area: int, morph_kernel: int,
+    dilate_iters: int, erode_iters: int,
     every: int, max_frames: int | None,
     start_frame: int, end_frame: int | None,
 ) -> Iterator[FrameResult]:
@@ -125,7 +132,9 @@ def _iter_frames(
             detections = detect_blobs(
                 gray, bg, mask,
                 threshold=threshold, min_area=min_area, max_area=max_area,
-                morph_kernel=morph_kernel, keep_contour=False,
+                morph_kernel=morph_kernel,
+                dilate_iters=dilate_iters, erode_iters=erode_iters,
+                keep_contour=False,
             )
             yield FrameResult(frame_idx=idx, detections=detections)
             kept += 1

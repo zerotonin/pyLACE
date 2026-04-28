@@ -63,3 +63,37 @@ def test_default_params_path_appends_suffix():
     assert default_params_path(video).name == (
         "recording_arena_03.mp4.pylace_detect_params.json"
     )
+
+
+def test_read_tolerant_of_missing_new_fields(tmp_path: Path):
+    """Older sidecars without dilate_iters / erode_iters still load."""
+    out = tmp_path / "old.json"
+    out.write_text(json.dumps({
+        "schema_version": SCHEMA_VERSION,
+        "video": {"path": "/tmp/x.mp4", "sha256": "0" * 64},
+        "detection": {
+            "threshold": 80, "min_area": 100, "max_area": 1500, "morph_kernel": 5,
+        },
+        "background": {"n_frames": 200, "start_frac": 0.1, "end_frac": 0.9},
+    }))
+    params, _ = read_params(out)
+    assert params.detection.threshold == 80
+    assert params.detection.dilate_iters == 0  # filled from dataclass default
+    assert params.detection.erode_iters == 0
+
+
+def test_read_tolerant_of_unknown_fields(tmp_path: Path):
+    """Future sidecars with extra keys do not break."""
+    out = tmp_path / "future.json"
+    out.write_text(json.dumps({
+        "schema_version": SCHEMA_VERSION,
+        "video": {"path": "/tmp/x.mp4", "sha256": "0" * 64},
+        "detection": {
+            "threshold": 25, "min_area": 20, "max_area": 5000, "morph_kernel": 3,
+            "dilate_iters": 0, "erode_iters": 0,
+            "future_knob": "ignored",
+        },
+        "background": {"n_frames": 50, "start_frac": 0.1, "end_frac": 0.9},
+    }))
+    params, _ = read_params(out)
+    assert params.detection.threshold == 25

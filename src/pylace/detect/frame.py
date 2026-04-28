@@ -11,6 +11,8 @@ DEFAULT_THRESHOLD = 25
 DEFAULT_MIN_AREA = 20
 DEFAULT_MAX_AREA = 5000
 DEFAULT_MORPH_KERNEL = 3
+DEFAULT_DILATE_ITERS = 0
+DEFAULT_ERODE_ITERS = 0
 ELLIPSE_FIT_MIN_POINTS = 5
 
 
@@ -36,6 +38,8 @@ def detect_blobs(
     min_area: int = DEFAULT_MIN_AREA,
     max_area: int = DEFAULT_MAX_AREA,
     morph_kernel: int = DEFAULT_MORPH_KERNEL,
+    dilate_iters: int = DEFAULT_DILATE_ITERS,
+    erode_iters: int = DEFAULT_ERODE_ITERS,
     keep_contour: bool = True,
 ) -> list[Detection]:
     """Per-frame blob detection on a grayscale frame.
@@ -53,13 +57,21 @@ def detect_blobs(
         max_area: Reject blobs larger than this (in pixels).
         morph_kernel: Side length of the elliptical structuring element used
             for opening and closing.
+        dilate_iters: Extra dilation iterations applied after open+close.
+            Useful for merging fragmented blobs (e.g. one fly split by a
+            shadow into two pieces).
+        erode_iters: Extra erosion iterations applied after dilation.
+            Useful for shrinking the blob back if dilation over-grew, or
+            for trimming peripheral noise.
         keep_contour: If True, return the raw contour with each detection;
             otherwise leave ``Detection.contour`` as None to save memory.
     """
     detections, _ = detect_blobs_with_mask(
         frame_gray, background_gray, arena_mask,
         threshold=threshold, min_area=min_area, max_area=max_area,
-        morph_kernel=morph_kernel, keep_contour=keep_contour,
+        morph_kernel=morph_kernel,
+        dilate_iters=dilate_iters, erode_iters=erode_iters,
+        keep_contour=keep_contour,
     )
     return detections
 
@@ -73,6 +85,8 @@ def detect_blobs_with_mask(
     min_area: int = DEFAULT_MIN_AREA,
     max_area: int = DEFAULT_MAX_AREA,
     morph_kernel: int = DEFAULT_MORPH_KERNEL,
+    dilate_iters: int = DEFAULT_DILATE_ITERS,
+    erode_iters: int = DEFAULT_ERODE_ITERS,
     keep_contour: bool = True,
 ) -> tuple[list[Detection], np.ndarray]:
     """Like :func:`detect_blobs` but also returns the binary foreground mask.
@@ -87,7 +101,9 @@ def detect_blobs_with_mask(
         ``uint8`` 0/255 array the same shape as the frame.
     """
     fg = _foreground_mask(
-        frame_gray, background_gray, arena_mask, threshold, morph_kernel,
+        frame_gray, background_gray, arena_mask,
+        threshold=threshold, morph_kernel=morph_kernel,
+        dilate_iters=dilate_iters, erode_iters=erode_iters,
     )
     contours = _filtered_contours(fg, min_area, max_area)
     out: list[Detection] = []
@@ -100,7 +116,8 @@ def detect_blobs_with_mask(
 
 def _foreground_mask(
     frame: np.ndarray, bg: np.ndarray, mask: np.ndarray,
-    threshold: int, morph_kernel: int,
+    *, threshold: int, morph_kernel: int,
+    dilate_iters: int, erode_iters: int,
 ) -> np.ndarray:
     diff = cv2.subtract(bg, frame)
     fg = (diff > threshold).astype(np.uint8) * 255
@@ -110,6 +127,10 @@ def _foreground_mask(
         )
         fg = cv2.morphologyEx(fg, cv2.MORPH_OPEN, kernel)
         fg = cv2.morphologyEx(fg, cv2.MORPH_CLOSE, kernel)
+        if dilate_iters > 0:
+            fg = cv2.dilate(fg, kernel, iterations=dilate_iters)
+        if erode_iters > 0:
+            fg = cv2.erode(fg, kernel, iterations=erode_iters)
     fg = cv2.bitwise_and(fg, mask.astype(np.uint8) * 255)
     return fg
 

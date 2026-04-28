@@ -106,3 +106,45 @@ def test_detect_keep_contour_flag_drops_contour_when_false():
 
     assert with_c[0].contour is not None
     assert without_c[0].contour is None
+
+
+def test_dilate_iters_increases_blob_area():
+    h, w = 100, 100
+    bg = _bright_background(h, w)
+    frame = _frame_with_dark_ellipse(h, w, cx=50, cy=50, axes=(8, 4), angle_deg=0)
+    mask = arena_mask(Circle(50.0, 50.0, 45.0), frame_size=(w, h))
+
+    base = detect_blobs(frame, bg, mask)
+    dilated = detect_blobs(frame, bg, mask, dilate_iters=3)
+
+    assert len(base) == len(dilated) == 1
+    assert dilated[0].area_px > base[0].area_px
+
+
+def test_erode_iters_decreases_blob_area():
+    h, w = 100, 100
+    bg = _bright_background(h, w)
+    frame = _frame_with_dark_ellipse(h, w, cx=50, cy=50, axes=(10, 6), angle_deg=0)
+    mask = arena_mask(Circle(50.0, 50.0, 45.0), frame_size=(w, h))
+
+    base = detect_blobs(frame, bg, mask)
+    eroded = detect_blobs(frame, bg, mask, erode_iters=2)
+
+    assert len(base) == 1
+    if eroded:
+        assert eroded[0].area_px < base[0].area_px
+
+
+def test_dilate_can_merge_two_close_blobs():
+    h, w = 80, 80
+    bg = _bright_background(h, w)
+    frame = bg.copy()
+    cv2.ellipse(frame, (35, 40), (4, 3), 0, 0, 360, 30, thickness=-1)
+    cv2.ellipse(frame, (45, 40), (4, 3), 0, 0, 360, 30, thickness=-1)
+    mask = arena_mask(Circle(40.0, 40.0, 35.0), frame_size=(w, h))
+
+    base = detect_blobs(frame, bg, mask, morph_kernel=3)
+    merged = detect_blobs(frame, bg, mask, morph_kernel=3, dilate_iters=4)
+
+    assert len(base) >= 1
+    assert len(merged) == 1

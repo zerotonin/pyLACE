@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from pylace.detect.frame import (
+    DEFAULT_DILATE_ITERS,
+    DEFAULT_ERODE_ITERS,
     DEFAULT_MAX_AREA,
     DEFAULT_MIN_AREA,
     DEFAULT_MORPH_KERNEL,
@@ -29,6 +32,8 @@ class DetectionParams:
     min_area: int = DEFAULT_MIN_AREA
     max_area: int = DEFAULT_MAX_AREA
     morph_kernel: int = DEFAULT_MORPH_KERNEL
+    dilate_iters: int = DEFAULT_DILATE_ITERS
+    erode_iters: int = DEFAULT_ERODE_ITERS
 
 
 @dataclass
@@ -66,7 +71,11 @@ def write_params(
 
 
 def read_params(in_path: Path) -> tuple[TuningParams, dict]:
-    """Load tuning params; return ``(params, video_meta_dict)``."""
+    """Load tuning params; return ``(params, video_meta_dict)``.
+
+    Tolerant of missing dataclass fields so old sidecars (pre-dilate/erode)
+    still load by falling back to dataclass defaults.
+    """
     payload = json.loads(in_path.read_text())
     version = payload.get("schema_version")
     if version != SCHEMA_VERSION:
@@ -76,11 +85,17 @@ def read_params(in_path: Path) -> tuple[TuningParams, dict]:
         )
     return (
         TuningParams(
-            detection=DetectionParams(**payload["detection"]),
-            background=BackgroundParams(**payload["background"]),
+            detection=_parse_dataclass(DetectionParams, payload["detection"]),
+            background=_parse_dataclass(BackgroundParams, payload["background"]),
         ),
         payload.get("video", {}),
     )
+
+
+def _parse_dataclass(cls, raw: dict):
+    """Construct ``cls`` from a dict, ignoring unknown keys and using defaults."""
+    valid = {f.name for f in dataclasses.fields(cls)}
+    return cls(**{k: v for k, v in raw.items() if k in valid})
 
 
 def default_params_path(video: Path) -> Path:
