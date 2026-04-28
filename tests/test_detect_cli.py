@@ -178,3 +178,64 @@ def test_pipeline_start_end_frame_yields_absolute_indices(
 
     results = list(run_detection(video, sidecar, start_frame=4, end_frame=8))
     assert [r.frame_idx for r in results] == [4, 5, 6, 7]
+
+
+def test_pylace_detect_loads_sibling_tuning_params(
+    video_and_sidecar: tuple[Path, Path], tmp_path: Path,
+) -> None:
+    """An auto-detected ``.pylace_detect_params.json`` overrides flag defaults."""
+    from pylace.tune.params import (
+        BackgroundParams,
+        DetectionParams,
+        TuningParams,
+        default_params_path,
+        write_params,
+    )
+
+    video, _ = video_and_sidecar
+    # Aggressive min_area to suppress all detections.
+    write_params(
+        TuningParams(
+            detection=DetectionParams(
+                threshold=25, min_area=10_000, max_area=100_000, morph_kernel=3,
+            ),
+            background=BackgroundParams(),
+        ),
+        video_path=video, video_sha256_hex="0" * 64,
+        out_path=default_params_path(video),
+    )
+
+    out = tmp_path / "with_params.csv"
+    rc = cli.main([str(video), "--out", str(out)])
+    assert rc == 0
+    rows = list(csv.DictReader(out.read_text().splitlines()))
+    assert rows == []  # tuned min_area suppressed everything
+
+
+def test_pylace_detect_explicit_flag_overrides_sibling_tuning_params(
+    video_and_sidecar: tuple[Path, Path], tmp_path: Path,
+) -> None:
+    """User-provided CLI flags win over the params sidecar."""
+    from pylace.tune.params import (
+        BackgroundParams,
+        DetectionParams,
+        TuningParams,
+        default_params_path,
+        write_params,
+    )
+
+    video, _ = video_and_sidecar
+    write_params(
+        TuningParams(
+            detection=DetectionParams(min_area=10_000),
+            background=BackgroundParams(),
+        ),
+        video_path=video, video_sha256_hex="0" * 64,
+        out_path=default_params_path(video),
+    )
+
+    out = tmp_path / "override.csv"
+    rc = cli.main([str(video), "--out", str(out), "--min-area", "20"])
+    assert rc == 0
+    rows = list(csv.DictReader(out.read_text().splitlines()))
+    assert rows  # the explicit --min-area lets detections through

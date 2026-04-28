@@ -14,6 +14,7 @@ from pylace.detect.frame import (
     DEFAULT_THRESHOLD,
 )
 from pylace.detect.pipeline import run_detection, write_detections_csv
+from pylace.tune.params import default_params_path, read_params
 
 DETECTIONS_SUFFIX = ".pylace_detections.csv"
 
@@ -33,6 +34,8 @@ def main(argv: list[str] | None = None) -> int:
         print("Run pylace-annotate first.", file=sys.stderr)
         return 2
     sidecar = read_sidecar(sidecar_path)
+
+    detection, background = _resolve_tuning_params(args)
 
     out_path = (
         args.out
@@ -56,20 +59,85 @@ def main(argv: list[str] | None = None) -> int:
         end_repr = f"{args.end:.2f}s" if args.end is not None else "end"
         start_repr = f"{args.start:.2f}s" if args.start is not None else "start"
         print(f"  window: {start_repr} -> {end_repr}  (frames {start_frame}..{end_frame})")
+    print(
+        f"  detection: threshold={detection['threshold']} "
+        f"min_area={detection['min_area']} max_area={detection['max_area']} "
+        f"morph={detection['morph_kernel']}"
+    )
+    print(
+        f"  background: n_frames={background['n_frames']} "
+        f"start_frac={background['start_frac']} end_frac={background['end_frac']}"
+    )
+    from pylace.detect.background import build_max_projection_background
+
+    bg = build_max_projection_background(
+        args.video,
+        n_frames=background["n_frames"],
+        start_frac=background["start_frac"],
+        end_frac=background["end_frac"],
+    )
+
     results = run_detection(
         args.video, sidecar,
-        threshold=args.threshold,
-        min_area=args.min_area,
-        max_area=args.max_area,
-        morph_kernel=args.morph_kernel,
+        threshold=detection["threshold"],
+        min_area=detection["min_area"],
+        max_area=detection["max_area"],
+        morph_kernel=detection["morph_kernel"],
         every=args.every,
         max_frames=args.max_frames,
         start_frame=start_frame,
         end_frame=end_frame,
+        background=bg,
     )
     rows = write_detections_csv(results, sidecar, out_path)
     print(f"Wrote {rows} detection rows.")
     return 0
+
+
+def _resolve_tuning_params(args: argparse.Namespace) -> tuple[dict, dict]:
+    """Resolve detection + background params from --params, sibling, or CLI flags.
+
+    Precedence (highest first):
+      1. Per-flag CLI arguments that the user explicitly provided
+         (detected via the parser's ``default=None`` sentinel).
+      2. The tuning-params JSON specified by --params, or the conventional
+         sibling ``<video>.pylace_detect_params.json`` if it exists.
+      3. The hard-coded detector defaults.
+    """
+    detection: dict = {
+        "threshold": DEFAULT_THRESHOLD,
+        "min_area": DEFAULT_MIN_AREA,
+        "max_area": DEFAULT_MAX_AREA,
+        "morph_kernel": DEFAULT_MORPH_KERNEL,
+    }
+    background: dict = {"n_frames": 50, "start_frac": 0.1, "end_frac": 0.9}
+
+    candidate = args.params if args.params else default_params_path(args.video)
+    if candidate.exists():
+        tp, _ = read_params(candidate)
+        detection.update(
+            threshold=tp.detection.threshold,
+            min_area=tp.detection.min_area,
+            max_area=tp.detection.max_area,
+            morph_kernel=tp.detection.morph_kernel,
+        )
+        background = {
+            "n_frames": tp.background.n_frames,
+            "start_frac": tp.background.start_frac,
+            "end_frac": tp.background.end_frac,
+        }
+        print(f"Loaded tuned params from {candidate.name}.")
+
+    overrides = {
+        "threshold": args.threshold,
+        "min_area": args.min_area,
+        "max_area": args.max_area,
+        "morph_kernel": args.morph_kernel,
+    }
+    for key, value in overrides.items():
+        if value is not None:
+            detection[key] = value
+    return detection, background
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -86,23 +154,30 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Sidecar path (default: <video>.pylace_arena.json).",
     )
     p.add_argument(
+        "--params", type=Path, default=None,
+        help=(
+            "Tuning-params JSON path. Defaults to <video>.pylace_detect_params.json "
+            "if that exists; per-flag CLI arguments still override."
+        ),
+    )
+    p.add_argument(
         "--out", type=Path, default=None,
         help="CSV output path (default: <video>.pylace_detections.csv).",
     )
     p.add_argument(
-        "--threshold", type=int, default=DEFAULT_THRESHOLD,
+        "--threshold", type=int, default=None,
         help=f"Foreground intensity threshold (default: {DEFAULT_THRESHOLD}).",
     )
     p.add_argument(
-        "--min-area", type=int, default=DEFAULT_MIN_AREA, dest="min_area",
+        "--min-area", type=int, default=None, dest="min_area",
         help=f"Minimum blob area in pixels (default: {DEFAULT_MIN_AREA}).",
     )
     p.add_argument(
-        "--max-area", type=int, default=DEFAULT_MAX_AREA, dest="max_area",
+        "--max-area", type=int, default=None, dest="max_area",
         help=f"Maximum blob area in pixels (default: {DEFAULT_MAX_AREA}).",
     )
     p.add_argument(
-        "--morph-kernel", type=int, default=DEFAULT_MORPH_KERNEL,
+        "--morph-kernel", type=int, default=None,
         dest="morph_kernel",
         help="Side length of the morphology kernel; set 0 to skip morphology.",
     )
