@@ -56,6 +56,36 @@ def detect_blobs(
         keep_contour: If True, return the raw contour with each detection;
             otherwise leave ``Detection.contour`` as None to save memory.
     """
+    detections, _ = detect_blobs_with_mask(
+        frame_gray, background_gray, arena_mask,
+        threshold=threshold, min_area=min_area, max_area=max_area,
+        morph_kernel=morph_kernel, keep_contour=keep_contour,
+    )
+    return detections
+
+
+def detect_blobs_with_mask(
+    frame_gray: np.ndarray,
+    background_gray: np.ndarray,
+    arena_mask: np.ndarray,
+    *,
+    threshold: int = DEFAULT_THRESHOLD,
+    min_area: int = DEFAULT_MIN_AREA,
+    max_area: int = DEFAULT_MAX_AREA,
+    morph_kernel: int = DEFAULT_MORPH_KERNEL,
+    keep_contour: bool = True,
+) -> tuple[list[Detection], np.ndarray]:
+    """Like :func:`detect_blobs` but also returns the binary foreground mask.
+
+    The mask is the post-morphology, arena-clipped foreground used for
+    contour finding — useful for tuning UIs that want to show which pixels
+    survived the threshold + open/close pipeline before any contour was
+    fitted.
+
+    Returns:
+        ``(detections, foreground_mask)`` where ``foreground_mask`` is a
+        ``uint8`` 0/255 array the same shape as the frame.
+    """
     fg = _foreground_mask(
         frame_gray, background_gray, arena_mask, threshold, morph_kernel,
     )
@@ -65,7 +95,7 @@ def detect_blobs(
         if len(c) < ELLIPSE_FIT_MIN_POINTS:
             continue
         out.append(_contour_to_detection(c, keep_contour=keep_contour))
-    return out
+    return out, fg
 
 
 def _foreground_mask(
