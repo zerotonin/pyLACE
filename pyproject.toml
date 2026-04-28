@@ -27,6 +27,7 @@ dev = ["pytest", "pytest-cov", "ruff"]
 [project.scripts]
 pylace-annotate = "pylace.annotator.cli:main"
 pylace-detect = "pylace.detect.cli:main"
+pylace-tune = "pylace.tune.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
