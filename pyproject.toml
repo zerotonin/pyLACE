@@ -18,11 +18,14 @@ dependencies = [
     "h5py",
     "pyyaml",
     "tqdm",
+    "PyQt6",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-cov", "ruff"]
-ui = ["PyQt6"]
+
+[project.scripts]
+pylace-annotate = "pylace.annotator.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
