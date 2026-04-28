@@ -8,6 +8,8 @@ from pathlib import Path
 
 from pylace.annotator.sidecar import default_sidecar_path, read_sidecar
 from pylace.detect.frame import (
+    DEFAULT_DILATE_ITERS,
+    DEFAULT_ERODE_ITERS,
     DEFAULT_MAX_AREA,
     DEFAULT_MIN_AREA,
     DEFAULT_MORPH_KERNEL,
@@ -62,20 +64,23 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"  detection: threshold={detection['threshold']} "
         f"min_area={detection['min_area']} max_area={detection['max_area']} "
-        f"morph={detection['morph_kernel']}"
+        f"morph={detection['morph_kernel']} "
+        f"dilate={detection['dilate_iters']} erode={detection['erode_iters']}"
     )
     print(
         f"  background: n_frames={background['n_frames']} "
         f"start_frac={background['start_frac']} end_frac={background['end_frac']}"
     )
-    from pylace.detect.background import build_max_projection_background
+    from pylace.detect.background import load_or_build_background
 
-    bg = build_max_projection_background(
+    bg, bg_source = load_or_build_background(
         args.video,
         n_frames=background["n_frames"],
         start_frac=background["start_frac"],
         end_frac=background["end_frac"],
+        force_rebuild=args.rebuild_background,
     )
+    print(f"  background: {bg_source}")
 
     results = run_detection(
         args.video, sidecar,
@@ -83,6 +88,8 @@ def main(argv: list[str] | None = None) -> int:
         min_area=detection["min_area"],
         max_area=detection["max_area"],
         morph_kernel=detection["morph_kernel"],
+        dilate_iters=detection["dilate_iters"],
+        erode_iters=detection["erode_iters"],
         every=args.every,
         max_frames=args.max_frames,
         start_frame=start_frame,
@@ -109,6 +116,8 @@ def _resolve_tuning_params(args: argparse.Namespace) -> tuple[dict, dict]:
         "min_area": DEFAULT_MIN_AREA,
         "max_area": DEFAULT_MAX_AREA,
         "morph_kernel": DEFAULT_MORPH_KERNEL,
+        "dilate_iters": DEFAULT_DILATE_ITERS,
+        "erode_iters": DEFAULT_ERODE_ITERS,
     }
     background: dict = {"n_frames": 50, "start_frac": 0.1, "end_frac": 0.9}
 
@@ -120,6 +129,8 @@ def _resolve_tuning_params(args: argparse.Namespace) -> tuple[dict, dict]:
             min_area=tp.detection.min_area,
             max_area=tp.detection.max_area,
             morph_kernel=tp.detection.morph_kernel,
+            dilate_iters=tp.detection.dilate_iters,
+            erode_iters=tp.detection.erode_iters,
         )
         background = {
             "n_frames": tp.background.n_frames,
@@ -133,6 +144,8 @@ def _resolve_tuning_params(args: argparse.Namespace) -> tuple[dict, dict]:
         "min_area": args.min_area,
         "max_area": args.max_area,
         "morph_kernel": args.morph_kernel,
+        "dilate_iters": args.dilate_iters,
+        "erode_iters": args.erode_iters,
     }
     for key, value in overrides.items():
         if value is not None:
@@ -182,6 +195,20 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Side length of the morphology kernel; set 0 to skip morphology.",
     )
     p.add_argument(
+        "--dilate-iters", type=int, default=None, dest="dilate_iters",
+        help=(
+            "Extra dilation iterations after open+close (default: "
+            f"{DEFAULT_DILATE_ITERS}). Useful to merge fragmented blobs."
+        ),
+    )
+    p.add_argument(
+        "--erode-iters", type=int, default=None, dest="erode_iters",
+        help=(
+            "Extra erosion iterations after dilation (default: "
+            f"{DEFAULT_ERODE_ITERS}). Useful to trim peripheral noise."
+        ),
+    )
+    p.add_argument(
         "--every", type=int, default=1,
         help="Process every Nth frame (default: 1, i.e. every frame).",
     )
@@ -196,6 +223,14 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--end", type=_parse_time_spec, default=None,
         help="End time as seconds, MM:SS, or HH:MM:SS (default: video end).",
+    )
+    p.add_argument(
+        "--rebuild-background", action="store_true",
+        dest="rebuild_background",
+        help=(
+            "Force max-projection recompute even if a "
+            "<video>.pylace_background.png sidecar already exists."
+        ),
     )
     return p
 

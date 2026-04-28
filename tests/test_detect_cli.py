@@ -239,3 +239,70 @@ def test_pylace_detect_explicit_flag_overrides_sibling_tuning_params(
     assert rc == 0
     rows = list(csv.DictReader(out.read_text().splitlines()))
     assert rows  # the explicit --min-area lets detections through
+
+
+def test_pylace_detect_writes_background_sidecar_and_reuses_it(
+    video_and_sidecar: tuple[Path, Path], tmp_path: Path,
+) -> None:
+    """First run writes the background PNG; second run reads it back."""
+    from pylace.detect.background import default_background_path
+
+    video, _ = video_and_sidecar
+    bg_path = default_background_path(video)
+    if bg_path.exists():
+        bg_path.unlink()
+
+    rc = cli.main([str(video), "--out", str(tmp_path / "first.csv")])
+    assert rc == 0
+    assert bg_path.exists()
+    first_mtime = bg_path.stat().st_mtime
+
+    rc = cli.main([str(video), "--out", str(tmp_path / "second.csv")])
+    assert rc == 0
+    # Sidecar reused on second run; mtime unchanged.
+    assert bg_path.stat().st_mtime == first_mtime
+
+
+def test_pylace_detect_rebuild_background_flag_overwrites(
+    video_and_sidecar: tuple[Path, Path], tmp_path: Path,
+) -> None:
+    from pylace.detect.background import default_background_path
+
+    video, _ = video_and_sidecar
+    bg_path = default_background_path(video)
+    cli.main([str(video), "--out", str(tmp_path / "first.csv")])
+    assert bg_path.exists()
+
+    # Touch the sidecar's mtime back to a known value, then force rebuild.
+    import os
+    import time
+
+    old_time = time.time() - 60
+    os.utime(bg_path, (old_time, old_time))
+    rc = cli.main([
+        str(video), "--out", str(tmp_path / "rebuild.csv"),
+        "--rebuild-background",
+    ])
+    assert rc == 0
+    assert bg_path.stat().st_mtime > old_time + 1
+
+
+def test_pylace_detect_dilate_and_erode_flags_propagate(
+    video_and_sidecar: tuple[Path, Path], tmp_path: Path,
+) -> None:
+    """``--dilate-iters`` / ``--erode-iters`` reach the pipeline; --dilate-iters
+    grows blobs into a clearly larger area than the default run."""
+    video, _ = video_and_sidecar
+
+    out_base = tmp_path / "base.csv"
+    cli.main([str(video), "--out", str(out_base)])
+    base_rows = list(csv.DictReader(out_base.read_text().splitlines()))
+    base_areas = [float(r["area_px"]) for r in base_rows]
+
+    out_dilated = tmp_path / "dilated.csv"
+    cli.main([str(video), "--out", str(out_dilated), "--dilate-iters", "3"])
+    dilated_rows = list(csv.DictReader(out_dilated.read_text().splitlines()))
+    dilated_areas = [float(r["area_px"]) for r in dilated_rows]
+
+    assert base_areas and dilated_areas
+    assert max(dilated_areas) > max(base_areas)
