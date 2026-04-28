@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pylace"
+version = "0.1.0.dev0"
+description = "Python port of LACE — Limbless Animal traCkEr (Geurten 2022 Frontiers Behav Neurosci)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "GPL-3.0-or-later" }
+authors = [{ name = "Bart Geurten", email = "bart.geurten@gmail.com" }]
+dependencies = [
+    "numpy",
+    "scipy",
+    "opencv-python",
+    "matplotlib",
+    "h5py",
+    "pyyaml",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-cov", "ruff"]
+ui = ["PyQt6"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

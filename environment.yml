@@ -1,0 +1,19 @@
+name: pylace
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - numpy
+  - scipy
+  - opencv
+  - matplotlib
+  - h5py
+  - pyyaml
+  - tqdm
+  - pytest
+  - pytest-cov
+  - ruff
+  - pip:
+      - PyQt6
+      - -e .

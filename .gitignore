@@ -1,0 +1,25 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.eggs/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Generated artefacts (per Bart Coding Whitepaper)
+figures/
+*.db
+*.h5
+*.parquet
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
