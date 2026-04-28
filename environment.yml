@@ -2,18 +2,11 @@ name: pylace
 channels:
   - conda-forge
 dependencies:
+  # Conda only provides the interpreter and pip; every native dep ships
+  # from PyPI wheels via pyproject.toml so we never mix toolchains
+  # (mixing conda-forge native libs with PyQt6's bundled Qt was causing
+  # cv2 import failures with libgobject symbol mismatches).
   - python=3.10
   - pip
-  - numpy
-  - scipy
-  - opencv
-  - matplotlib
-  - h5py
-  - pyyaml
-  - tqdm
-  - pytest
-  - pytest-cov
-  - ruff
   - pip:
-      - PyQt6
-      - -e .
+      - -e ".[dev]"
