@@ -18,6 +18,14 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from pylace.annotator.geometry import Arena, Circle
+from pylace.roi.geometry import ROISet
+
+ARENA_OUTLINE_COLOR = (0, 220, 220)        # cyan
+ROI_ADD_OUTLINE_COLOR = (0, 220, 0)        # green
+ROI_SUB_OUTLINE_COLOR = (0, 0, 220)        # red
+FREEHAND_OUTLINE_COLOR = (200, 220, 0)     # teal
+
 
 @dataclass
 class TrackTrajectory:
@@ -144,10 +152,57 @@ def render_current_markers(
             )
 
 
+def render_arena_outline(
+    bgr: np.ndarray,
+    arena: Arena,
+    *,
+    color: tuple[int, int, int] = ARENA_OUTLINE_COLOR,
+    thickness: int = 1,
+) -> None:
+    """Draw the arena boundary onto ``bgr`` in place."""
+    if isinstance(arena, Circle):
+        cv2.circle(
+            bgr,
+            (int(round(arena.cx)), int(round(arena.cy))),
+            int(round(arena.r)),
+            color, thickness,
+        )
+        return
+    poly = np.array(arena.vertices, dtype=np.int32).reshape(-1, 1, 2)
+    cv2.polylines(bgr, [poly], isClosed=True, color=color, thickness=thickness)
+
+
+def render_roi_outlines(
+    bgr: np.ndarray,
+    roi_set: ROISet,
+    *,
+    add_color: tuple[int, int, int] = ROI_ADD_OUTLINE_COLOR,
+    subtract_color: tuple[int, int, int] = ROI_SUB_OUTLINE_COLOR,
+    freehand_color: tuple[int, int, int] = FREEHAND_OUTLINE_COLOR,
+    thickness: int = 1,
+) -> None:
+    """Draw every ROI outline onto ``bgr`` in place; colour by add/subtract."""
+    for roi in roi_set.rois:
+        col = add_color if roi.operation == "add" else subtract_color
+        render_arena_outline(bgr, roi.shape, color=col, thickness=thickness)
+    if roi_set.has_freehand_mask():
+        mask = roi_set.freehand_mask.astype(np.uint8)
+        contours, _ = cv2.findContours(
+            mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE,
+        )
+        cv2.drawContours(bgr, contours, -1, freehand_color, thickness)
+
+
 __all__ = [
+    "ARENA_OUTLINE_COLOR",
+    "FREEHAND_OUTLINE_COLOR",
+    "ROI_ADD_OUTLINE_COLOR",
+    "ROI_SUB_OUTLINE_COLOR",
     "TrackTrajectory",
     "read_traces",
+    "render_arena_outline",
     "render_current_markers",
     "render_full_trajectories",
+    "render_roi_outlines",
     "render_trail",
 ]

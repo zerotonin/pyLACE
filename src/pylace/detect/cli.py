@@ -382,6 +382,10 @@ def _resolve_roi_plan(args: argparse.Namespace, sidecar):
         return [(MERGED_ROI_LABEL, None)]
     candidate = args.rois if args.rois else default_rois_path(args.video)
     if not candidate.exists():
+        print(
+            f"  rois: no sidecar at {candidate.name}; "
+            "running on whole-arena mask (use pylace-roi to add ROIs).",
+        )
         return [(MERGED_ROI_LABEL, None)]
 
     rois_sidecar = read_rois(candidate)

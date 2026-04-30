@@ -20,6 +20,12 @@ import numpy as np
 from PyQt6 import QtCore, QtGui, QtWidgets
 from PyQt6.QtCore import Qt
 
+from pylace.annotator.sidecar import (
+    Sidecar,
+    SidecarSchemaError,
+    default_sidecar_path,
+    read_sidecar,
+)
 from pylace.detect.background import (
     default_background_paths,
     load_background_png,
@@ -29,12 +35,62 @@ from pylace.inspect.palette import palette_bgr
 from pylace.inspect.traces import (
     TrackTrajectory,
     read_traces,
+    render_arena_outline,
     render_current_markers,
     render_full_trajectories,
+    render_roi_outlines,
     render_trail,
+)
+from pylace.roi.geometry import ROISet
+from pylace.roi.sidecar import (
+    ROISidecarSchemaError,
+    default_rois_path,
+    read_rois,
 )
 
 DEFAULT_TRAIL_SECONDS = 5.0
+
+
+class _ClickableImageLabel(QtWidgets.QLabel):
+    """QLabel that emits clicks in source-image (pixel) coordinates.
+
+    The pixmap is scaled with KeepAspectRatio and centred inside the label,
+    so we have to undo both the centring offset and the scale to recover
+    the original-image coordinate the user actually clicked on.
+    """
+
+    imageClicked = QtCore.pyqtSignal(float, float)
+
+    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._image_size: tuple[int, int] | None = None
+        self.setCursor(Qt.CursorShape.CrossCursor)
+        self.setToolTip(
+            "Click anywhere on a trajectory to jump the live frame to "
+            "that detection.",
+        )
+
+    def set_image_size(self, width: int, height: int) -> None:
+        self._image_size = (int(width), int(height))
+
+    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:  # noqa: N802
+        if event.button() != Qt.MouseButton.LeftButton or self._image_size is None:
+            return super().mousePressEvent(event)
+        pix = self.pixmap()
+        if pix is None or pix.isNull():
+            return
+        pw, ph = pix.width(), pix.height()
+        lw, lh = self.width(), self.height()
+        x_off = (lw - pw) / 2.0
+        y_off = (lh - ph) / 2.0
+        cx = event.position().x() - x_off
+        cy = event.position().y() - y_off
+        if cx < 0 or cy < 0 or cx > pw or cy > ph:
+            return
+        sw, sh = self._image_size
+        ix = cx * sw / pw
+        iy = cy * sh / ph
+        self.imageClicked.emit(float(ix), float(iy))
 
 
 class InspectorWindow(QtWidgets.QMainWindow):
@@ -60,11 +116,15 @@ class InspectorWindow(QtWidgets.QMainWindow):
 
         self._first_frame = self._read_frame_at(self._first_frame_idx())
         self._bg_max, self._bg_min = self._load_bg_pair()
+        self._sidecar = self._load_sidecar()
+        self._roi_set = self._load_roi_set()
         self._overview_bg = self._first_frame.copy()
         self._overview_cache: np.ndarray | None = None
 
         self._current_frame = self._first_frame_idx()
         self._trail_seconds = DEFAULT_TRAIL_SECONDS
+        self._show_arena = self._sidecar is not None
+        self._show_rois = self._roi_set is not None
 
         self.setWindowTitle(
             f"pylace-inspect — {video.name}  ({len(self._trajectories)} tracks)",
@@ -105,6 +165,24 @@ class InspectorWindow(QtWidgets.QMainWindow):
             return load_background_png(max_path), load_background_png(min_path)
         except OSError:
             return None, None
+
+    def _load_sidecar(self) -> Sidecar | None:
+        path = default_sidecar_path(self._video)
+        if not path.exists():
+            return None
+        try:
+            return read_sidecar(path)
+        except (SidecarSchemaError, OSError, ValueError):
+            return None
+
+    def _load_roi_set(self) -> ROISet | None:
+        path = default_rois_path(self._video)
+        if not path.exists():
+            return None
+        try:
+            return read_rois(path).roi_set
+        except (ROISidecarSchemaError, OSError, ValueError):
+            return None
 
     # ── Layout ─────────────────────────────────────────────────────────
 
@@ -160,9 +238,10 @@ class InspectorWindow(QtWidgets.QMainWindow):
         row.addWidget(self._cb_bg, stretch=1)
         v.addLayout(row)
 
-        self._overview_label = QtWidgets.QLabel(wrap)
+        self._overview_label = _ClickableImageLabel(wrap)
         self._overview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._overview_label.setMinimumSize(320, 240)
+        self._overview_label.imageClicked.connect(self._on_overview_clicked)
         v.addWidget(self._overview_label, stretch=1)
         return wrap
 
@@ -177,6 +256,29 @@ class InspectorWindow(QtWidgets.QMainWindow):
         self._sb_trail.setValue(self._trail_seconds)
         self._sb_trail.valueChanged.connect(self._on_trail_changed)
         bar.addWidget(self._sb_trail)
+
+        bar.addSeparator()
+        self._cb_show_arena = QtWidgets.QCheckBox("Arena", bar)
+        self._cb_show_arena.setChecked(self._show_arena)
+        self._cb_show_arena.setEnabled(self._sidecar is not None)
+        if self._sidecar is None:
+            self._cb_show_arena.setToolTip(
+                "No arena sidecar found alongside this video.",
+            )
+        self._cb_show_arena.toggled.connect(self._on_arena_toggled)
+        bar.addWidget(self._cb_show_arena)
+
+        self._cb_show_rois = QtWidgets.QCheckBox("ROIs", bar)
+        self._cb_show_rois.setChecked(self._show_rois)
+        self._cb_show_rois.setEnabled(self._roi_set is not None)
+        if self._roi_set is None:
+            self._cb_show_rois.setToolTip(
+                "No ROI sidecar (.pylace_rois.json) found — pylace-detect "
+                "ran on the whole arena. If you expected an ROI, check "
+                "that the sidecar lives next to the video.",
+            )
+        self._cb_show_rois.toggled.connect(self._on_rois_toggled)
+        bar.addWidget(self._cb_show_rois)
 
         bar.addSeparator()
         prev_act = QtGui.QAction("◀ Frame", self)
@@ -210,6 +312,39 @@ class InspectorWindow(QtWidgets.QMainWindow):
         self._overview_cache = None
         self._refresh_overview()
 
+    def _on_arena_toggled(self, checked: bool) -> None:
+        self._show_arena = bool(checked)
+        self._overview_cache = None
+        self._refresh()
+
+    def _on_rois_toggled(self, checked: bool) -> None:
+        self._show_rois = bool(checked)
+        self._overview_cache = None
+        self._refresh()
+
+    def _on_overview_clicked(self, x: float, y: float) -> None:
+        """Find the nearest trajectory sample (across all tracks) and jump to it."""
+        best_frame: int | None = None
+        best_d2 = float("inf")
+        best_track: int | None = None
+        for traj in self._trajectories:
+            if traj.cx_px.size == 0:
+                continue
+            d2 = (traj.cx_px - x) ** 2 + (traj.cy_px - y) ** 2
+            i = int(np.argmin(d2))
+            if float(d2[i]) < best_d2:
+                best_d2 = float(d2[i])
+                best_frame = int(traj.frame_indices[i])
+                best_track = int(traj.track_id)
+        if best_frame is None:
+            return
+        self._nav.set_current_frame(best_frame)
+        self.statusBar().showMessage(
+            f"Jumped to frame {best_frame} on track {best_track} "
+            f"(Δ={best_d2 ** 0.5:.1f} px from click)",
+            4000,
+        )
+
     def _step_frame(self, delta: int) -> None:
         self._nav.step(delta)
 
@@ -221,6 +356,7 @@ class InspectorWindow(QtWidgets.QMainWindow):
 
     def _refresh_scrub(self) -> None:
         frame = self._read_frame_at(self._current_frame)
+        self._draw_geometry(frame)
         trail_frames = max(1, int(round(self._trail_seconds * self._fps)))
         for traj, colour in zip(self._trajectories, self._colours, strict=False):
             render_trail(
@@ -234,13 +370,24 @@ class InspectorWindow(QtWidgets.QMainWindow):
     def _refresh_overview(self) -> None:
         if self._overview_cache is None:
             cache = self._overview_bg.copy()
+            self._draw_geometry(cache)
             render_full_trajectories(cache, self._trajectories, self._colours)
             self._overview_cache = cache
         composite = self._overview_cache.copy()
         render_current_markers(
             composite, self._trajectories, self._colours, self._current_frame,
         )
+        self._overview_label.set_image_size(
+            composite.shape[1], composite.shape[0],
+        )
         self._set_pixmap(self._overview_label, composite)
+
+    def _draw_geometry(self, bgr: np.ndarray) -> None:
+        """Overlay arena boundary + ROI outlines if those sidecars were loaded."""
+        if self._show_arena and self._sidecar is not None:
+            render_arena_outline(bgr, self._sidecar.arena)
+        if self._show_rois and self._roi_set is not None:
+            render_roi_outlines(bgr, self._roi_set)
 
     def _refresh_overview_marker(self) -> None:
         # Trajectory polylines do not change with the frame; only the
