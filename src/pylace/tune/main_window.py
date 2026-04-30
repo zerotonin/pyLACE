@@ -78,7 +78,11 @@ class TuneWindow(QtWidgets.QMainWindow):
         self._show_contours = False
         self._show_ellipses = True
         self._show_centroids = True
+        self._show_numbers = True
         self._view_mode: str = "frame"  # "frame" | "detection_bg" | "trail_bg"
+
+        self._aggregate_cache_key: tuple | None = None
+        self._aggregate_cache: dict[str, list[float]] | None = None
 
         self.setWindowTitle(f"pylace-tune — {video.name}")
         self._build_ui()
@@ -451,9 +455,15 @@ class TuneWindow(QtWidgets.QMainWindow):
             dv, "Centroids", self._show_centroids,
             tip="Marks each detection's centroid with a coloured pixel.",
         )
+        self._cb_numbers = self._check(
+            dv, "Detection numbers", self._show_numbers,
+            tip="Labels each detection with its track ID (when tracking has "
+                "run) or its per-frame index. Numbers match the entries in "
+                "the Detection info panel below.",
+        )
         for cb in (
             self._cb_mask, self._cb_arena, self._cb_contours,
-            self._cb_ellipses, self._cb_centroids,
+            self._cb_ellipses, self._cb_centroids, self._cb_numbers,
         ):
             cb.toggled.connect(self._on_display_toggled)
         v.addWidget(disp_box)
@@ -461,15 +471,21 @@ class TuneWindow(QtWidgets.QMainWindow):
         return page
 
     def _build_stats_group(self, parent: QtWidgets.QWidget) -> QtWidgets.QGroupBox:
-        box = QtWidgets.QGroupBox("Stats", parent)
+        box = QtWidgets.QGroupBox("Detection info", parent)
         v = QtWidgets.QVBoxLayout(box)
-        self._lbl_frame = QtWidgets.QLabel("Frame: —", box)
-        self._lbl_this = QtWidgets.QLabel("This frame: — detections", box)
-        self._lbl_agg = QtWidgets.QLabel("Across sample: — / —", box)
-        self._lbl_shape = QtWidgets.QLabel("Shape: —", box)
-        for lbl in (self._lbl_frame, self._lbl_this, self._lbl_agg, self._lbl_shape):
-            lbl.setWordWrap(True)
-            v.addWidget(lbl)
+        self._lbl_info = QtWidgets.QLabel("—", box)
+        mono = QtGui.QFont("Monospace")
+        mono.setStyleHint(QtGui.QFont.StyleHint.TypeWriter)
+        mono.setPointSize(9)
+        self._lbl_info.setFont(mono)
+        self._lbl_info.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse,
+        )
+        self._lbl_info.setAlignment(
+            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft,
+        )
+        self._lbl_info.setMinimumHeight(180)
+        v.addWidget(self._lbl_info)
         return box
 
     # ── Widget builders ────────────────────────────────────────────────
@@ -582,6 +598,7 @@ class TuneWindow(QtWidgets.QMainWindow):
             background=self._params.background,
             tracking=self._params.tracking,
         )
+        self._invalidate_aggregate_cache()
         self._render_current()
 
     def _on_tracking_changed(self) -> None:
@@ -607,6 +624,7 @@ class TuneWindow(QtWidgets.QMainWindow):
         self._show_contours = self._cb_contours.isChecked()
         self._show_ellipses = self._cb_ellipses.isChecked()
         self._show_centroids = self._cb_centroids.isChecked()
+        self._show_numbers = self._cb_numbers.isChecked()
         self._render_current()
 
     def _on_view_mode_changed(self, _index: int) -> None:
@@ -792,6 +810,10 @@ class TuneWindow(QtWidgets.QMainWindow):
 
     # ── Compute / render ───────────────────────────────────────────────
 
+    def _invalidate_aggregate_cache(self) -> None:
+        self._aggregate_cache_key = None
+        self._aggregate_cache = None
+
     def _sample_frames(self) -> None:
         start_frame = int(round(self._preview_start_s * self._fps))
         end_frame = int(round(self._preview_end_s * self._fps))
@@ -801,6 +823,7 @@ class TuneWindow(QtWidgets.QMainWindow):
             self._video, n=self._preview_n,
             start_frame=start_frame, end_frame=end_frame,
         )
+        self._invalidate_aggregate_cache()
         self._current = 0
         self._frame_slider.blockSignals(True)
         self._frame_slider.setMaximum(max(0, len(self._frames) - 1))
@@ -828,6 +851,7 @@ class TuneWindow(QtWidgets.QMainWindow):
         self._background, self._trail = detection_and_trail(
             self._bg_max, self._bg_min, self._params.background.polarity,
         )
+        self._invalidate_aggregate_cache()
 
     def _render_current(self) -> None:
         if not self._frames or self._background is None:
@@ -854,6 +878,7 @@ class TuneWindow(QtWidgets.QMainWindow):
             show_contours=self._show_contours,
             show_ellipses=self._show_ellipses,
             show_centroids=self._show_centroids,
+            show_numbers=self._show_numbers,
         )
         self._set_pixmap(overlay)
         self._update_stats(detections)
@@ -884,17 +909,11 @@ class TuneWindow(QtWidgets.QMainWindow):
             return
         idx = self._frame_indices[self._current] if self._frame_indices else -1
         self._frame_index_label.setText(f"{self._current + 1} / {len(self._frames)}")
-        self._lbl_frame.setText(
-            f"Frame: {self._current + 1} / {len(self._frames)}  (source idx {idx})",
+        self._lbl_info.setText(
+            self._format_info_block(
+                detections, source_idx=idx, showing_label=showing_label,
+            )
         )
-        if showing_label is not None:
-            self._lbl_this.setText(f"Showing {showing_label}")
-        else:
-            self._lbl_this.setText(f"This frame: {len(detections)} detections")
-        counts = self._counts_across_sample()
-        if counts:
-            self._lbl_agg.setText(self._summarise_counts(counts))
-        self._lbl_shape.setText(self._summarise_shape(detections))
 
     def _render_static_image(self, gray: np.ndarray, *, label: str) -> None:
         overlay = render_overlay(
@@ -905,11 +924,26 @@ class TuneWindow(QtWidgets.QMainWindow):
         self._set_pixmap(overlay)
         self._update_stats(detections=[], showing_label=label)
 
-    def _counts_across_sample(self) -> list[int]:
-        if self._background is None:
-            return []
+    def _aggregate_across_sample(self) -> dict[str, list[float]] | None:
+        """Run detection on every sample frame; return per-detection feature lists."""
+        if self._background is None or not self._frames:
+            return None
         dp = self._params.detection
-        out: list[int] = []
+        key = (
+            id(self._frames), id(self._background),
+            dp.threshold, dp.min_area, dp.max_area, dp.morph_kernel,
+            dp.dilate_iters, dp.erode_iters,
+            dp.min_solidity, dp.max_axis_ratio,
+        )
+        if self._aggregate_cache_key == key and self._aggregate_cache is not None:
+            return self._aggregate_cache
+
+        counts: list[int] = []
+        areas: list[float] = []
+        majors: list[float] = []
+        minors: list[float] = []
+        sols: list[float] = []
+        ratios: list[float] = []
         for frame in self._frames:
             dets, _ = detect_blobs_with_mask(
                 frame, self._background, self._mask,
@@ -919,32 +953,91 @@ class TuneWindow(QtWidgets.QMainWindow):
                 min_solidity=dp.min_solidity, max_axis_ratio=dp.max_axis_ratio,
                 keep_contour=False,
             )
-            out.append(len(dets))
+            counts.append(len(dets))
+            for d in dets:
+                areas.append(d.area_px)
+                majors.append(d.major_axis_px)
+                minors.append(d.minor_axis_px)
+                sols.append(d.solidity)
+                if d.minor_axis_px > 0:
+                    ratios.append(d.major_axis_px / d.minor_axis_px)
+        out = {
+            "counts": counts, "areas": areas, "majors": majors,
+            "minors": minors, "sols": sols, "ratios": ratios,
+        }
+        self._aggregate_cache_key = key
+        self._aggregate_cache = out
         return out
 
-    def _summarise_shape(self, detections: list[Detection]) -> str:
-        if not detections:
-            return "Shape: no detections this frame"
-        sols = [d.solidity for d in detections]
-        ratios = [
-            d.major_axis_px / d.minor_axis_px
-            for d in detections if d.minor_axis_px > 0
-        ]
-        sol_med = statistics.median(sols)
-        sol_min = min(sols)
-        ratio_med = statistics.median(ratios) if ratios else 0.0
-        ratio_max = max(ratios) if ratios else 0.0
-        return (
-            f"Shape: solidity median {sol_med:.2f} (min {sol_min:.2f}), "
-            f"axis-ratio median {ratio_med:.1f} (max {ratio_max:.1f})"
+    def _format_info_block(
+        self,
+        detections: list[Detection],
+        *,
+        source_idx: int,
+        showing_label: str | None,
+    ) -> str:
+        lines: list[str] = []
+        lines.append(
+            f"Frame {self._current + 1} / {len(self._frames)}  "
+            f"(source idx {source_idx})",
         )
+        if showing_label is not None:
+            lines.append(f"Showing: {showing_label}")
+            return "\n".join(lines)
 
-    def _summarise_counts(self, counts: list[int]) -> str:
+        lines.append(f"This frame: {len(detections)} detections")
+        if detections:
+            row = "  {:>3}  {:>6}  {:>6}  {:>6}  {:>5}  {:>5}"
+            lines.append(row.format("idx", "area", "major", "minor", "solid", "ratio"))
+            for i, d in enumerate(detections):
+                label = d.track_id if d.track_id >= 0 else i
+                ratio = (
+                    d.major_axis_px / d.minor_axis_px
+                    if d.minor_axis_px > 0 else 0.0
+                )
+                lines.append(row.format(
+                    str(label),
+                    f"{d.area_px:.0f}",
+                    f"{d.major_axis_px:.1f}",
+                    f"{d.minor_axis_px:.1f}",
+                    f"{d.solidity:.2f}",
+                    f"{ratio:.1f}",
+                ))
+
+        agg = self._aggregate_across_sample()
+        if agg and agg["counts"]:
+            lines.append("")
+            lines.append(
+                f"Across sample (n={len(agg['counts'])} frames, "
+                f"{len(agg['areas'])} detections):",
+            )
+            lines.append(self._fmt_count(agg["counts"]))
+            if agg["areas"]:
+                lines.append(self._fmt_mean("area  ", agg["areas"], unit="px²"))
+                lines.append(self._fmt_mean("major ", agg["majors"], unit="px"))
+                lines.append(self._fmt_mean("minor ", agg["minors"], unit="px"))
+                lines.append(self._fmt_mean("solid ", agg["sols"], unit=""))
+            if agg["ratios"]:
+                lines.append(self._fmt_mean("ratio ", agg["ratios"], unit=""))
+        return "\n".join(lines)
+
+    def _fmt_count(self, counts: list[int]) -> str:
         mean = statistics.fmean(counts)
         sd = statistics.pstdev(counts) if len(counts) > 1 else 0.0
         return (
-            f"Across sample (n={len(counts)}): "
-            f"{mean:.1f} ± {sd:.1f}  ({min(counts)} – {max(counts)})"
+            f"  count  {mean:6.1f} ± {sd:5.1f}   "
+            f"({min(counts)} – {max(counts)})"
+        )
+
+    def _fmt_mean(self, label: str, xs: list[float], *, unit: str) -> str:
+        if not xs:
+            return f"  {label}     —"
+        mean = statistics.fmean(xs)
+        sd = statistics.pstdev(xs) if len(xs) > 1 else 0.0
+        u = f" {unit}" if unit else ""
+        return (
+            f"  {label} {mean:6.1f} ± {sd:5.1f}{u}   "
+            f"({min(xs):.1f} – {max(xs):.1f})"
         )
 
     def resizeEvent(self, event: QtGui.QResizeEvent) -> None:  # noqa: N802

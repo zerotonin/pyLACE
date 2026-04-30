@@ -12,6 +12,7 @@ ARENA_COLOR = (0, 220, 220)        # cyan
 CONTOUR_COLOR = (0, 255, 0)        # green
 ELLIPSE_COLOR = (0, 165, 255)      # orange
 CENTROID_COLOR = (0, 0, 255)       # red
+NUMBER_COLOR = (255, 255, 255)     # white (with black outline for legibility)
 MASK_TINT = (60, 0, 0)             # subtle blue tint on foreground pixels
 
 
@@ -25,6 +26,7 @@ def render_overlay(
     show_contours: bool = True,
     show_ellipses: bool = True,
     show_centroids: bool = True,
+    show_numbers: bool = False,
 ) -> np.ndarray:
     """Return a BGR image with overlays drawn for display.
 
@@ -36,7 +38,9 @@ def render_overlay(
             frame; if provided, foreground pixels get a subtle tint to
             reveal which pixels survived threshold + morphology before
             contour fitting.
-        show_arena, show_contours, show_ellipses, show_centroids: Toggles.
+        show_arena, show_contours, show_ellipses, show_centroids,
+        show_numbers: Toggles. ``show_numbers`` labels each detection
+            with its track_id (if assigned) or per-frame index.
 
     Returns:
         ``(H, W, 3)`` BGR ``uint8`` image.
@@ -46,7 +50,7 @@ def render_overlay(
         _tint_mask(bgr, foreground_mask, MASK_TINT)
     if show_arena:
         _draw_arena(bgr, arena)
-    for d in detections:
+    for idx, d in enumerate(detections):
         if show_contours and d.contour is not None:
             cv2.drawContours(bgr, [d.contour], -1, CONTOUR_COLOR, 1)
         if show_ellipses:
@@ -56,6 +60,8 @@ def render_overlay(
                 bgr, (int(round(d.cx)), int(round(d.cy))),
                 CENTROID_COLOR, cv2.MARKER_CROSS, 8, 1,
             )
+        if show_numbers:
+            _draw_detection_number(bgr, d, idx)
     return bgr
 
 
@@ -91,3 +97,13 @@ def _draw_detection_ellipse(bgr: np.ndarray, d: Detection) -> None:
         ELLIPSE_COLOR,
         1,
     )
+
+
+def _draw_detection_number(bgr: np.ndarray, d: Detection, idx: int) -> None:
+    """Label a detection with its track_id (if assigned) or per-frame index."""
+    label = f"#{d.track_id}" if d.track_id >= 0 else f"#{idx}"
+    pos = (int(round(d.cx)) + 6, int(round(d.cy)) - 6)
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    scale = 0.45
+    cv2.putText(bgr, label, pos, font, scale, (0, 0, 0), 3, cv2.LINE_AA)
+    cv2.putText(bgr, label, pos, font, scale, NUMBER_COLOR, 1, cv2.LINE_AA)
