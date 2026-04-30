@@ -39,7 +39,8 @@ from pylace.roi.constants import (
 from pylace.roi.geometry import ROI, ROISet
 from pylace.roi.mask import build_combined_mask
 
-ToolName = Literal["circle", "rectangle", "polygon"]
+ToolName = Literal["circle", "rectangle", "polygon", "brush", "eraser"]
+DEFAULT_BRUSH_RADIUS_PX = 12
 
 
 class RoiCanvas(QtWidgets.QLabel):
@@ -64,6 +65,7 @@ class RoiCanvas(QtWidgets.QLabel):
         # rectangle relative to the click, not relative to the previous
         # cursor position.
         self._rect_anchor: Vertex | None = None
+        self._brush_radius: int = DEFAULT_BRUSH_RADIUS_PX
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
@@ -92,6 +94,10 @@ class RoiCanvas(QtWidgets.QLabel):
         self._polygon_in_progress.clear()
         self._refresh()
 
+    def set_brush_radius(self, radius: int) -> None:
+        self._brush_radius = max(1, int(radius))
+        self._refresh()
+
     def set_selected(self, index: int) -> None:
         if -1 <= index < len(self._roi_set.rois):
             self._selected_index = index
@@ -113,6 +119,10 @@ class RoiCanvas(QtWidgets.QLabel):
             self._update_draft_circle()
         elif self._draft_mode == "drag_rectangle":
             self._update_draft_rectangle()
+        elif self._draft_mode == "paint":
+            self._stamp_freehand(self._cursor_pos, value=255)
+        elif self._draft_mode == "erase":
+            self._stamp_freehand(self._cursor_pos, value=0)
         self._refresh()
 
     def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:  # noqa: N802
@@ -120,6 +130,8 @@ class RoiCanvas(QtWidgets.QLabel):
             return
         if self._draft_mode in ("drag_circle", "drag_rectangle"):
             self._finalise_draft()
+        elif self._draft_mode in ("paint", "erase"):
+            self._draft_mode = "idle"
 
     def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:  # noqa: N802
         if (
@@ -141,6 +153,12 @@ class RoiCanvas(QtWidgets.QLabel):
             self._start_rectangle_draft(pos)
         elif self._tool == "polygon":
             self._extend_polygon_draft(pos)
+        elif self._tool == "brush":
+            self._draft_mode = "paint"
+            self._stamp_freehand(pos, value=255)
+        elif self._tool == "eraser":
+            self._draft_mode = "erase"
+            self._stamp_freehand(pos, value=0)
 
     def _on_right_press(self, pos: Vertex) -> None:
         if (
@@ -217,6 +235,19 @@ class RoiCanvas(QtWidgets.QLabel):
         self._polygon_in_progress.clear()
         self._refresh()
 
+    def _stamp_freehand(self, pos: Vertex, *, value: int) -> None:
+        """Paint or erase a circular stamp into the freehand mask in place."""
+        h, w = self._frame_rgb.shape[:2] if self._frame_rgb is not None else (0, 0)
+        if self._roi_set.freehand_mask is None and h and w:
+            self._roi_set.freehand_mask = np.zeros((h, w), dtype=np.uint8)
+        if self._roi_set.freehand_mask is None:
+            return
+        cv2.circle(
+            self._roi_set.freehand_mask,
+            (int(pos[0]), int(pos[1])), self._brush_radius,
+            value, thickness=-1,
+        )
+
     # ── Rendering ──────────────────────────────────────────────────────
 
     @staticmethod
@@ -273,6 +304,14 @@ class RoiCanvas(QtWidgets.QLabel):
             )
         if self._draft_mode == "draw_polygon" and self._polygon_in_progress:
             self._draw_polygon_in_progress(bgr)
+        if self._tool in ("brush", "eraser") and self._cursor_pos is not None:
+            colour = (
+                ROI_ADD_COLOR_BGR if self._tool == "brush"
+                else ROI_SUBTRACT_COLOR_BGR
+            )
+            cv2.circle(
+                bgr, self._cursor_pos, self._brush_radius, colour, 1,
+            )
 
     def _draw_polygon_in_progress(self, bgr: np.ndarray) -> None:
         verts = self._polygon_in_progress

@@ -124,6 +124,51 @@ def test_split_mode_helper_rejects_merge_mode():
         build_split_masks(rs, frame_size=(40, 30))
 
 
+def test_freehand_only_combines_into_merge_mask():
+    fh = np.zeros((30, 40), dtype=np.uint8)
+    fh[10:20, 10:20] = 255
+    rs = ROISet(freehand_mask=fh)
+    mask = build_combined_mask(rs, frame_size=(40, 30))
+    assert mask[15, 15]
+    assert not mask[5, 5]
+
+
+def test_freehand_unions_with_shape_rois_in_merge():
+    fh = np.zeros((30, 40), dtype=np.uint8)
+    fh[0:5, 0:5] = 255
+    rs = ROISet(
+        rois=[ROI(shape=Circle(20.0, 15.0, 5.0))],
+        freehand_mask=fh,
+    )
+    mask = build_combined_mask(rs, frame_size=(40, 30))
+    assert mask[15, 20]    # circle covered
+    assert mask[2, 2]      # freehand covered
+    assert not mask[28, 38]
+
+
+def test_split_mode_includes_freehand_entry():
+    from pylace.roi.mask import build_split_masks
+
+    fh = np.zeros((30, 40), dtype=np.uint8)
+    fh[5:8, 5:8] = 255
+    rs = ROISet(
+        rois=[ROI(shape=Circle(20.0, 15.0, 5.0), label="left")],
+        mode="split",
+        freehand_mask=fh,
+    )
+    pairs = build_split_masks(rs, frame_size=(40, 30))
+    labels = [label for label, _ in pairs]
+    assert "freehand" in labels
+
+
+def test_freehand_shape_mismatch_raises():
+    fh = np.zeros((10, 10), dtype=np.uint8)
+    fh[5, 5] = 255
+    rs = ROISet(freehand_mask=fh)
+    with pytest.raises(ValueError):
+        build_combined_mask(rs, frame_size=(40, 30))
+
+
 def test_mask_shape_matches_frame_size():
     rs = ROISet(rois=[ROI(shape=Circle(50.0, 50.0, 10.0))])
     mask = build_combined_mask(rs, frame_size=(640, 480))

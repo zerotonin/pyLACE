@@ -47,6 +47,9 @@ def build_combined_mask(
             mask |= roi_pixels
         else:
             mask &= ~roi_pixels
+    fh = _freehand_bool(roi_set, (width, height))
+    if fh is not None:
+        mask |= fh
     return mask
 
 
@@ -72,4 +75,23 @@ def build_split_masks(
             continue
         label = roi.label.strip() or f"roi_{index}"
         out.append((label, arena_mask(roi.shape, frame_size)))
+    fh = _freehand_bool(roi_set, frame_size)
+    if fh is not None:
+        out.append(("freehand", fh))
     return out
+
+
+def _freehand_bool(
+    roi_set: ROISet, frame_size: tuple[int, int],
+) -> np.ndarray | None:
+    """Validate and return ``ROISet.freehand_mask`` as a bool, or None."""
+    if not roi_set.has_freehand_mask():
+        return None
+    fh = roi_set.freehand_mask
+    width, height = frame_size
+    if fh.shape != (height, width):
+        raise ValueError(
+            f"freehand_mask shape {fh.shape} does not match frame "
+            f"{(height, width)}.",
+        )
+    return fh.astype(bool)

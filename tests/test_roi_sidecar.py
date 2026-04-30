@@ -106,3 +106,42 @@ def test_default_rois_path_appends_suffix():
     assert default_rois_path(video).name == (
         "recording_arena_03.mp4.pylace_rois.json"
     )
+
+
+def test_freehand_mask_round_trips_via_sibling_png(tmp_path: Path):
+    import numpy as np
+
+    fh = np.zeros((20, 30), dtype=np.uint8)
+    fh[5:10, 5:10] = 255
+    sc = ROISidecar(
+        video_path="/tmp/x.mp4", video_sha256="0" * 64,
+        roi_set=ROISet(
+            rois=[ROI(shape=Circle(10.0, 10.0, 4.0))],
+            freehand_mask=fh,
+        ),
+    )
+    out = tmp_path / "rois.json"
+    write_rois(sc, out)
+
+    fh_path = out.with_suffix(".freehand.png")
+    assert fh_path.exists()
+
+    loaded = read_rois(out)
+    assert loaded.roi_set.freehand_mask is not None
+    assert loaded.roi_set.freehand_mask.shape == fh.shape
+    assert (loaded.roi_set.freehand_mask > 0).sum() == (fh > 0).sum()
+
+
+def test_save_without_freehand_clears_stale_sibling_png(tmp_path: Path):
+    import numpy as np
+
+    out = tmp_path / "rois.json"
+    fh_path = out.with_suffix(".freehand.png")
+    fh_path.write_bytes(b"\x89PNG stale stub")  # leave a stale file behind
+
+    sc = ROISidecar(
+        video_path="/tmp/x.mp4", video_sha256="0" * 64,
+        roi_set=ROISet(rois=[ROI(shape=Circle(0, 0, 1))]),
+    )
+    write_rois(sc, out)
+    assert not fh_path.exists()

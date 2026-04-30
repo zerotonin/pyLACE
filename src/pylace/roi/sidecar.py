@@ -15,6 +15,9 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+import cv2
+import numpy as np
+
 from pylace.annotator.geometry import Arena
 from pylace.annotator.sidecar import _arena_from_dict, _arena_to_dict
 from pylace.roi.constants import SCHEMA_VERSION, SIDECAR_SUFFIX
@@ -35,12 +38,25 @@ class ROISidecar:
 
 
 def write_rois(sidecar: ROISidecar, out_path: Path) -> None:
-    """Write an ROI sidecar to JSON, overwriting any existing file."""
+    """Write an ROI sidecar to JSON; freehand mask goes to a sibling PNG.
+
+    The PNG path is derived from the JSON path by replacing the final
+    ``.json`` with ``.freehand.png``. If the ROI set has no freehand
+    mask, any stale sibling PNG is removed.
+    """
     out_path.write_text(json.dumps(_to_payload(sidecar), indent=2))
+    fh_path = freehand_path_for_json(out_path)
+    if sidecar.roi_set.has_freehand_mask():
+        cv2.imwrite(str(fh_path), sidecar.roi_set.freehand_mask)
+    elif fh_path.exists():
+        fh_path.unlink()
 
 
 def read_rois(in_path: Path) -> ROISidecar:
-    """Load an ROI sidecar; raise if the schema version is unsupported."""
+    """Load an ROI sidecar; raise if the schema version is unsupported.
+
+    The sibling freehand PNG is loaded automatically when present.
+    """
     payload = json.loads(in_path.read_text())
     version = payload.get("schema_version")
     if version != SCHEMA_VERSION:
@@ -48,12 +64,23 @@ def read_rois(in_path: Path) -> ROISidecar:
             f"Unsupported ROI schema_version: {version!r} "
             f"(this build expects {SCHEMA_VERSION}).",
         )
-    return _from_payload(payload)
+    sidecar = _from_payload(payload)
+    fh_path = freehand_path_for_json(in_path)
+    if fh_path.exists():
+        loaded = cv2.imread(str(fh_path), cv2.IMREAD_GRAYSCALE)
+        if loaded is not None:
+            sidecar.roi_set.freehand_mask = loaded
+    return sidecar
 
 
 def default_rois_path(video: Path) -> Path:
     """Conventional sidecar path next to the video."""
     return video.with_name(video.name + SIDECAR_SUFFIX)
+
+
+def freehand_path_for_json(json_path: Path) -> Path:
+    """Sibling path of the freehand PNG given the ROI JSON path."""
+    return json_path.with_suffix(".freehand.png")
 
 
 # ─────────────────────────────────────────────────────────────────

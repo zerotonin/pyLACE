@@ -16,6 +16,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
+import numpy as np
+
 from pylace.annotator.geometry import Arena
 
 ROIOperation = Literal["add", "subtract"]
@@ -39,10 +41,20 @@ class ROI:
 
 @dataclass
 class ROISet:
-    """Ordered collection of ROIs with a top-level merge/split mode."""
+    """Ordered collection of ROIs with a top-level merge/split mode.
+
+    ``freehand_mask`` is an optional ``uint8`` raster (0 / 255) the
+    same shape as the video frame. It is painted by the brush / eraser
+    tools and unions into the combined mask in merge mode. It is also
+    surfaced as a single extra ``("freehand", mask)`` pair in
+    :func:`pylace.roi.mask.build_split_masks` so split-mode runs can
+    pick it up too. Persisted as a sibling PNG sidecar — see
+    :mod:`pylace.roi.sidecar`.
+    """
 
     rois: list[ROI] = field(default_factory=list)
     mode: ROIMode = "merge"
+    freehand_mask: np.ndarray | None = None
 
     def __post_init__(self) -> None:
         if self.mode not in ("merge", "split"):
@@ -51,7 +63,10 @@ class ROISet:
             )
 
     def is_empty(self) -> bool:
-        return len(self.rois) == 0
+        return len(self.rois) == 0 and not self.has_freehand_mask()
+
+    def has_freehand_mask(self) -> bool:
+        return self.freehand_mask is not None and bool(self.freehand_mask.any())
 
     def add(self, roi: ROI) -> None:
         self.rois.append(roi)

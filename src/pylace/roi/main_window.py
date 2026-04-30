@@ -246,6 +246,27 @@ class RoiBuilderWindow(QtWidgets.QMainWindow):
 
         bar.addSeparator()
 
+        brush = QtGui.QAction("Brush", self)
+        brush.setShortcut(QtGui.QKeySequence("B"))
+        brush.setToolTip("Paint freehand pixels into the ROI mask (B).")
+        brush.triggered.connect(lambda: self._canvas.set_tool("brush"))
+        bar.addAction(brush)
+
+        eraser = QtGui.QAction("Eraser", self)
+        eraser.setShortcut(QtGui.QKeySequence("E"))
+        eraser.setToolTip("Erase freehand pixels from the ROI mask (E).")
+        eraser.triggered.connect(lambda: self._canvas.set_tool("eraser"))
+        bar.addAction(eraser)
+
+        bar.addWidget(QtWidgets.QLabel(" Brush size:"))
+        self._sb_brush = QtWidgets.QSpinBox()
+        self._sb_brush.setRange(1, 200)
+        self._sb_brush.setValue(12)
+        self._sb_brush.valueChanged.connect(self._canvas.set_brush_radius)
+        bar.addWidget(self._sb_brush)
+
+        bar.addSeparator()
+
         clear_tool = QtGui.QAction("No tool", self)
         clear_tool.setShortcut(QtGui.QKeySequence("Esc"))
         clear_tool.triggered.connect(lambda: self._canvas.set_tool(None))

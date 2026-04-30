@@ -46,3 +46,21 @@ def test_roi_set_add_and_remove_at():
 
     rs.remove_at(99)  # out-of-range is a no-op
     assert len(rs.rois) == 2
+
+
+def test_roi_set_with_only_freehand_is_not_empty():
+    import numpy as np
+
+    mask = np.zeros((20, 20), dtype=np.uint8)
+    mask[5:10, 5:10] = 255
+    rs = ROISet(freehand_mask=mask)
+    assert not rs.is_empty()
+    assert rs.has_freehand_mask()
+
+
+def test_roi_set_with_blank_freehand_mask_is_empty():
+    import numpy as np
+
+    rs = ROISet(freehand_mask=np.zeros((20, 20), dtype=np.uint8))
+    assert rs.is_empty()
+    assert not rs.has_freehand_mask()
