@@ -6,6 +6,8 @@ import argparse
 import sys
 from pathlib import Path
 
+from tqdm import tqdm
+
 from pylace.annotator.sidecar import default_sidecar_path, read_sidecar
 from pylace.detect.frame import (
     DEFAULT_DILATE_ITERS,
@@ -169,6 +171,11 @@ def _run_plan(
     start_frame, end_frame, every, max_frames,
 ) -> int:
     """Run detection for each (label, mask) entry in the ROI plan, into one CSV."""
+    total = _estimate_total_frames(
+        video=video, start_frame=start_frame, end_frame=end_frame,
+        every=every, max_frames=max_frames, n_rois=len(plan),
+    )
+
     def gen():
         for label, mask in plan:
             tracker = (
@@ -220,7 +227,45 @@ def _run_plan(
                     f"{chain_splitter.expected_animal_area_px:.0f} px²",
                 )
 
-    return write_detections_csv(gen(), sidecar, out_path)
+    progress = tqdm(
+        gen(),
+        total=total,
+        desc="Detecting",
+        unit="frame",
+        smoothing=0.05,
+        dynamic_ncols=True,
+    )
+    return write_detections_csv(progress, sidecar, out_path)
+
+
+def _estimate_total_frames(
+    *,
+    video: Path,
+    start_frame: int,
+    end_frame: int | None,
+    every: int,
+    max_frames: int | None,
+    n_rois: int,
+) -> int | None:
+    """Estimate processed-frame count for tqdm; ``None`` if the video can't be probed."""
+    import cv2
+
+    cap = cv2.VideoCapture(str(video))
+    if not cap.isOpened():
+        return None
+    try:
+        n_total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    finally:
+        cap.release()
+    if n_total <= 0:
+        return None
+    real_end = end_frame if end_frame is not None else n_total
+    if real_end <= start_frame:
+        return None
+    per_roi = (real_end - start_frame + every - 1) // every
+    if max_frames is not None:
+        per_roi = min(per_roi, max_frames)
+    return per_roi * max(1, n_rois)
 
 
 def _resolve_tuning_params(args: argparse.Namespace) -> tuple[dict, dict]:
