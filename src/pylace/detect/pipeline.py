@@ -152,7 +152,7 @@ def _iter_frames(
                 keep_contour=False,
             )
             if tracker is not None:
-                tracker.step(idx, detections)
+                detections = tracker.step(idx, detections)
             yield FrameResult(frame_idx=idx, detections=detections)
             kept += 1
             if max_frames is not None and kept >= max_frames:

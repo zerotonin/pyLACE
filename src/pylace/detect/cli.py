@@ -80,10 +80,17 @@ def main(argv: list[str] | None = None) -> int:
         f"polarity={background['polarity']}"
     )
     if tracking["enabled"]:
-        print(
-            f"  tracking: max_distance={tracking['max_distance_px']:.1f} px "
-            f"max_missed={tracking['max_missed_frames']}"
-        )
+        if tracking["n_animals"] is not None:
+            print(
+                f"  tracking: fixed-N mode, N={tracking['n_animals']} "
+                "(max_distance ignored, max_missed ignored)",
+            )
+        else:
+            print(
+                f"  tracking: dynamic-N "
+                f"max_distance={tracking['max_distance_px']:.1f} px "
+                f"max_missed={tracking['max_missed_frames']}",
+            )
     else:
         print("  tracking: disabled (track_id falls back to per-frame index)")
     from pylace.detect.background import load_or_build_background_pair
@@ -136,6 +143,7 @@ def _run_plan(
                 Tracker(
                     max_distance_px=tracking["max_distance_px"],
                     max_missed_frames=tracking["max_missed_frames"],
+                    n_animals=tracking["n_animals"],
                 )
                 if tracking["enabled"]
                 else None
@@ -190,6 +198,7 @@ def _resolve_tuning_params(args: argparse.Namespace) -> tuple[dict, dict]:
         "enabled": True,
         "max_distance_px": DEFAULT_MAX_DISTANCE_PX,
         "max_missed_frames": DEFAULT_MAX_MISSED_FRAMES,
+        "n_animals": None,
     }
 
     candidate = args.params if args.params else default_params_path(args.video)
@@ -213,6 +222,7 @@ def _resolve_tuning_params(args: argparse.Namespace) -> tuple[dict, dict]:
             "enabled": tp.tracking.enabled,
             "max_distance_px": tp.tracking.max_distance_px,
             "max_missed_frames": tp.tracking.max_missed_frames,
+            "n_animals": tp.tracking.n_animals,
         }
         print(f"Loaded tuned params from {candidate.name}.")
 
@@ -234,6 +244,8 @@ def _resolve_tuning_params(args: argparse.Namespace) -> tuple[dict, dict]:
         tracking["max_missed_frames"] = args.max_missed_frames
     if args.no_track:
         tracking["enabled"] = False
+    if args.n_animals is not None:
+        tracking["n_animals"] = args.n_animals
     return detection, background, tracking
 
 
@@ -380,6 +392,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             "Disable identity tracking; the track_id column falls back to "
             "the per-frame detection index."
+        ),
+    )
+    p.add_argument(
+        "--n-animals", type=int, default=None, dest="n_animals",
+        help=(
+            "Number of animals known to be present; switches the tracker "
+            "to fixed-N mode. Tracks are born up to N then never retired "
+            "or replaced; max-track-distance is ignored. Recommended for "
+            "the LACE-paper workflow."
         ),
     )
     return p

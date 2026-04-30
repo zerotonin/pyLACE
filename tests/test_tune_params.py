@@ -98,6 +98,7 @@ def test_tracking_params_round_trip(tmp_path: Path):
         background=BackgroundParams(),
         tracking=TrackingParams(
             enabled=False, max_distance_px=80.0, max_missed_frames=10,
+            n_animals=3,
         ),
     )
     write_params(params, video_path=Path("/tmp/x.mp4"), video_sha256_hex="0" * 64,
@@ -106,6 +107,12 @@ def test_tracking_params_round_trip(tmp_path: Path):
     assert loaded.tracking.enabled is False
     assert loaded.tracking.max_distance_px == 80.0
     assert loaded.tracking.max_missed_frames == 10
+    assert loaded.tracking.n_animals == 3
+
+
+def test_tracking_params_n_animals_default_is_none():
+    p = TuningParams.defaults()
+    assert p.tracking.n_animals is None
 
 
 def test_old_sidecar_without_tracking_block_loads_with_defaults(tmp_path: Path):

@@ -63,11 +63,18 @@ class BackgroundParams:
 
 @dataclass
 class TrackingParams:
-    """Hungarian-tracker parameters tunable in the GUI / sidecar."""
+    """Hungarian-tracker parameters tunable in the GUI / sidecar.
+
+    ``n_animals`` selects fixed-N mode (the LACE-paper assumption that
+    the animal count is known a priori) when set to a positive int.
+    None means dynamic-N — tracks are born / retired automatically and
+    ``max_distance_px`` / ``max_missed_frames`` apply.
+    """
 
     enabled: bool = True
     max_distance_px: float = DEFAULT_MAX_DISTANCE_PX
     max_missed_frames: int = DEFAULT_MAX_MISSED_FRAMES
+    n_animals: int | None = None
 
 
 @dataclass

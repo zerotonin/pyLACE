@@ -403,6 +403,19 @@ def test_pylace_detect_no_track_falls_back_to_per_frame_index(
     assert {int(r["track_id"]) for r in rows} == {0}
 
 
+def test_pylace_detect_n_animals_caps_unique_track_ids(
+    video_and_sidecar: tuple[Path, Path], tmp_path: Path,
+) -> None:
+    """``--n-animals`` clamps the number of distinct track_ids in the CSV."""
+    video, _ = video_and_sidecar
+    out = tmp_path / "fixed_n.csv"
+    rc = cli.main([str(video), "--out", str(out), "--n-animals", "1"])
+    assert rc == 0
+    rows = list(csv.DictReader(out.read_text().splitlines()))
+    track_ids = {int(r["track_id"]) for r in rows}
+    assert track_ids == {0}
+
+
 def test_pylace_detect_max_track_distance_zero_births_id_per_frame(
     video_and_sidecar: tuple[Path, Path], tmp_path: Path,
 ) -> None:
