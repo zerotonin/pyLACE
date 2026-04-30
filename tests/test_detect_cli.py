@@ -75,8 +75,8 @@ def test_pylace_detect_writes_one_detection_per_frame(
     assert rc == 0
 
     rows = list(csv.DictReader(out.read_text().splitlines()))
-    # All rows are detection_idx == 0 (one blob per frame).
-    assert {int(r["detection_idx"]) for r in rows} == {0}
+    # One blob per frame and tracking on by default → all rows share track_id.
+    assert len({int(r["track_id"]) for r in rows}) == 1
     # First row's centroid is near (20, 40); last row's is near (53, 40).
     first = rows[0]
     last = rows[-1]
@@ -373,6 +373,51 @@ def test_pylace_detect_no_rois_flag_bypasses_sidecar(
     assert rc == 0
     rows = list(csv.DictReader(out.read_text().splitlines()))
     assert rows  # detections happen because ROI was bypassed
+
+
+def test_pylace_detect_tracking_assigns_stable_track_id_across_frames(
+    video_and_sidecar: tuple[Path, Path], tmp_path: Path,
+) -> None:
+    """The walking blob keeps the same track_id across every frame."""
+    video, _ = video_and_sidecar
+    out = tmp_path / "tracked.csv"
+    rc = cli.main([str(video), "--out", str(out)])
+    assert rc == 0
+    rows = list(csv.DictReader(out.read_text().splitlines()))
+    assert len({int(r["track_id"]) for r in rows}) == 1
+    # And the centroid actually walked: cx_px monotonically increases.
+    cx_values = [float(r["cx_px"]) for r in rows]
+    assert cx_values[-1] > cx_values[0]
+
+
+def test_pylace_detect_no_track_falls_back_to_per_frame_index(
+    video_and_sidecar: tuple[Path, Path], tmp_path: Path,
+) -> None:
+    """``--no-track`` produces track_id == per-frame detection index."""
+    video, _ = video_and_sidecar
+    out = tmp_path / "untracked.csv"
+    rc = cli.main([str(video), "--out", str(out), "--no-track"])
+    assert rc == 0
+    rows = list(csv.DictReader(out.read_text().splitlines()))
+    # One blob per frame; per-frame index is 0 each time.
+    assert {int(r["track_id"]) for r in rows} == {0}
+
+
+def test_pylace_detect_max_track_distance_zero_births_id_per_frame(
+    video_and_sidecar: tuple[Path, Path], tmp_path: Path,
+) -> None:
+    """An aggressive max_track_distance prevents any cross-frame matches."""
+    video, _ = video_and_sidecar
+    out = tmp_path / "no_match.csv"
+    rc = cli.main([
+        str(video), "--out", str(out),
+        "--max-track-distance", "0",
+        "--max-missed-frames", "0",
+    ])
+    assert rc == 0
+    rows = list(csv.DictReader(out.read_text().splitlines()))
+    track_ids = [int(r["track_id"]) for r in rows]
+    assert len(set(track_ids)) == len(rows)
 
 
 def test_pylace_detect_dilate_and_erode_flags_propagate(

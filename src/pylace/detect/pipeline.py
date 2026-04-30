@@ -24,9 +24,10 @@ from pylace.detect.frame import (
     Detection,
     detect_blobs,
 )
+from pylace.tracking.tracks import Tracker
 
 CSV_COLUMNS = (
-    "frame_idx", "roi_label", "detection_idx",
+    "frame_idx", "roi_label", "track_id",
     "cx_px", "cy_px", "x_mm", "y_mm",
     "area_px", "major_axis_px", "minor_axis_px", "orientation_deg",
 )
@@ -59,6 +60,7 @@ def run_detection(
     end_frame: int | None = None,
     background: np.ndarray | None = None,
     extra_mask: np.ndarray | None = None,
+    tracker: Tracker | None = None,
 ) -> Iterator[FrameResult]:
     """Stream per-frame detections for a video against a sidecar.
 
@@ -116,6 +118,7 @@ def run_detection(
             dilate_iters=dilate_iters, erode_iters=erode_iters,
             every=every, max_frames=max_frames,
             start_frame=start_frame, end_frame=end_frame,
+            tracker=tracker,
         )
     finally:
         cap.release()
@@ -127,6 +130,7 @@ def _iter_frames(
     dilate_iters: int, erode_iters: int,
     every: int, max_frames: int | None,
     start_frame: int, end_frame: int | None,
+    tracker: Tracker | None,
 ) -> Iterator[FrameResult]:
     if start_frame > 0:
         cap.set(cv2.CAP_PROP_POS_FRAMES, float(start_frame))
@@ -147,6 +151,8 @@ def _iter_frames(
                 dilate_iters=dilate_iters, erode_iters=erode_iters,
                 keep_contour=False,
             )
+            if tracker is not None:
+                tracker.step(idx, detections)
             yield FrameResult(frame_idx=idx, detections=detections)
             kept += 1
             if max_frames is not None and kept >= max_frames:
@@ -169,8 +175,9 @@ def write_detections_csv(
                 x_mm, y_mm = pixel_to_world(
                     (d.cx, d.cy), sidecar.world_frame, sidecar.calibration,
                 )
+                track_id = d.track_id if d.track_id >= 0 else det_idx
                 writer.writerow([
-                    fr.frame_idx, fr.roi_label, det_idx,
+                    fr.frame_idx, fr.roi_label, track_id,
                     f"{d.cx:.3f}", f"{d.cy:.3f}",
                     f"{x_mm:.4f}", f"{y_mm:.4f}",
                     f"{d.area_px:.1f}",

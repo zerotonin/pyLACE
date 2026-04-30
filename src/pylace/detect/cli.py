@@ -18,6 +18,11 @@ from pylace.detect.frame import (
 from pylace.detect.pipeline import run_detection, write_detections_csv
 from pylace.roi.mask import build_combined_mask, build_split_masks
 from pylace.roi.sidecar import default_rois_path, read_rois
+from pylace.tracking.constants import (
+    DEFAULT_MAX_DISTANCE_PX,
+    DEFAULT_MAX_MISSED_FRAMES,
+)
+from pylace.tracking.tracks import Tracker
 from pylace.tune.params import default_params_path, read_params
 
 DETECTIONS_SUFFIX = ".pylace_detections.csv"
@@ -39,7 +44,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     sidecar = read_sidecar(sidecar_path)
 
-    detection, background = _resolve_tuning_params(args)
+    detection, background, tracking = _resolve_tuning_params(args)
 
     out_path = (
         args.out
@@ -74,6 +79,13 @@ def main(argv: list[str] | None = None) -> int:
         f"start_frac={background['start_frac']} end_frac={background['end_frac']} "
         f"polarity={background['polarity']}"
     )
+    if tracking["enabled"]:
+        print(
+            f"  tracking: max_distance={tracking['max_distance_px']:.1f} px "
+            f"max_missed={tracking['max_missed_frames']}"
+        )
+    else:
+        print("  tracking: disabled (track_id falls back to per-frame index)")
     from pylace.detect.background import load_or_build_background_pair
 
     bg, _trail, bg_source = load_or_build_background_pair(
@@ -103,6 +115,7 @@ def main(argv: list[str] | None = None) -> int:
         out_path=out_path,
         bg=bg,
         detection=detection,
+        tracking=tracking,
         start_frame=start_frame,
         end_frame=end_frame,
         every=args.every,
@@ -113,12 +126,20 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _run_plan(
-    *, plan, video, sidecar, out_path, bg, detection,
+    *, plan, video, sidecar, out_path, bg, detection, tracking,
     start_frame, end_frame, every, max_frames,
 ) -> int:
     """Run detection for each (label, mask) entry in the ROI plan, into one CSV."""
     def gen():
         for label, mask in plan:
+            tracker = (
+                Tracker(
+                    max_distance_px=tracking["max_distance_px"],
+                    max_missed_frames=tracking["max_missed_frames"],
+                )
+                if tracking["enabled"]
+                else None
+            )
             for fr in run_detection(
                 video, sidecar,
                 threshold=detection["threshold"],
@@ -133,6 +154,7 @@ def _run_plan(
                 end_frame=end_frame,
                 background=bg,
                 extra_mask=mask,
+                tracker=tracker,
             ):
                 fr.roi_label = label
                 yield fr
@@ -164,6 +186,11 @@ def _resolve_tuning_params(args: argparse.Namespace) -> tuple[dict, dict]:
         "end_frac": 0.9,
         "polarity": "dark_on_light",
     }
+    tracking: dict = {
+        "enabled": True,
+        "max_distance_px": DEFAULT_MAX_DISTANCE_PX,
+        "max_missed_frames": DEFAULT_MAX_MISSED_FRAMES,
+    }
 
     candidate = args.params if args.params else default_params_path(args.video)
     if candidate.exists():
@@ -182,6 +209,11 @@ def _resolve_tuning_params(args: argparse.Namespace) -> tuple[dict, dict]:
             "end_frac": tp.background.end_frac,
             "polarity": tp.background.polarity,
         }
+        tracking = {
+            "enabled": tp.tracking.enabled,
+            "max_distance_px": tp.tracking.max_distance_px,
+            "max_missed_frames": tp.tracking.max_missed_frames,
+        }
         print(f"Loaded tuned params from {candidate.name}.")
 
     overrides = {
@@ -195,7 +227,14 @@ def _resolve_tuning_params(args: argparse.Namespace) -> tuple[dict, dict]:
     for key, value in overrides.items():
         if value is not None:
             detection[key] = value
-    return detection, background
+
+    if args.max_track_distance is not None:
+        tracking["max_distance_px"] = args.max_track_distance
+    if args.max_missed_frames is not None:
+        tracking["max_missed_frames"] = args.max_missed_frames
+    if args.no_track:
+        tracking["enabled"] = False
+    return detection, background, tracking
 
 
 def _resolve_roi_plan(args: argparse.Namespace, sidecar):
@@ -318,6 +357,29 @@ def _build_parser() -> argparse.ArgumentParser:
         "--no-rois", action="store_true", dest="no_rois",
         help=(
             "Ignore any ROI sidecar and run detection on the whole arena."
+        ),
+    )
+    p.add_argument(
+        "--max-track-distance", type=float, default=None,
+        dest="max_track_distance",
+        help=(
+            f"Hungarian-tracker rejection threshold in pixels "
+            f"(default: {DEFAULT_MAX_DISTANCE_PX})."
+        ),
+    )
+    p.add_argument(
+        "--max-missed-frames", type=int, default=None,
+        dest="max_missed_frames",
+        help=(
+            f"Tracks unmatched for more than this many frames are retired "
+            f"(default: {DEFAULT_MAX_MISSED_FRAMES})."
+        ),
+    )
+    p.add_argument(
+        "--no-track", action="store_true", dest="no_track",
+        help=(
+            "Disable identity tracking; the track_id column falls back to "
+            "the per-frame detection index."
         ),
     )
     return p

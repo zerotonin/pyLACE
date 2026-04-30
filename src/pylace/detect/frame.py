@@ -18,7 +18,12 @@ ELLIPSE_FIT_MIN_POINTS = 5
 
 @dataclass
 class Detection:
-    """One blob's per-frame summary in image (pixel) coordinates."""
+    """One blob's per-frame summary in image (pixel) coordinates.
+
+    ``track_id`` is set in place by :class:`pylace.tracking.Tracker`
+    after detection. The sentinel ``-1`` means "no tracking applied";
+    the CSV writer treats that as "use the per-frame index instead".
+    """
 
     cx: float
     cy: float
@@ -27,6 +32,7 @@ class Detection:
     minor_axis_px: float
     orientation_deg: float
     contour: np.ndarray | None = None
+    track_id: int = -1
 
 
 def detect_blobs(
