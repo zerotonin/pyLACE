@@ -24,6 +24,7 @@ from pylace.detect.frame import (
     Detection,
     detect_blobs,
 )
+from pylace.detect.chain import ChainSplitter
 from pylace.tracking.tracks import Tracker
 
 CSV_COLUMNS = (
@@ -61,6 +62,7 @@ def run_detection(
     background: np.ndarray | None = None,
     extra_mask: np.ndarray | None = None,
     tracker: Tracker | None = None,
+    chain_splitter: ChainSplitter | None = None,
 ) -> Iterator[FrameResult]:
     """Stream per-frame detections for a video against a sidecar.
 
@@ -118,7 +120,7 @@ def run_detection(
             dilate_iters=dilate_iters, erode_iters=erode_iters,
             every=every, max_frames=max_frames,
             start_frame=start_frame, end_frame=end_frame,
-            tracker=tracker,
+            tracker=tracker, chain_splitter=chain_splitter,
         )
     finally:
         cap.release()
@@ -131,6 +133,7 @@ def _iter_frames(
     every: int, max_frames: int | None,
     start_frame: int, end_frame: int | None,
     tracker: Tracker | None,
+    chain_splitter: ChainSplitter | None,
 ) -> Iterator[FrameResult]:
     if start_frame > 0:
         cap.set(cv2.CAP_PROP_POS_FRAMES, float(start_frame))
@@ -150,6 +153,7 @@ def _iter_frames(
                 morph_kernel=morph_kernel,
                 dilate_iters=dilate_iters, erode_iters=erode_iters,
                 keep_contour=False,
+                chain_splitter=chain_splitter,
             )
             if tracker is not None:
                 detections = tracker.step(idx, detections)

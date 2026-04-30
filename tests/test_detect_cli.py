@@ -403,6 +403,85 @@ def test_pylace_detect_no_track_falls_back_to_per_frame_index(
     assert {int(r["track_id"]) for r in rows} == {0}
 
 
+def _make_video_with_two_blobs_one_chained(
+    path: Path, n_frames: int = 6,
+) -> tuple[int, int]:
+    """First N-1 frames: two distinct blobs. Last frame: a single 2-fly chain.
+
+    Returns ``(width, height)``.
+    """
+    cv2 = pytest.importorskip("cv2")
+    h, w = 80, 100
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    writer = cv2.VideoWriter(str(path), fourcc, 25.0, (w, h))
+    if not writer.isOpened():
+        pytest.skip("cv2.VideoWriter cannot open mp4v on this platform.")
+    try:
+        for i in range(n_frames - 1):
+            frame = np.full((h, w, 3), 220, dtype=np.uint8)
+            cv2.ellipse(frame, (30, 40), (8, 4), 0, 0, 360, (30, 30, 30), -1)
+            cv2.ellipse(frame, (70, 40), (8, 4), 0, 0, 360, (30, 30, 30), -1)
+            writer.write(frame)
+        # Final frame: the two flies pile up into one elongated blob.
+        chain_frame = np.full((h, w, 3), 220, dtype=np.uint8)
+        cv2.ellipse(chain_frame, (50, 40), (16, 4), 0, 0, 360, (30, 30, 30), -1)
+        writer.write(chain_frame)
+    finally:
+        writer.release()
+    return w, h
+
+
+def test_pylace_detect_chain_split_recovers_two_detections_in_chain(
+    video_and_sidecar: tuple[Path, Path], tmp_path: Path,
+) -> None:
+    """A chained frame produces 2 detections after splitting (1 without)."""
+    from pylace.annotator.geometry import Circle
+    from pylace.annotator.sidecar import (
+        Sidecar, VideoMeta, WorldFrame,
+        Calibration, default_sidecar_path, video_sha256, write_sidecar,
+    )
+
+    video = tmp_path / "chain.mp4"
+    w, h = _make_video_with_two_blobs_one_chained(video)
+    sidecar = Sidecar(
+        video=VideoMeta(path=str(video), sha256=video_sha256(video),
+                        frame_size=(w, h), fps=25.0),
+        arena=Circle(cx=50.0, cy=40.0, r=45.0),
+        world_frame=WorldFrame(origin_pixel=(50.0, 40.0)),
+        calibration=Calibration(
+            reference_kind="diameter", physical_mm=10.0, pixel_distance=90.0,
+        ),
+    )
+    write_sidecar(sidecar, default_sidecar_path(video))
+
+    # Without chain split: the chain frame yields 1 contour → 1 detection.
+    out_no_split = tmp_path / "no_split.csv"
+    rc = cli.main([
+        str(video), "--out", str(out_no_split),
+        "--no-chain-split",
+        "--no-track",  # keep track_id deterministic per-frame
+    ])
+    assert rc == 0
+    rows = list(csv.DictReader(out_no_split.read_text().splitlines()))
+    last_frame = max(int(r["frame_idx"]) for r in rows)
+    last_rows_no_split = [r for r in rows if int(r["frame_idx"]) == last_frame]
+    assert len(last_rows_no_split) == 1
+
+    # With chain split + an explicit expected area, the chain splits.
+    out_split = tmp_path / "split.csv"
+    rc = cli.main([
+        str(video), "--out", str(out_split),
+        "--expected-animal-area", "100",
+        "--no-track",
+    ])
+    assert rc == 0
+    rows_split = list(csv.DictReader(out_split.read_text().splitlines()))
+    last_rows_split = [
+        r for r in rows_split if int(r["frame_idx"]) == last_frame
+    ]
+    assert len(last_rows_split) == 2
+
+
 def test_pylace_detect_n_animals_caps_unique_track_ids(
     video_and_sidecar: tuple[Path, Path], tmp_path: Path,
 ) -> None:

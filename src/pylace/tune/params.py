@@ -75,6 +75,7 @@ class TrackingParams:
     max_distance_px: float = DEFAULT_MAX_DISTANCE_PX
     max_missed_frames: int = DEFAULT_MAX_MISSED_FRAMES
     n_animals: int | None = None
+    expected_animal_area_px: float | None = None
 
 
 @dataclass

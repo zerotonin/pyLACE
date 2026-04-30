@@ -115,6 +115,28 @@ def test_tracking_params_n_animals_default_is_none():
     assert p.tracking.n_animals is None
 
 
+def test_tracking_params_expected_animal_area_round_trip(tmp_path: Path):
+    from pylace.tune.params import TrackingParams
+
+    out = tmp_path / "with_area.json"
+    params = TuningParams(
+        detection=DetectionParams(),
+        background=BackgroundParams(),
+        tracking=TrackingParams(
+            n_animals=3, expected_animal_area_px=2400.0,
+        ),
+    )
+    write_params(params, video_path=Path("/tmp/x.mp4"), video_sha256_hex="0" * 64,
+                 out_path=out)
+    loaded, _ = read_params(out)
+    assert loaded.tracking.expected_animal_area_px == 2400.0
+
+
+def test_tracking_params_expected_animal_area_default_is_none():
+    p = TuningParams.defaults()
+    assert p.tracking.expected_animal_area_px is None
+
+
 def test_old_sidecar_without_tracking_block_loads_with_defaults(tmp_path: Path):
     """Sidecars predating the tracking block fall back to defaults."""
     out = tmp_path / "legacy.json"

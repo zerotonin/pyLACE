@@ -47,6 +47,7 @@ def detect_blobs(
     dilate_iters: int = DEFAULT_DILATE_ITERS,
     erode_iters: int = DEFAULT_ERODE_ITERS,
     keep_contour: bool = True,
+    chain_splitter=None,
 ) -> list[Detection]:
     """Per-frame blob detection on a grayscale frame.
 
@@ -78,6 +79,7 @@ def detect_blobs(
         morph_kernel=morph_kernel,
         dilate_iters=dilate_iters, erode_iters=erode_iters,
         keep_contour=keep_contour,
+        chain_splitter=chain_splitter,
     )
     return detections
 
@@ -94,6 +96,7 @@ def detect_blobs_with_mask(
     dilate_iters: int = DEFAULT_DILATE_ITERS,
     erode_iters: int = DEFAULT_ERODE_ITERS,
     keep_contour: bool = True,
+    chain_splitter=None,
 ) -> tuple[list[Detection], np.ndarray]:
     """Like :func:`detect_blobs` but also returns the binary foreground mask.
 
@@ -112,6 +115,8 @@ def detect_blobs_with_mask(
         dilate_iters=dilate_iters, erode_iters=erode_iters,
     )
     contours = _filtered_contours(fg, min_area, max_area)
+    if chain_splitter is not None:
+        contours = chain_splitter.maybe_split(contours)
     out: list[Detection] = []
     for c in contours:
         if len(c) < ELLIPSE_FIT_MIN_POINTS:

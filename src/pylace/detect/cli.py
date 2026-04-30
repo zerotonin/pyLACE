@@ -15,6 +15,7 @@ from pylace.detect.frame import (
     DEFAULT_MORPH_KERNEL,
     DEFAULT_THRESHOLD,
 )
+from pylace.detect.chain import ChainSplitter
 from pylace.detect.pipeline import run_detection, write_detections_csv
 from pylace.roi.mask import build_combined_mask, build_split_masks
 from pylace.roi.sidecar import default_rois_path, read_rois
@@ -93,6 +94,20 @@ def main(argv: list[str] | None = None) -> int:
             )
     else:
         print("  tracking: disabled (track_id falls back to per-frame index)")
+    if tracking["chain_split_enabled"]:
+        if tracking["expected_animal_area_px"] is not None:
+            print(
+                f"  chain split: expected_animal_area="
+                f"{tracking['expected_animal_area_px']:.0f} px² "
+                "(threshold 1.5×)",
+            )
+        else:
+            print(
+                "  chain split: enabled, expected area auto-learned from "
+                "first 50 frames",
+            )
+    else:
+        print("  chain split: disabled")
     from pylace.detect.background import load_or_build_background_pair
 
     bg, _trail, bg_source = load_or_build_background_pair(
@@ -148,6 +163,13 @@ def _run_plan(
                 if tracking["enabled"]
                 else None
             )
+            chain_splitter = (
+                ChainSplitter(
+                    expected_animal_area_px=tracking["expected_animal_area_px"],
+                )
+                if tracking["chain_split_enabled"]
+                else None
+            )
             for fr in run_detection(
                 video, sidecar,
                 threshold=detection["threshold"],
@@ -163,9 +185,19 @@ def _run_plan(
                 background=bg,
                 extra_mask=mask,
                 tracker=tracker,
+                chain_splitter=chain_splitter,
             ):
                 fr.roi_label = label
                 yield fr
+            if (
+                chain_splitter is not None
+                and chain_splitter.expected_animal_area_px is not None
+                and tracking["expected_animal_area_px"] is None
+            ):
+                print(
+                    f"  chain split [{label}]: learned expected_animal_area="
+                    f"{chain_splitter.expected_animal_area_px:.0f} px²",
+                )
 
     return write_detections_csv(gen(), sidecar, out_path)
 
@@ -199,6 +231,8 @@ def _resolve_tuning_params(args: argparse.Namespace) -> tuple[dict, dict]:
         "max_distance_px": DEFAULT_MAX_DISTANCE_PX,
         "max_missed_frames": DEFAULT_MAX_MISSED_FRAMES,
         "n_animals": None,
+        "expected_animal_area_px": None,
+        "chain_split_enabled": True,
     }
 
     candidate = args.params if args.params else default_params_path(args.video)
@@ -223,6 +257,8 @@ def _resolve_tuning_params(args: argparse.Namespace) -> tuple[dict, dict]:
             "max_distance_px": tp.tracking.max_distance_px,
             "max_missed_frames": tp.tracking.max_missed_frames,
             "n_animals": tp.tracking.n_animals,
+            "expected_animal_area_px": tp.tracking.expected_animal_area_px,
+            "chain_split_enabled": True,
         }
         print(f"Loaded tuned params from {candidate.name}.")
 
@@ -246,6 +282,10 @@ def _resolve_tuning_params(args: argparse.Namespace) -> tuple[dict, dict]:
         tracking["enabled"] = False
     if args.n_animals is not None:
         tracking["n_animals"] = args.n_animals
+    if args.expected_animal_area is not None:
+        tracking["expected_animal_area_px"] = args.expected_animal_area
+    if args.no_chain_split:
+        tracking["chain_split_enabled"] = False
     return detection, background, tracking
 
 
@@ -402,6 +442,21 @@ def _build_parser() -> argparse.ArgumentParser:
             "or replaced; max-track-distance is ignored. Recommended for "
             "the LACE-paper workflow."
         ),
+    )
+    p.add_argument(
+        "--expected-animal-area", type=float, default=None,
+        dest="expected_animal_area",
+        help=(
+            "Expected single-animal area in px². Enables LACE-paper chain "
+            "splitting: any contour above 1.5× this area is cut "
+            "perpendicular to its major axis at the centroid and refit "
+            "as two ellipses. Auto-learned from the median of the first "
+            "50 frames if omitted."
+        ),
+    )
+    p.add_argument(
+        "--no-chain-split", action="store_true", dest="no_chain_split",
+        help="Disable chain splitting even if --expected-animal-area is set.",
     )
     return p
 
