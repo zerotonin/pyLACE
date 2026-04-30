@@ -16,9 +16,11 @@ from pylace.tracking.tracks import Tracker
 def _det(
     cx: float, cy: float,
     *, area_px: float = 100.0, perimeter_px: float = 40.0,
+    solidity: float = 0.95,
 ) -> Detection:
     return Detection(
         cx=cx, cy=cy, area_px=area_px, perimeter_px=perimeter_px,
+        solidity=solidity,
         major_axis_px=10.0, minor_axis_px=5.0,
         orientation_deg=0.0, contour=None,
     )

@@ -22,7 +22,7 @@ def _gray_canvas(h: int = 80, w: int = 80, level: int = 200) -> np.ndarray:
 def _detection(cx: float = 40, cy: float = 40) -> Detection:
     return Detection(
         cx=cx, cy=cy,
-        area_px=80.0, perimeter_px=35.0,
+        area_px=80.0, perimeter_px=35.0, solidity=0.95,
         major_axis_px=12.0, minor_axis_px=5.0,
         orientation_deg=0.0, contour=None,
     )
@@ -90,7 +90,7 @@ def test_overlay_with_contour_draws_green_line():
     contour = np.array([[35, 38], [45, 38], [45, 42], [35, 42]], dtype=np.int32)
     contour = contour.reshape(-1, 1, 2)
     det = Detection(
-        cx=40, cy=40, area_px=40, perimeter_px=20,
+        cx=40, cy=40, area_px=40, perimeter_px=20, solidity=0.9,
         major_axis_px=10, minor_axis_px=4,
         orientation_deg=0,
         contour=contour,

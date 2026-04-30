@@ -13,6 +13,8 @@ DEFAULT_MAX_AREA = 5000
 DEFAULT_MORPH_KERNEL = 3
 DEFAULT_DILATE_ITERS = 0
 DEFAULT_ERODE_ITERS = 0
+DEFAULT_MIN_SOLIDITY = 0.0          # 0 = disabled (no minimum)
+DEFAULT_MAX_AXIS_RATIO = 0.0        # 0 = disabled (no maximum)
 ELLIPSE_FIT_MIN_POINTS = 5
 
 
@@ -32,6 +34,7 @@ class Detection:
     cy: float
     area_px: float
     perimeter_px: float
+    solidity: float
     major_axis_px: float
     minor_axis_px: float
     orientation_deg: float
@@ -50,6 +53,8 @@ def detect_blobs(
     morph_kernel: int = DEFAULT_MORPH_KERNEL,
     dilate_iters: int = DEFAULT_DILATE_ITERS,
     erode_iters: int = DEFAULT_ERODE_ITERS,
+    min_solidity: float = DEFAULT_MIN_SOLIDITY,
+    max_axis_ratio: float = DEFAULT_MAX_AXIS_RATIO,
     keep_contour: bool = True,
     chain_splitter=None,
 ) -> list[Detection]:
@@ -82,6 +87,7 @@ def detect_blobs(
         threshold=threshold, min_area=min_area, max_area=max_area,
         morph_kernel=morph_kernel,
         dilate_iters=dilate_iters, erode_iters=erode_iters,
+        min_solidity=min_solidity, max_axis_ratio=max_axis_ratio,
         keep_contour=keep_contour,
         chain_splitter=chain_splitter,
     )
@@ -99,6 +105,8 @@ def detect_blobs_with_mask(
     morph_kernel: int = DEFAULT_MORPH_KERNEL,
     dilate_iters: int = DEFAULT_DILATE_ITERS,
     erode_iters: int = DEFAULT_ERODE_ITERS,
+    min_solidity: float = DEFAULT_MIN_SOLIDITY,
+    max_axis_ratio: float = DEFAULT_MAX_AXIS_RATIO,
     keep_contour: bool = True,
     chain_splitter=None,
 ) -> tuple[list[Detection], np.ndarray]:
@@ -125,7 +133,14 @@ def detect_blobs_with_mask(
     for c in contours:
         if len(c) < ELLIPSE_FIT_MIN_POINTS:
             continue
-        out.append(_contour_to_detection(c, keep_contour=keep_contour))
+        det = _contour_to_detection(c, keep_contour=keep_contour)
+        if min_solidity > 0.0 and det.solidity < min_solidity:
+            continue
+        if max_axis_ratio > 0.0 and det.minor_axis_px > 0.0:
+            ratio = det.major_axis_px / det.minor_axis_px
+            if ratio > max_axis_ratio:
+                continue
+        out.append(det)
     return out, fg
 
 
@@ -166,11 +181,15 @@ def _contour_to_detection(c: np.ndarray, *, keep_contour: bool) -> Detection:
     (cx, cy), (axis_a, axis_b), angle = cv2.fitEllipse(c)
     major = max(axis_a, axis_b)
     minor = min(axis_a, axis_b)
+    area = float(cv2.contourArea(c))
+    hull_area = float(cv2.contourArea(cv2.convexHull(c)))
+    solidity = area / hull_area if hull_area > 0 else 1.0
     return Detection(
         cx=float(cx),
         cy=float(cy),
-        area_px=float(cv2.contourArea(c)),
+        area_px=area,
         perimeter_px=float(cv2.arcLength(c, closed=True)),
+        solidity=solidity,
         major_axis_px=float(major),
         minor_axis_px=float(minor),
         orientation_deg=float(angle),

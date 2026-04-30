@@ -18,7 +18,9 @@ from pylace.detect.frame import (
     DEFAULT_DILATE_ITERS,
     DEFAULT_ERODE_ITERS,
     DEFAULT_MAX_AREA,
+    DEFAULT_MAX_AXIS_RATIO,
     DEFAULT_MIN_AREA,
+    DEFAULT_MIN_SOLIDITY,
     DEFAULT_MORPH_KERNEL,
     DEFAULT_THRESHOLD,
     Detection,
@@ -30,7 +32,7 @@ from pylace.tracking.tracks import Tracker
 CSV_COLUMNS = (
     "frame_idx", "roi_label", "track_id",
     "cx_px", "cy_px", "x_mm", "y_mm",
-    "area_px", "perimeter_px",
+    "area_px", "perimeter_px", "solidity",
     "major_axis_px", "minor_axis_px", "orientation_deg",
 )
 
@@ -56,6 +58,8 @@ def run_detection(
     morph_kernel: int = DEFAULT_MORPH_KERNEL,
     dilate_iters: int = DEFAULT_DILATE_ITERS,
     erode_iters: int = DEFAULT_ERODE_ITERS,
+    min_solidity: float = DEFAULT_MIN_SOLIDITY,
+    max_axis_ratio: float = DEFAULT_MAX_AXIS_RATIO,
     every: int = 1,
     max_frames: int | None = None,
     start_frame: int = 0,
@@ -119,6 +123,7 @@ def run_detection(
             threshold=threshold, min_area=min_area, max_area=max_area,
             morph_kernel=morph_kernel,
             dilate_iters=dilate_iters, erode_iters=erode_iters,
+            min_solidity=min_solidity, max_axis_ratio=max_axis_ratio,
             every=every, max_frames=max_frames,
             start_frame=start_frame, end_frame=end_frame,
             tracker=tracker, chain_splitter=chain_splitter,
@@ -131,6 +136,7 @@ def _iter_frames(
     *, cap: cv2.VideoCapture, bg: np.ndarray, mask: np.ndarray,
     threshold: int, min_area: int, max_area: int, morph_kernel: int,
     dilate_iters: int, erode_iters: int,
+    min_solidity: float, max_axis_ratio: float,
     every: int, max_frames: int | None,
     start_frame: int, end_frame: int | None,
     tracker: Tracker | None,
@@ -153,6 +159,7 @@ def _iter_frames(
                 threshold=threshold, min_area=min_area, max_area=max_area,
                 morph_kernel=morph_kernel,
                 dilate_iters=dilate_iters, erode_iters=erode_iters,
+                min_solidity=min_solidity, max_axis_ratio=max_axis_ratio,
                 keep_contour=False,
                 chain_splitter=chain_splitter,
             )
@@ -186,6 +193,7 @@ def write_detections_csv(
                     f"{d.cx:.3f}", f"{d.cy:.3f}",
                     f"{x_mm:.4f}", f"{y_mm:.4f}",
                     f"{d.area_px:.1f}", f"{d.perimeter_px:.2f}",
+                    f"{d.solidity:.4f}",
                     f"{d.major_axis_px:.3f}", f"{d.minor_axis_px:.3f}",
                     f"{d.orientation_deg:.2f}",
                 ])

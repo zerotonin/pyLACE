@@ -159,6 +159,25 @@ def test_tracking_params_cost_weights_default_to_zero():
     assert p.tracking.perimeter_cost_weight == 0.0
 
 
+def test_detection_params_shape_filter_round_trip(tmp_path: Path):
+    out = tmp_path / "shape.json"
+    params = TuningParams(
+        detection=DetectionParams(min_solidity=0.85, max_axis_ratio=5.0),
+        background=BackgroundParams(),
+    )
+    write_params(params, video_path=Path("/tmp/x.mp4"), video_sha256_hex="0" * 64,
+                 out_path=out)
+    loaded, _ = read_params(out)
+    assert loaded.detection.min_solidity == 0.85
+    assert loaded.detection.max_axis_ratio == 5.0
+
+
+def test_detection_params_shape_filter_defaults_disabled():
+    p = TuningParams.defaults()
+    assert p.detection.min_solidity == 0.0
+    assert p.detection.max_axis_ratio == 0.0
+
+
 def test_old_sidecar_without_tracking_block_loads_with_defaults(tmp_path: Path):
     """Sidecars predating the tracking block fall back to defaults."""
     out = tmp_path / "legacy.json"

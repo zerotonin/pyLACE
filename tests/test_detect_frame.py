@@ -135,6 +135,43 @@ def test_erode_iters_decreases_blob_area():
         assert eroded[0].area_px < base[0].area_px
 
 
+def test_solidity_is_close_to_one_for_a_filled_ellipse():
+    h, w = 100, 100
+    bg = _bright_background(h, w)
+    frame = _frame_with_dark_ellipse(h, w, cx=50, cy=50, axes=(12, 5), angle_deg=0)
+    mask = arena_mask(Circle(50.0, 50.0, 45.0), frame_size=(w, h))
+    detections = detect_blobs(frame, bg, mask)
+    assert len(detections) == 1
+    assert 0.85 <= detections[0].solidity <= 1.0
+
+
+def test_solidity_filter_rejects_an_L_shaped_blob():
+    """An L-shape has low solidity (~0.5–0.7); 0.85 cutoff drops it."""
+    h, w = 100, 100
+    bg = _bright_background(h, w)
+    frame = bg.copy()
+    cv2.rectangle(frame, (20, 20), (40, 80), 30, thickness=-1)
+    cv2.rectangle(frame, (20, 60), (80, 80), 30, thickness=-1)
+    mask = arena_mask(Circle(50.0, 50.0, 45.0), frame_size=(w, h))
+    permissive = detect_blobs(frame, bg, mask)
+    strict = detect_blobs(frame, bg, mask, min_solidity=0.85)
+    assert len(permissive) == 1
+    assert strict == []
+
+
+def test_axis_ratio_filter_rejects_a_long_thin_streak():
+    h, w = 200, 200
+    bg = _bright_background(h, w)
+    frame = bg.copy()
+    cv2.rectangle(frame, (50, 99), (150, 102), 30, thickness=-1)
+    mask = arena_mask(Circle(100.0, 100.0, 90.0), frame_size=(w, h))
+    permissive = detect_blobs(frame, bg, mask)
+    strict = detect_blobs(frame, bg, mask, max_axis_ratio=5.0)
+    assert len(permissive) == 1
+    assert permissive[0].major_axis_px / permissive[0].minor_axis_px > 5.0
+    assert strict == []
+
+
 def test_dilate_can_merge_two_close_blobs():
     h, w = 80, 80
     bg = _bright_background(h, w)

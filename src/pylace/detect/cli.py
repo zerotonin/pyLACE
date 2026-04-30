@@ -11,7 +11,9 @@ from pylace.detect.frame import (
     DEFAULT_DILATE_ITERS,
     DEFAULT_ERODE_ITERS,
     DEFAULT_MAX_AREA,
+    DEFAULT_MAX_AXIS_RATIO,
     DEFAULT_MIN_AREA,
+    DEFAULT_MIN_SOLIDITY,
     DEFAULT_MORPH_KERNEL,
     DEFAULT_THRESHOLD,
 )
@@ -77,6 +79,15 @@ def main(argv: list[str] | None = None) -> int:
         f"morph={detection['morph_kernel']} "
         f"dilate={detection['dilate_iters']} erode={detection['erode_iters']}"
     )
+    quality_bits: list[str] = []
+    if detection["min_solidity"] > 0.0:
+        quality_bits.append(f"min_solidity={detection['min_solidity']:.2f}")
+    if detection["max_axis_ratio"] > 0.0:
+        quality_bits.append(f"max_axis_ratio={detection['max_axis_ratio']:.2f}")
+    if quality_bits:
+        print(f"  shape filter: {' '.join(quality_bits)}")
+    else:
+        print("  shape filter: disabled")
     print(
         f"  background: n_frames={background['n_frames']} "
         f"start_frac={background['start_frac']} end_frac={background['end_frac']} "
@@ -186,6 +197,8 @@ def _run_plan(
                 morph_kernel=detection["morph_kernel"],
                 dilate_iters=detection["dilate_iters"],
                 erode_iters=detection["erode_iters"],
+                min_solidity=detection["min_solidity"],
+                max_axis_ratio=detection["max_axis_ratio"],
                 every=every,
                 max_frames=max_frames,
                 start_frame=start_frame,
@@ -227,6 +240,8 @@ def _resolve_tuning_params(args: argparse.Namespace) -> tuple[dict, dict]:
         "morph_kernel": DEFAULT_MORPH_KERNEL,
         "dilate_iters": DEFAULT_DILATE_ITERS,
         "erode_iters": DEFAULT_ERODE_ITERS,
+        "min_solidity": DEFAULT_MIN_SOLIDITY,
+        "max_axis_ratio": DEFAULT_MAX_AXIS_RATIO,
     }
     background: dict = {
         "n_frames": 50,
@@ -255,6 +270,8 @@ def _resolve_tuning_params(args: argparse.Namespace) -> tuple[dict, dict]:
             morph_kernel=tp.detection.morph_kernel,
             dilate_iters=tp.detection.dilate_iters,
             erode_iters=tp.detection.erode_iters,
+            min_solidity=tp.detection.min_solidity,
+            max_axis_ratio=tp.detection.max_axis_ratio,
         )
         background = {
             "n_frames": tp.background.n_frames,
@@ -281,6 +298,8 @@ def _resolve_tuning_params(args: argparse.Namespace) -> tuple[dict, dict]:
         "morph_kernel": args.morph_kernel,
         "dilate_iters": args.dilate_iters,
         "erode_iters": args.erode_iters,
+        "min_solidity": args.min_solidity,
+        "max_axis_ratio": args.max_axis_ratio,
     }
     for key, value in overrides.items():
         if value is not None:
@@ -490,6 +509,24 @@ def _build_parser() -> argparse.ArgumentParser:
             "Weight on |Δperimeter_px| in the Hungarian cost matrix. "
             "0 disables. Try 0.5 (1 px-equivalent per 2 px perimeter "
             "difference)."
+        ),
+    )
+    p.add_argument(
+        "--min-solidity", type=float, default=None,
+        dest="min_solidity",
+        help=(
+            "Reject contours whose solidity (area / convex-hull area) "
+            "falls below this. 0 disables. A real fly is ≈ 0.9; "
+            "shadows / streaks are < 0.7 — start with 0.85."
+        ),
+    )
+    p.add_argument(
+        "--max-axis-ratio", type=float, default=None,
+        dest="max_axis_ratio",
+        help=(
+            "Reject contours whose major / minor axis ratio exceeds this. "
+            "0 disables. A real fly is ≈ 2–3; thin streak shadows are "
+            "5+ — start with 5.0."
         ),
     )
     return p

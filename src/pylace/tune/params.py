@@ -12,7 +12,9 @@ from pylace.detect.frame import (
     DEFAULT_DILATE_ITERS,
     DEFAULT_ERODE_ITERS,
     DEFAULT_MAX_AREA,
+    DEFAULT_MAX_AXIS_RATIO,
     DEFAULT_MIN_AREA,
+    DEFAULT_MIN_SOLIDITY,
     DEFAULT_MORPH_KERNEL,
     DEFAULT_THRESHOLD,
 )
@@ -43,6 +45,8 @@ class DetectionParams:
     morph_kernel: int = DEFAULT_MORPH_KERNEL
     dilate_iters: int = DEFAULT_DILATE_ITERS
     erode_iters: int = DEFAULT_ERODE_ITERS
+    min_solidity: float = DEFAULT_MIN_SOLIDITY
+    max_axis_ratio: float = DEFAULT_MAX_AXIS_RATIO
 
 
 @dataclass
