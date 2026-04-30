@@ -30,6 +30,7 @@ from pylace.tune.overlay import render_overlay
 from pylace.tune.params import (
     BackgroundParams,
     DetectionParams,
+    TrackingParams,
     TuningParams,
     TuningParamsSchemaError,
     default_params_path,
@@ -172,6 +173,7 @@ class TuneWindow(QtWidgets.QMainWindow):
         v = QtWidgets.QVBoxLayout(wrap)
         v.addWidget(self._build_detection_group(wrap))
         v.addWidget(self._build_background_group(wrap))
+        v.addWidget(self._build_tracking_group(wrap))
         v.addWidget(self._build_preview_group(wrap))
         v.addWidget(self._build_display_group(wrap))
         v.addWidget(self._build_stats_group(wrap))
@@ -217,11 +219,26 @@ class TuneWindow(QtWidgets.QMainWindow):
         self._sb_morph = self._spin(form, "Morph kernel", dp.morph_kernel, 0, 21)
         self._sb_dilate = self._spin(form, "Dilate iters", dp.dilate_iters, 0, 20)
         self._sb_erode = self._spin(form, "Erode iters", dp.erode_iters, 0, 20)
+        self._sb_min_sol = self._dspin(
+            form, "Min solidity (0=off)", dp.min_solidity, 0.0, 1.0, 0.01,
+        )
+        self._sb_min_sol.setToolTip(
+            "0 disables. ~0.85 rejects diffuse shadows; lower for side-lying "
+            "flies whose silhouette is less convex.",
+        )
+        self._sb_max_axis = self._dspin(
+            form, "Max axis ratio (0=off)", dp.max_axis_ratio, 0.0, 30.0, 0.5,
+        )
+        self._sb_max_axis.setToolTip(
+            "0 disables. ~5.0 rejects long thin streaks (wing reflections).",
+        )
         for sb in (
             self._sb_threshold, self._sb_min_area, self._sb_max_area,
             self._sb_morph, self._sb_dilate, self._sb_erode,
         ):
             sb.valueChanged.connect(self._on_detection_changed)
+        for dsb in (self._sb_min_sol, self._sb_max_axis):
+            dsb.valueChanged.connect(self._on_detection_changed)
         return box
 
     def _build_background_group(self, parent: QtWidgets.QWidget) -> QtWidgets.QGroupBox:
@@ -243,6 +260,60 @@ class TuneWindow(QtWidgets.QMainWindow):
         rebuild = QtWidgets.QPushButton("Rebuild background", box)
         rebuild.clicked.connect(self._on_rebuild_background)
         form.addRow(rebuild)
+        return box
+
+    def _build_tracking_group(self, parent: QtWidgets.QWidget) -> QtWidgets.QGroupBox:
+        box = QtWidgets.QGroupBox("Tracking + chain split (saved → pylace-detect)", parent)
+        form = QtWidgets.QFormLayout(box)
+        tp = self._params.tracking
+
+        self._cb_track_enabled = QtWidgets.QCheckBox("Enable Hungarian tracker")
+        self._cb_track_enabled.setChecked(tp.enabled)
+        form.addRow(self._cb_track_enabled)
+
+        self._sb_n_animals = self._spin(
+            form, "N animals (0 = auto)", tp.n_animals or 0, 0, 100,
+        )
+        self._sb_n_animals.setToolTip(
+            "Set to the known animal count for fixed-N mode (LACE-paper "
+            "assumption). 0 lets tracks be born and retired automatically.",
+        )
+        self._sb_track_dist = self._dspin(
+            form, "Max distance (px)", tp.max_distance_px, 0.0, 5000.0, 5.0,
+        )
+        self._sb_track_missed = self._spin(
+            form, "Max missed frames", tp.max_missed_frames, 0, 1000,
+        )
+        self._sb_expected_area = self._dspin(
+            form, "Expected animal area px (0 = auto)",
+            tp.expected_animal_area_px or 0.0, 0.0, 1_000_000.0, 50.0,
+        )
+        self._sb_expected_area.setToolTip(
+            "Chain splitter cuts a blob whose area exceeds 1.5× this value. "
+            "0 = auto-learn the median from the first frames at runtime.",
+        )
+        self._sb_area_w = self._dspin(
+            form, "Area cost weight", tp.area_cost_weight, 0.0, 10.0, 0.01,
+        )
+        self._sb_area_w.setToolTip(
+            "Adds |Δarea|·w to the Hungarian cost. Helps disambiguate two "
+            "animals at similar positions but different sizes.",
+        )
+        self._sb_per_w = self._dspin(
+            form, "Perimeter cost weight", tp.perimeter_cost_weight, 0.0, 10.0, 0.01,
+        )
+        self._sb_per_w.setToolTip(
+            "Adds |Δperimeter|·w to the Hungarian cost.",
+        )
+
+        self._cb_track_enabled.toggled.connect(self._on_tracking_changed)
+        for sb in (self._sb_n_animals, self._sb_track_missed):
+            sb.valueChanged.connect(self._on_tracking_changed)
+        for dsb in (
+            self._sb_track_dist, self._sb_expected_area,
+            self._sb_area_w, self._sb_per_w,
+        ):
+            dsb.valueChanged.connect(self._on_tracking_changed)
         return box
 
     def _build_preview_group(self, parent: QtWidgets.QWidget) -> QtWidgets.QGroupBox:
@@ -292,9 +363,11 @@ class TuneWindow(QtWidgets.QMainWindow):
         self._lbl_frame = QtWidgets.QLabel("Frame: —", box)
         self._lbl_this = QtWidgets.QLabel("This frame: — detections", box)
         self._lbl_agg = QtWidgets.QLabel("Across sample: — / —", box)
+        self._lbl_shape = QtWidgets.QLabel("Shape: —", box)
         v.addWidget(self._lbl_frame)
         v.addWidget(self._lbl_this)
         v.addWidget(self._lbl_agg)
+        v.addWidget(self._lbl_shape)
         return box
 
     # ── Widget builders ────────────────────────────────────────────────
@@ -339,10 +412,30 @@ class TuneWindow(QtWidgets.QMainWindow):
                 morph_kernel=self._sb_morph.value(),
                 dilate_iters=self._sb_dilate.value(),
                 erode_iters=self._sb_erode.value(),
+                min_solidity=float(self._sb_min_sol.value()),
+                max_axis_ratio=float(self._sb_max_axis.value()),
             ),
             background=self._params.background,
+            tracking=self._params.tracking,
         )
         self._render_current()
+
+    def _on_tracking_changed(self) -> None:
+        n = self._sb_n_animals.value()
+        area = float(self._sb_expected_area.value())
+        self._params = TuningParams(
+            detection=self._params.detection,
+            background=self._params.background,
+            tracking=TrackingParams(
+                enabled=self._cb_track_enabled.isChecked(),
+                max_distance_px=float(self._sb_track_dist.value()),
+                max_missed_frames=self._sb_track_missed.value(),
+                n_animals=n if n > 0 else None,
+                expected_animal_area_px=area if area > 0 else None,
+                area_cost_weight=float(self._sb_area_w.value()),
+                perimeter_cost_weight=float(self._sb_per_w.value()),
+            ),
+        )
 
     def _on_display_toggled(self) -> None:
         self._show_mask = self._cb_mask.isChecked()
@@ -366,6 +459,7 @@ class TuneWindow(QtWidgets.QMainWindow):
                 end_frac=self._params.background.end_frac,
                 polarity=new_polarity,
             ),
+            tracking=self._params.tracking,
         )
         self._apply_polarity()
         self._render_current()
@@ -377,7 +471,9 @@ class TuneWindow(QtWidgets.QMainWindow):
                 n_frames=self._sb_bg_n.value(),
                 start_frac=float(self._sb_bg_start.value()),
                 end_frac=float(self._sb_bg_end.value()),
+                polarity=self._params.background.polarity,
             ),
+            tracking=self._params.tracking,
         )
         self.statusBar().showMessage("Rebuilding background...")
         QtWidgets.QApplication.processEvents()
@@ -493,6 +589,7 @@ class TuneWindow(QtWidgets.QMainWindow):
         """Push self._params back into the spinboxes without triggering signals."""
         dp = self._params.detection
         bp = self._params.background
+        tp = self._params.tracking
         for sb, val in (
             (self._sb_threshold, dp.threshold),
             (self._sb_min_area, dp.min_area),
@@ -501,6 +598,8 @@ class TuneWindow(QtWidgets.QMainWindow):
             (self._sb_dilate, dp.dilate_iters),
             (self._sb_erode, dp.erode_iters),
             (self._sb_bg_n, bp.n_frames),
+            (self._sb_n_animals, tp.n_animals or 0),
+            (self._sb_track_missed, tp.max_missed_frames),
         ):
             sb.blockSignals(True)
             sb.setValue(int(val))
@@ -508,10 +607,24 @@ class TuneWindow(QtWidgets.QMainWindow):
         for sb, val in (
             (self._sb_bg_start, bp.start_frac),
             (self._sb_bg_end, bp.end_frac),
+            (self._sb_min_sol, dp.min_solidity),
+            (self._sb_max_axis, dp.max_axis_ratio),
+            (self._sb_track_dist, tp.max_distance_px),
+            (self._sb_expected_area, tp.expected_animal_area_px or 0.0),
+            (self._sb_area_w, tp.area_cost_weight),
+            (self._sb_per_w, tp.perimeter_cost_weight),
         ):
             sb.blockSignals(True)
             sb.setValue(float(val))
             sb.blockSignals(False)
+        self._cb_track_enabled.blockSignals(True)
+        self._cb_track_enabled.setChecked(tp.enabled)
+        self._cb_track_enabled.blockSignals(False)
+        self._cb_polarity.blockSignals(True)
+        self._cb_polarity.setCurrentIndex(
+            0 if bp.polarity == "dark_on_light" else 1,
+        )
+        self._cb_polarity.blockSignals(False)
 
     # ── Compute / render ───────────────────────────────────────────────
 
@@ -568,6 +681,7 @@ class TuneWindow(QtWidgets.QMainWindow):
             threshold=dp.threshold, min_area=dp.min_area,
             max_area=dp.max_area, morph_kernel=dp.morph_kernel,
             dilate_iters=dp.dilate_iters, erode_iters=dp.erode_iters,
+            min_solidity=dp.min_solidity, max_axis_ratio=dp.max_axis_ratio,
         )
         overlay = render_overlay(
             frame, self._sidecar.arena, detections,
@@ -616,6 +730,7 @@ class TuneWindow(QtWidgets.QMainWindow):
         counts = self._counts_across_sample()
         if counts:
             self._lbl_agg.setText(self._summarise_counts(counts))
+        self._lbl_shape.setText(self._summarise_shape(detections))
 
     def _render_static_image(self, gray: np.ndarray, *, label: str) -> None:
         overlay = render_overlay(
@@ -637,10 +752,28 @@ class TuneWindow(QtWidgets.QMainWindow):
                 threshold=dp.threshold, min_area=dp.min_area,
                 max_area=dp.max_area, morph_kernel=dp.morph_kernel,
                 dilate_iters=dp.dilate_iters, erode_iters=dp.erode_iters,
+                min_solidity=dp.min_solidity, max_axis_ratio=dp.max_axis_ratio,
                 keep_contour=False,
             )
             out.append(len(dets))
         return out
+
+    def _summarise_shape(self, detections: list[Detection]) -> str:
+        if not detections:
+            return "Shape: no detections this frame"
+        sols = [d.solidity for d in detections]
+        ratios = [
+            d.major_axis_px / d.minor_axis_px
+            for d in detections if d.minor_axis_px > 0
+        ]
+        sol_med = statistics.median(sols)
+        sol_min = min(sols)
+        ratio_med = statistics.median(ratios) if ratios else 0.0
+        ratio_max = max(ratios) if ratios else 0.0
+        return (
+            f"Shape: solidity median {sol_med:.2f} (min {sol_min:.2f}), "
+            f"axis-ratio median {ratio_med:.1f} (max {ratio_max:.1f})"
+        )
 
     def _summarise_counts(self, counts: list[int]) -> str:
         mean = statistics.fmean(counts)
