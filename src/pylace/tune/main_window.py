@@ -164,20 +164,21 @@ class TuneWindow(QtWidgets.QMainWindow):
         return wrap
 
     def _build_right_panel(self) -> QtWidgets.QWidget:
-        scroll = QtWidgets.QScrollArea(self)
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setMinimumWidth(320)
-
-        wrap = QtWidgets.QWidget(scroll)
+        wrap = QtWidgets.QWidget(self)
+        wrap.setMinimumWidth(360)
         v = QtWidgets.QVBoxLayout(wrap)
-        v.addWidget(self._build_detection_group(wrap))
-        v.addWidget(self._build_background_group(wrap))
-        v.addWidget(self._build_tracking_group(wrap))
-        v.addWidget(self._build_preview_group(wrap))
-        v.addWidget(self._build_display_group(wrap))
+        v.setContentsMargins(4, 4, 4, 4)
+
+        tabs = QtWidgets.QTabWidget(wrap)
+        tabs.addTab(self._build_detection_page(tabs), "Detection")
+        tabs.addTab(self._build_background_page(tabs), "Background")
+        tabs.addTab(self._build_tracking_page(tabs), "Tracking")
+        tabs.addTab(self._build_view_page(tabs), "View")
+        v.addWidget(tabs)
+
+        v.addWidget(self._h_separator(wrap))
         v.addWidget(self._build_stats_group(wrap))
-        v.addStretch(1)
+        v.addWidget(self._h_separator(wrap))
 
         button_row = QtWidgets.QHBoxLayout()
         save = QtWidgets.QPushButton("Save", wrap)
@@ -206,31 +207,60 @@ class TuneWindow(QtWidgets.QMainWindow):
         edit_bg.clicked.connect(self._on_edit_background)
         v.addWidget(edit_bg)
 
-        scroll.setWidget(wrap)
-        return scroll
+        return wrap
 
-    def _build_detection_group(self, parent: QtWidgets.QWidget) -> QtWidgets.QGroupBox:
-        box = QtWidgets.QGroupBox("Detection", parent)
-        form = QtWidgets.QFormLayout(box)
+    def _h_separator(self, parent: QtWidgets.QWidget) -> QtWidgets.QFrame:
+        line = QtWidgets.QFrame(parent)
+        line.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+        line.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
+        return line
+
+    def _build_detection_page(self, parent: QtWidgets.QWidget) -> QtWidgets.QWidget:
+        page = QtWidgets.QWidget(parent)
+        form = QtWidgets.QFormLayout(page)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         dp = self._params.detection
-        self._sb_threshold = self._spin(form, "Threshold", dp.threshold, 0, 255)
-        self._sb_min_area = self._spin(form, "Min area (px)", dp.min_area, 1, 1_000_000)
-        self._sb_max_area = self._spin(form, "Max area (px)", dp.max_area, 1, 1_000_000)
-        self._sb_morph = self._spin(form, "Morph kernel", dp.morph_kernel, 0, 21)
-        self._sb_dilate = self._spin(form, "Dilate iters", dp.dilate_iters, 0, 20)
-        self._sb_erode = self._spin(form, "Erode iters", dp.erode_iters, 0, 20)
+        self._sb_threshold = self._spin(
+            form, "Threshold", dp.threshold, 0, 255,
+            tip="Pixel intensity below which a foreground pixel survives "
+                "after background subtraction. Lower threshold = more "
+                "permissive (more candidate blobs).",
+        )
+        self._sb_min_area = self._spin(
+            form, "Min area (px)", dp.min_area, 1, 1_000_000,
+            tip="Smallest contour kept. Below this, blobs are dust / noise / "
+                "shadows of legs.",
+        )
+        self._sb_max_area = self._spin(
+            form, "Max area (px)", dp.max_area, 1, 1_000_000,
+            tip="Largest contour kept. Above this, the blob is two animals "
+                "merged into a chain or part of the arena rim.",
+        )
+        self._sb_morph = self._spin(
+            form, "Morph kernel", dp.morph_kernel, 0, 21,
+            tip="Square kernel (px) used by the post-threshold open/close "
+                "morphology pass. Smooths jagged boundaries.",
+        )
+        self._sb_dilate = self._spin(
+            form, "Dilate iters", dp.dilate_iters, 0, 20,
+            tip="How many dilate passes to run after threshold. Use to "
+                "merge adjacent fragments of the same fly into one blob.",
+        )
+        self._sb_erode = self._spin(
+            form, "Erode iters", dp.erode_iters, 0, 20,
+            tip="How many erode passes to run after threshold. Use to "
+                "break two flies that are nearly touching.",
+        )
         self._sb_min_sol = self._dspin(
             form, "Min solidity (0=off)", dp.min_solidity, 0.0, 1.0, 0.01,
-        )
-        self._sb_min_sol.setToolTip(
-            "0 disables. ~0.85 rejects diffuse shadows; lower for side-lying "
-            "flies whose silhouette is less convex.",
+            tip="Solidity = area / convex-hull area. 0 disables the filter. "
+                "~0.85 rejects diffuse shadows; lower (~0.7) for side-lying "
+                "flies whose silhouette is less convex.",
         )
         self._sb_max_axis = self._dspin(
             form, "Max axis ratio (0=off)", dp.max_axis_ratio, 0.0, 30.0, 0.5,
-        )
-        self._sb_max_axis.setToolTip(
-            "0 disables. ~5.0 rejects long thin streaks (wing reflections).",
+            tip="major / minor axis ratio. 0 disables. ~5.0 rejects long thin "
+                "streaks (wing reflections, antennae artefacts).",
         )
         for sb in (
             self._sb_threshold, self._sb_min_area, self._sb_max_area,
@@ -239,71 +269,107 @@ class TuneWindow(QtWidgets.QMainWindow):
             sb.valueChanged.connect(self._on_detection_changed)
         for dsb in (self._sb_min_sol, self._sb_max_axis):
             dsb.valueChanged.connect(self._on_detection_changed)
-        return box
+        return page
 
-    def _build_background_group(self, parent: QtWidgets.QWidget) -> QtWidgets.QGroupBox:
-        box = QtWidgets.QGroupBox("Background (projection pair)", parent)
-        form = QtWidgets.QFormLayout(box)
+    def _build_background_page(self, parent: QtWidgets.QWidget) -> QtWidgets.QWidget:
+        page = QtWidgets.QWidget(parent)
+        form = QtWidgets.QFormLayout(page)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         bp = self._params.background
-        self._sb_bg_n = self._spin(form, "n_frames", bp.n_frames, 1, 1000)
-        self._sb_bg_start = self._dspin(form, "start_frac", bp.start_frac, 0.0, 1.0, 0.01)
-        self._sb_bg_end = self._dspin(form, "end_frac", bp.end_frac, 0.0, 1.0, 0.01)
+        self._sb_bg_n = self._spin(
+            form, "n_frames", bp.n_frames, 1, 1000,
+            tip="Number of frames sampled to build the projection pair "
+                "(per-pixel max + min). More frames = more robust bg, slower.",
+        )
+        self._sb_bg_start = self._dspin(
+            form, "start_frac", bp.start_frac, 0.0, 1.0, 0.01,
+            tip="Fraction of the video where bg sampling begins (0..1). "
+                "Skip the first chunk if the camera is settling.",
+        )
+        self._sb_bg_end = self._dspin(
+            form, "end_frac", bp.end_frac, 0.0, 1.0, 0.01,
+            tip="Fraction of the video where bg sampling ends (0..1).",
+        )
 
-        self._cb_polarity = QtWidgets.QComboBox(box)
+        self._cb_polarity = QtWidgets.QComboBox(page)
         self._cb_polarity.addItem("Dark on light (max → detection)", "dark_on_light")
         self._cb_polarity.addItem("Light on dark (min → detection)", "light_on_dark")
         idx = 0 if bp.polarity == "dark_on_light" else 1
         self._cb_polarity.setCurrentIndex(idx)
         self._cb_polarity.currentIndexChanged.connect(self._on_polarity_changed)
-        form.addRow("Polarity", self._cb_polarity)
+        self._add_form_row(
+            form, "Polarity", self._cb_polarity,
+            tip="Dark animals on a bright arena → max-projection feeds "
+                "detection. Bright animals on a dark arena → min-projection. "
+                "Both projections are always saved; the unused one becomes "
+                "the trail/heatmap image.",
+        )
 
-        rebuild = QtWidgets.QPushButton("Rebuild background", box)
+        rebuild = QtWidgets.QPushButton("Rebuild background", page)
         rebuild.clicked.connect(self._on_rebuild_background)
         form.addRow(rebuild)
-        return box
+        return page
 
-    def _build_tracking_group(self, parent: QtWidgets.QWidget) -> QtWidgets.QGroupBox:
-        box = QtWidgets.QGroupBox("Tracking + chain split (saved → pylace-detect)", parent)
-        form = QtWidgets.QFormLayout(box)
+    def _build_tracking_page(self, parent: QtWidgets.QWidget) -> QtWidgets.QWidget:
+        page = QtWidgets.QWidget(parent)
+        form = QtWidgets.QFormLayout(page)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         tp = self._params.tracking
+
+        info = QtWidgets.QLabel(
+            "These knobs are not applied in the live preview (tracking is "
+            "sequential).\nThey are saved into the params sidecar and used by "
+            "the next pylace-detect run.",
+            page,
+        )
+        info.setWordWrap(True)
+        info.setStyleSheet("color: gray; font-style: italic;")
+        form.addRow(info)
 
         self._cb_track_enabled = QtWidgets.QCheckBox("Enable Hungarian tracker")
         self._cb_track_enabled.setChecked(tp.enabled)
-        form.addRow(self._cb_track_enabled)
+        self._add_form_row(
+            form, "", self._cb_track_enabled,
+            tip="Off = pylace-detect emits raw detections without track IDs. "
+                "On = each detection gets a track_id assigned via Hungarian "
+                "centroid matching across frames.",
+        )
 
         self._sb_n_animals = self._spin(
             form, "N animals (0 = auto)", tp.n_animals or 0, 0, 100,
-        )
-        self._sb_n_animals.setToolTip(
-            "Set to the known animal count for fixed-N mode (LACE-paper "
-            "assumption). 0 lets tracks be born and retired automatically.",
+            tip="Set to the known animal count for fixed-N mode (the LACE-"
+                "paper assumption). In fixed-N mode tracks never die during "
+                "occlusion. 0 = dynamic-N: tracks are born when a detection "
+                "appears and retired after Max missed frames.",
         )
         self._sb_track_dist = self._dspin(
             form, "Max distance (px)", tp.max_distance_px, 0.0, 5000.0, 5.0,
+            tip="In dynamic-N mode, two same-track positions farther apart "
+                "than this in successive frames cannot be matched. Ignored "
+                "in fixed-N mode (the N animals must be matched to N tracks).",
         )
         self._sb_track_missed = self._spin(
             form, "Max missed frames", tp.max_missed_frames, 0, 1000,
+            tip="In dynamic-N mode, a track unmatched for more than this "
+                "many frames is retired. Ignored in fixed-N mode.",
         )
         self._sb_expected_area = self._dspin(
             form, "Expected animal area px (0 = auto)",
             tp.expected_animal_area_px or 0.0, 0.0, 1_000_000.0, 50.0,
-        )
-        self._sb_expected_area.setToolTip(
-            "Chain splitter cuts a blob whose area exceeds 1.5× this value. "
-            "0 = auto-learn the median from the first frames at runtime.",
+            tip="Chain splitter cuts a blob whose area exceeds 1.5× this "
+                "value perpendicular to its major axis (LACE Problem 5/6/7). "
+                "0 = auto-learn the median from the first ~50 frames at "
+                "runtime.",
         )
         self._sb_area_w = self._dspin(
             form, "Area cost weight", tp.area_cost_weight, 0.0, 10.0, 0.01,
-        )
-        self._sb_area_w.setToolTip(
-            "Adds |Δarea|·w to the Hungarian cost. Helps disambiguate two "
-            "animals at similar positions but different sizes.",
+            tip="Adds |Δarea|·w to the Hungarian cost so size differences "
+                "tip ambiguous matches the right way. Try 0.05.",
         )
         self._sb_per_w = self._dspin(
             form, "Perimeter cost weight", tp.perimeter_cost_weight, 0.0, 10.0, 0.01,
-        )
-        self._sb_per_w.setToolTip(
-            "Adds |Δperimeter|·w to the Hungarian cost.",
+            tip="Adds |Δperimeter|·w to the Hungarian cost. Useful when "
+                "two animals have similar areas but very different shapes.",
         )
 
         self._cb_track_enabled.toggled.connect(self._on_tracking_changed)
@@ -314,48 +380,85 @@ class TuneWindow(QtWidgets.QMainWindow):
             self._sb_area_w, self._sb_per_w,
         ):
             dsb.valueChanged.connect(self._on_tracking_changed)
-        return box
+        return page
 
-    def _build_preview_group(self, parent: QtWidgets.QWidget) -> QtWidgets.QGroupBox:
-        box = QtWidgets.QGroupBox("Preview window", parent)
-        form = QtWidgets.QFormLayout(box)
+    def _build_view_page(self, parent: QtWidgets.QWidget) -> QtWidgets.QWidget:
+        page = QtWidgets.QWidget(parent)
+        v = QtWidgets.QVBoxLayout(page)
+
+        prev_box = QtWidgets.QGroupBox("Preview window", page)
+        prev_form = QtWidgets.QFormLayout(prev_box)
+        prev_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         self._sb_prev_start = self._dspin(
-            form, "Start (s)", self._preview_start_s, 0.0, self._video_duration_s, 1.0,
+            prev_form, "Start (s)", self._preview_start_s,
+            0.0, self._video_duration_s, 1.0,
+            tip="Earliest source-time the tuner samples preview frames from.",
         )
         self._sb_prev_end = self._dspin(
-            form, "End (s)", self._preview_end_s, 0.0, self._video_duration_s, 1.0,
+            prev_form, "End (s)", self._preview_end_s,
+            0.0, self._video_duration_s, 1.0,
+            tip="Latest source-time the tuner samples preview frames from.",
         )
-        self._sb_prev_n = self._spin(form, "Sample N frames", self._preview_n, 1, 200)
-        resample = QtWidgets.QPushButton("Resample", box)
+        self._sb_prev_n = self._spin(
+            prev_form, "Sample N frames", self._preview_n, 1, 200,
+            tip="Number of evenly-spaced preview frames pulled from the "
+                "Start..End window. Larger = better Stats average but slower.",
+        )
+        resample = QtWidgets.QPushButton("Resample", prev_box)
         resample.clicked.connect(self._on_resample)
-        form.addRow(resample)
-        return box
+        prev_form.addRow(resample)
+        v.addWidget(prev_box)
 
-    def _build_display_group(self, parent: QtWidgets.QWidget) -> QtWidgets.QGroupBox:
-        box = QtWidgets.QGroupBox("Display", parent)
-        v = QtWidgets.QVBoxLayout(box)
+        disp_box = QtWidgets.QGroupBox("Display", page)
+        dv = QtWidgets.QVBoxLayout(disp_box)
 
         view_row = QtWidgets.QHBoxLayout()
-        view_row.addWidget(QtWidgets.QLabel("Show:", box))
-        self._cb_view = QtWidgets.QComboBox(box)
+        view_row.addWidget(QtWidgets.QLabel("Show:", disp_box))
+        self._cb_view = QtWidgets.QComboBox(disp_box)
         self._cb_view.addItem("Sample frame", "frame")
         self._cb_view.addItem("Detection bg", "detection_bg")
         self._cb_view.addItem("Trail bg (animal heatmap)", "trail_bg")
         self._cb_view.currentIndexChanged.connect(self._on_view_mode_changed)
+        self._cb_view.setToolTip(
+            "Sample frame = the currently-selected frame from the preview "
+            "window. Detection bg = the projection that detection subtracts. "
+            "Trail bg = the opposite projection — where the animal lives "
+            "most of the time.",
+        )
         view_row.addWidget(self._cb_view, stretch=1)
-        v.addLayout(view_row)
+        view_row.addWidget(self._help_button(self._cb_view.toolTip()))
+        dv.addLayout(view_row)
 
-        self._cb_mask = self._check(v, "Foreground mask tint", self._show_mask)
-        self._cb_arena = self._check(v, "Arena outline", self._show_arena)
-        self._cb_contours = self._check(v, "Contours", self._show_contours)
-        self._cb_ellipses = self._check(v, "Ellipses", self._show_ellipses)
-        self._cb_centroids = self._check(v, "Centroids", self._show_centroids)
+        self._cb_mask = self._check(
+            dv, "Foreground mask tint", self._show_mask,
+            tip="Tints the pixels that survive threshold + morphology, so "
+                "you can see what the contour finder will see.",
+        )
+        self._cb_arena = self._check(
+            dv, "Arena outline", self._show_arena,
+            tip="Draws the calibrated arena boundary on the overlay.",
+        )
+        self._cb_contours = self._check(
+            dv, "Contours", self._show_contours,
+            tip="Draws each detection's raw OpenCV contour.",
+        )
+        self._cb_ellipses = self._check(
+            dv, "Ellipses", self._show_ellipses,
+            tip="Draws the fitted ellipse for each detection (LACE-style "
+                "ellipse hypothesis).",
+        )
+        self._cb_centroids = self._check(
+            dv, "Centroids", self._show_centroids,
+            tip="Marks each detection's centroid with a coloured pixel.",
+        )
         for cb in (
             self._cb_mask, self._cb_arena, self._cb_contours,
             self._cb_ellipses, self._cb_centroids,
         ):
             cb.toggled.connect(self._on_display_toggled)
-        return box
+        v.addWidget(disp_box)
+        v.addStretch(1)
+        return page
 
     def _build_stats_group(self, parent: QtWidgets.QWidget) -> QtWidgets.QGroupBox:
         box = QtWidgets.QGroupBox("Stats", parent)
@@ -364,42 +467,103 @@ class TuneWindow(QtWidgets.QMainWindow):
         self._lbl_this = QtWidgets.QLabel("This frame: — detections", box)
         self._lbl_agg = QtWidgets.QLabel("Across sample: — / —", box)
         self._lbl_shape = QtWidgets.QLabel("Shape: —", box)
-        v.addWidget(self._lbl_frame)
-        v.addWidget(self._lbl_this)
-        v.addWidget(self._lbl_agg)
-        v.addWidget(self._lbl_shape)
+        for lbl in (self._lbl_frame, self._lbl_this, self._lbl_agg, self._lbl_shape):
+            lbl.setWordWrap(True)
+            v.addWidget(lbl)
         return box
 
     # ── Widget builders ────────────────────────────────────────────────
 
     def _spin(
         self, form: QtWidgets.QFormLayout, label: str, value: int, lo: int, hi: int,
+        *, tip: str | None = None,
     ) -> QtWidgets.QSpinBox:
         sb = QtWidgets.QSpinBox()
         sb.setRange(lo, hi)
         sb.setValue(int(value))
-        form.addRow(label, sb)
+        self._add_form_row(form, label, sb, tip=tip)
         return sb
 
     def _dspin(
         self, form: QtWidgets.QFormLayout, label: str,
         value: float, lo: float, hi: float, step: float,
+        *, tip: str | None = None,
     ) -> QtWidgets.QDoubleSpinBox:
         sb = QtWidgets.QDoubleSpinBox()
         sb.setRange(lo, hi)
         sb.setSingleStep(step)
         sb.setDecimals(3)
         sb.setValue(float(value))
-        form.addRow(label, sb)
+        self._add_form_row(form, label, sb, tip=tip)
         return sb
 
     def _check(
         self, layout: QtWidgets.QVBoxLayout, label: str, value: bool,
+        *, tip: str | None = None,
     ) -> QtWidgets.QCheckBox:
+        row = QtWidgets.QWidget()
+        h = QtWidgets.QHBoxLayout(row)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.setSpacing(4)
         cb = QtWidgets.QCheckBox(label)
         cb.setChecked(value)
-        layout.addWidget(cb)
+        h.addWidget(cb)
+        if tip:
+            cb.setToolTip(tip)
+            h.addWidget(self._help_button(tip))
+        h.addStretch(1)
+        layout.addWidget(row)
         return cb
+
+    def _add_form_row(
+        self,
+        form: QtWidgets.QFormLayout,
+        label: str,
+        field: QtWidgets.QWidget,
+        *,
+        tip: str | None = None,
+    ) -> None:
+        """Add ``[label] [?] field`` to a QFormLayout. ``?`` only appears if tip."""
+        if not tip:
+            if label:
+                form.addRow(label, field)
+            else:
+                form.addRow(field)
+            return
+        field.setToolTip(tip)
+        label_widget = QtWidgets.QWidget()
+        h = QtWidgets.QHBoxLayout(label_widget)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.setSpacing(2)
+        if label:
+            h.addWidget(QtWidgets.QLabel(label))
+        h.addWidget(self._help_button(tip))
+        h.addStretch(1)
+        form.addRow(label_widget, field)
+
+    def _help_button(self, tip: str) -> QtWidgets.QToolButton:
+        """A small clickable ``?`` that pops the given tip near the cursor."""
+        btn = QtWidgets.QToolButton()
+        btn.setText("?")
+        btn.setToolTip(tip)
+        btn.setAutoRaise(True)
+        btn.setCursor(Qt.CursorShape.WhatsThisCursor)
+        btn.setStyleSheet(
+            "QToolButton {"
+            "  color: #2a78c2; font-weight: bold; font-size: 10pt;"
+            "  border: 1px solid #2a78c2; border-radius: 8px;"
+            "  min-width: 16px; max-width: 16px;"
+            "  min-height: 16px; max-height: 16px;"
+            "  padding: 0px;"
+            "}"
+            "QToolButton:hover { background-color: #e6f0fa; }"
+        )
+        btn.clicked.connect(
+            lambda _checked=False, t=tip: QtWidgets.QToolTip.showText(
+                QtGui.QCursor.pos(), t,
+            )
+        )
+        return btn
 
     # ── Event handlers ─────────────────────────────────────────────────
 
