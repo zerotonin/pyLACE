@@ -244,47 +244,135 @@ def test_pylace_detect_explicit_flag_overrides_sibling_tuning_params(
 def test_pylace_detect_writes_background_sidecar_and_reuses_it(
     video_and_sidecar: tuple[Path, Path], tmp_path: Path,
 ) -> None:
-    """First run writes the background PNG; second run reads it back."""
-    from pylace.detect.background import default_background_path
+    """First run writes the max + min PNG pair; second run reads them back."""
+    from pylace.detect.background import default_background_paths
 
     video, _ = video_and_sidecar
-    bg_path = default_background_path(video)
-    if bg_path.exists():
-        bg_path.unlink()
+    max_path, min_path = default_background_paths(video)
+    for p in (max_path, min_path):
+        if p.exists():
+            p.unlink()
 
     rc = cli.main([str(video), "--out", str(tmp_path / "first.csv")])
     assert rc == 0
-    assert bg_path.exists()
-    first_mtime = bg_path.stat().st_mtime
+    assert max_path.exists() and min_path.exists()
+    first_mtime = max_path.stat().st_mtime
 
     rc = cli.main([str(video), "--out", str(tmp_path / "second.csv")])
     assert rc == 0
-    # Sidecar reused on second run; mtime unchanged.
-    assert bg_path.stat().st_mtime == first_mtime
+    assert max_path.stat().st_mtime == first_mtime
 
 
 def test_pylace_detect_rebuild_background_flag_overwrites(
     video_and_sidecar: tuple[Path, Path], tmp_path: Path,
 ) -> None:
-    from pylace.detect.background import default_background_path
+    from pylace.detect.background import default_background_paths
 
     video, _ = video_and_sidecar
-    bg_path = default_background_path(video)
+    max_path, _ = default_background_paths(video)
     cli.main([str(video), "--out", str(tmp_path / "first.csv")])
-    assert bg_path.exists()
+    assert max_path.exists()
 
-    # Touch the sidecar's mtime back to a known value, then force rebuild.
     import os
     import time
 
     old_time = time.time() - 60
-    os.utime(bg_path, (old_time, old_time))
+    os.utime(max_path, (old_time, old_time))
     rc = cli.main([
         str(video), "--out", str(tmp_path / "rebuild.csv"),
         "--rebuild-background",
     ])
     assert rc == 0
-    assert bg_path.stat().st_mtime > old_time + 1
+    assert max_path.stat().st_mtime > old_time + 1
+
+
+def test_pylace_detect_consumes_sibling_roi_sidecar(
+    video_and_sidecar: tuple[Path, Path], tmp_path: Path,
+) -> None:
+    """A subtractive ROI over the blob's path should suppress detections."""
+    from pylace.annotator.geometry import Circle, Rectangle
+    from pylace.roi.geometry import ROI, ROISet
+    from pylace.roi.sidecar import ROISidecar, default_rois_path, write_rois
+
+    video, _ = video_and_sidecar
+    # ROI = full arena MINUS the strip the blob walks across.
+    rois = ROISet(
+        rois=[
+            ROI(shape=Rectangle.from_two_points((0.0, 0.0), (80.0, 80.0))),
+            ROI(
+                shape=Rectangle.from_two_points((0.0, 30.0), (80.0, 50.0)),
+                operation="subtract",
+            ),
+        ],
+    )
+    write_rois(
+        ROISidecar(video_path=str(video), video_sha256="0" * 64, roi_set=rois),
+        default_rois_path(video),
+    )
+
+    out = tmp_path / "with_rois.csv"
+    rc = cli.main([str(video), "--out", str(out)])
+    assert rc == 0
+    rows = list(csv.DictReader(out.read_text().splitlines()))
+    assert rows == []  # the blob stripe is masked out
+
+
+def test_pylace_detect_split_mode_tags_rows_with_roi_label(
+    video_and_sidecar: tuple[Path, Path], tmp_path: Path,
+) -> None:
+    """Split mode runs detection per add-ROI and tags rows with the label."""
+    from pylace.annotator.geometry import Rectangle
+    from pylace.roi.geometry import ROI, ROISet
+    from pylace.roi.sidecar import ROISidecar, default_rois_path, write_rois
+
+    video, _ = video_and_sidecar
+    rois = ROISet(
+        rois=[
+            ROI(
+                shape=Rectangle.from_two_points((0.0, 0.0), (40.0, 80.0)),
+                label="left",
+            ),
+            ROI(
+                shape=Rectangle.from_two_points((40.0, 0.0), (80.0, 80.0)),
+                label="right",
+            ),
+        ],
+        mode="split",
+    )
+    write_rois(
+        ROISidecar(video_path=str(video), video_sha256="0" * 64, roi_set=rois),
+        default_rois_path(video),
+    )
+
+    out = tmp_path / "split.csv"
+    rc = cli.main([str(video), "--out", str(out)])
+    assert rc == 0
+    rows = list(csv.DictReader(out.read_text().splitlines()))
+    labels = {r["roi_label"] for r in rows}
+    assert "left" in labels
+    assert "right" in labels
+
+
+def test_pylace_detect_no_rois_flag_bypasses_sidecar(
+    video_and_sidecar: tuple[Path, Path], tmp_path: Path,
+) -> None:
+    """``--no-rois`` should ignore an existing ROI sidecar."""
+    from pylace.annotator.geometry import Circle
+    from pylace.roi.geometry import ROI, ROISet
+    from pylace.roi.sidecar import ROISidecar, default_rois_path, write_rois
+
+    video, _ = video_and_sidecar
+    rois = ROISet(rois=[ROI(shape=Circle(0.0, 0.0, 1.0))])  # tiny corner ROI
+    write_rois(
+        ROISidecar(video_path=str(video), video_sha256="0" * 64, roi_set=rois),
+        default_rois_path(video),
+    )
+
+    out = tmp_path / "ignore_rois.csv"
+    rc = cli.main([str(video), "--out", str(out), "--no-rois"])
+    assert rc == 0
+    rows = list(csv.DictReader(out.read_text().splitlines()))
+    assert rows  # detections happen because ROI was bypassed
 
 
 def test_pylace_detect_dilate_and_erode_flags_propagate(

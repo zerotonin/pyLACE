@@ -18,8 +18,9 @@ from pylace.annotator.sidecar import (
 )
 from pylace.detect.arena_mask import arena_mask
 from pylace.detect.background import (
-    build_max_projection_background,
-    default_background_path,
+    compute_projection_pair,
+    default_background_paths,
+    detection_and_trail,
     load_background_png,
     save_background_png,
 )
@@ -56,6 +57,9 @@ class TuneWindow(QtWidgets.QMainWindow):
 
         self._mask = arena_mask(sidecar.arena, sidecar.video.frame_size)
         self._background: np.ndarray | None = None
+        self._trail: np.ndarray | None = None
+        self._bg_max: np.ndarray | None = None
+        self._bg_min: np.ndarray | None = None
         self._frames: list[np.ndarray] = []
         self._frame_indices: list[int] = []
         self._current = 0
@@ -73,7 +77,7 @@ class TuneWindow(QtWidgets.QMainWindow):
         self._show_contours = False
         self._show_ellipses = True
         self._show_centroids = True
-        self._show_background = False
+        self._view_mode: str = "frame"  # "frame" | "detection_bg" | "trail_bg"
 
         self.setWindowTitle(f"pylace-tune — {video.name}")
         self._build_ui()
@@ -107,13 +111,16 @@ class TuneWindow(QtWidgets.QMainWindow):
         self._render_current()
 
     def _load_or_compute_background(self) -> None:
-        """Prefer a saved sidecar over a fresh max-projection at startup."""
-        bg_path = default_background_path(self._video)
-        if bg_path.exists():
+        """Prefer the saved max+min sidecars over a fresh recompute at startup."""
+        max_path, min_path = default_background_paths(self._video)
+        if max_path.exists() and min_path.exists():
             try:
-                self._background = load_background_png(bg_path)
+                self._bg_max = load_background_png(max_path)
+                self._bg_min = load_background_png(min_path)
+                self._apply_polarity()
                 self.statusBar().showMessage(
-                    f"Loaded background from {bg_path.name}", 4000,
+                    f"Loaded background pair from {max_path.name} / {min_path.name}",
+                    4000,
                 )
                 return
             except OSError:
@@ -218,12 +225,21 @@ class TuneWindow(QtWidgets.QMainWindow):
         return box
 
     def _build_background_group(self, parent: QtWidgets.QWidget) -> QtWidgets.QGroupBox:
-        box = QtWidgets.QGroupBox("Background (max-projection)", parent)
+        box = QtWidgets.QGroupBox("Background (projection pair)", parent)
         form = QtWidgets.QFormLayout(box)
         bp = self._params.background
         self._sb_bg_n = self._spin(form, "n_frames", bp.n_frames, 1, 1000)
         self._sb_bg_start = self._dspin(form, "start_frac", bp.start_frac, 0.0, 1.0, 0.01)
         self._sb_bg_end = self._dspin(form, "end_frac", bp.end_frac, 0.0, 1.0, 0.01)
+
+        self._cb_polarity = QtWidgets.QComboBox(box)
+        self._cb_polarity.addItem("Dark on light (max → detection)", "dark_on_light")
+        self._cb_polarity.addItem("Light on dark (min → detection)", "light_on_dark")
+        idx = 0 if bp.polarity == "dark_on_light" else 1
+        self._cb_polarity.setCurrentIndex(idx)
+        self._cb_polarity.currentIndexChanged.connect(self._on_polarity_changed)
+        form.addRow("Polarity", self._cb_polarity)
+
         rebuild = QtWidgets.QPushButton("Rebuild background", box)
         rebuild.clicked.connect(self._on_rebuild_background)
         form.addRow(rebuild)
@@ -247,14 +263,24 @@ class TuneWindow(QtWidgets.QMainWindow):
     def _build_display_group(self, parent: QtWidgets.QWidget) -> QtWidgets.QGroupBox:
         box = QtWidgets.QGroupBox("Display", parent)
         v = QtWidgets.QVBoxLayout(box)
-        self._cb_show_bg = self._check(v, "Show background image", self._show_background)
+
+        view_row = QtWidgets.QHBoxLayout()
+        view_row.addWidget(QtWidgets.QLabel("Show:", box))
+        self._cb_view = QtWidgets.QComboBox(box)
+        self._cb_view.addItem("Sample frame", "frame")
+        self._cb_view.addItem("Detection bg", "detection_bg")
+        self._cb_view.addItem("Trail bg (animal heatmap)", "trail_bg")
+        self._cb_view.currentIndexChanged.connect(self._on_view_mode_changed)
+        view_row.addWidget(self._cb_view, stretch=1)
+        v.addLayout(view_row)
+
         self._cb_mask = self._check(v, "Foreground mask tint", self._show_mask)
         self._cb_arena = self._check(v, "Arena outline", self._show_arena)
         self._cb_contours = self._check(v, "Contours", self._show_contours)
         self._cb_ellipses = self._check(v, "Ellipses", self._show_ellipses)
         self._cb_centroids = self._check(v, "Centroids", self._show_centroids)
         for cb in (
-            self._cb_show_bg, self._cb_mask, self._cb_arena, self._cb_contours,
+            self._cb_mask, self._cb_arena, self._cb_contours,
             self._cb_ellipses, self._cb_centroids,
         ):
             cb.toggled.connect(self._on_display_toggled)
@@ -319,12 +345,29 @@ class TuneWindow(QtWidgets.QMainWindow):
         self._render_current()
 
     def _on_display_toggled(self) -> None:
-        self._show_background = self._cb_show_bg.isChecked()
         self._show_mask = self._cb_mask.isChecked()
         self._show_arena = self._cb_arena.isChecked()
         self._show_contours = self._cb_contours.isChecked()
         self._show_ellipses = self._cb_ellipses.isChecked()
         self._show_centroids = self._cb_centroids.isChecked()
+        self._render_current()
+
+    def _on_view_mode_changed(self, _index: int) -> None:
+        self._view_mode = self._cb_view.currentData() or "frame"
+        self._render_current()
+
+    def _on_polarity_changed(self, _index: int) -> None:
+        new_polarity = self._cb_polarity.currentData() or "dark_on_light"
+        self._params = TuningParams(
+            detection=self._params.detection,
+            background=BackgroundParams(
+                n_frames=self._params.background.n_frames,
+                start_frac=self._params.background.start_frac,
+                end_frac=self._params.background.end_frac,
+                polarity=new_polarity,
+            ),
+        )
+        self._apply_polarity()
         self._render_current()
 
     def _on_rebuild_background(self) -> None:
@@ -385,15 +428,28 @@ class TuneWindow(QtWidgets.QMainWindow):
             return
         edited = dlg.result_bg()
         self._background = edited
+        # The dialog edits the *detection* bg, which is whichever projection
+        # the current polarity routes to. Save back to that projection's
+        # sidecar so the next pylace-detect run picks it up.
+        max_path, min_path = default_background_paths(self._video)
+        target_path = (
+            max_path
+            if self._params.background.polarity == "dark_on_light"
+            else min_path
+        )
+        if self._params.background.polarity == "dark_on_light":
+            self._bg_max = edited
+        else:
+            self._bg_min = edited
         try:
-            save_background_png(edited, default_background_path(self._video))
+            save_background_png(edited, target_path)
         except OSError as exc:
             self.statusBar().showMessage(
                 f"Background edited but could not save: {exc}", 6000,
             )
         else:
             self.statusBar().showMessage(
-                "Background edited and saved.", 4000,
+                f"Edited bg saved to {target_path.name}.", 4000,
             )
         self._render_current()
 
@@ -476,28 +532,34 @@ class TuneWindow(QtWidgets.QMainWindow):
 
     def _rebuild_background(self) -> None:
         bp = self._params.background
-        self._background = build_max_projection_background(
+        self._bg_max, self._bg_min = compute_projection_pair(
             self._video, n_frames=bp.n_frames,
             start_frac=bp.start_frac, end_frac=bp.end_frac,
         )
+        max_path, min_path = default_background_paths(self._video)
         try:
-            save_background_png(
-                self._background, default_background_path(self._video),
-            )
+            save_background_png(self._bg_max, max_path)
+            save_background_png(self._bg_min, min_path)
         except OSError as exc:
             self.statusBar().showMessage(f"Could not save background: {exc}", 5000)
+        self._apply_polarity()
+
+    def _apply_polarity(self) -> None:
+        """Route the cached max/min projections into detection_bg / trail_bg."""
+        if self._bg_max is None or self._bg_min is None:
+            return
+        self._background, self._trail = detection_and_trail(
+            self._bg_max, self._bg_min, self._params.background.polarity,
+        )
 
     def _render_current(self) -> None:
         if not self._frames or self._background is None:
             return
-        if self._show_background:
-            overlay = render_overlay(
-                self._background, self._sidecar.arena, [],
-                show_arena=self._show_arena,
-                show_contours=False, show_ellipses=False, show_centroids=False,
-            )
-            self._set_pixmap(overlay)
-            self._update_stats(detections=[], showing_bg=True)
+        if self._view_mode == "detection_bg":
+            self._render_static_image(self._background, label="Detection bg")
+            return
+        if self._view_mode == "trail_bg" and self._trail is not None:
+            self._render_static_image(self._trail, label="Trail bg")
             return
         frame = self._frames[self._current]
         dp = self._params.detection
@@ -535,7 +597,10 @@ class TuneWindow(QtWidgets.QMainWindow):
         )
 
     def _update_stats(
-        self, detections: list[Detection], *, showing_bg: bool = False,
+        self,
+        detections: list[Detection],
+        *,
+        showing_label: str | None = None,
     ) -> None:
         if not self._frames:
             return
@@ -544,13 +609,22 @@ class TuneWindow(QtWidgets.QMainWindow):
         self._lbl_frame.setText(
             f"Frame: {self._current + 1} / {len(self._frames)}  (source idx {idx})",
         )
-        if showing_bg:
-            self._lbl_this.setText("Showing background image")
+        if showing_label is not None:
+            self._lbl_this.setText(f"Showing {showing_label}")
         else:
             self._lbl_this.setText(f"This frame: {len(detections)} detections")
         counts = self._counts_across_sample()
         if counts:
             self._lbl_agg.setText(self._summarise_counts(counts))
+
+    def _render_static_image(self, gray: np.ndarray, *, label: str) -> None:
+        overlay = render_overlay(
+            gray, self._sidecar.arena, [],
+            show_arena=self._show_arena,
+            show_contours=False, show_ellipses=False, show_centroids=False,
+        )
+        self._set_pixmap(overlay)
+        self._update_stats(detections=[], showing_label=label)
 
     def _counts_across_sample(self) -> list[int]:
         if self._background is None:

@@ -26,10 +26,12 @@ from pylace.detect.frame import (
 )
 
 CSV_COLUMNS = (
-    "frame_idx", "detection_idx",
+    "frame_idx", "roi_label", "detection_idx",
     "cx_px", "cy_px", "x_mm", "y_mm",
     "area_px", "major_axis_px", "minor_axis_px", "orientation_deg",
 )
+
+MERGED_ROI_LABEL = "_merged"
 
 
 @dataclass
@@ -38,6 +40,7 @@ class FrameResult:
 
     frame_idx: int
     detections: list[Detection]
+    roi_label: str = MERGED_ROI_LABEL
 
 
 def run_detection(
@@ -55,6 +58,7 @@ def run_detection(
     start_frame: int = 0,
     end_frame: int | None = None,
     background: np.ndarray | None = None,
+    extra_mask: np.ndarray | None = None,
 ) -> Iterator[FrameResult]:
     """Stream per-frame detections for a video against a sidecar.
 
@@ -93,6 +97,13 @@ def run_detection(
         else build_max_projection_background(video_path)
     )
     mask = arena_mask(sidecar.arena, sidecar.video.frame_size)
+    if extra_mask is not None:
+        if extra_mask.shape != mask.shape:
+            raise ValueError(
+                f"extra_mask shape {extra_mask.shape} does not match arena mask "
+                f"{mask.shape}.",
+            )
+        mask = mask & extra_mask.astype(bool)
 
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
@@ -159,7 +170,7 @@ def write_detections_csv(
                     (d.cx, d.cy), sidecar.world_frame, sidecar.calibration,
                 )
                 writer.writerow([
-                    fr.frame_idx, det_idx,
+                    fr.frame_idx, fr.roi_label, det_idx,
                     f"{d.cx:.3f}", f"{d.cy:.3f}",
                     f"{x_mm:.4f}", f"{y_mm:.4f}",
                     f"{d.area_px:.1f}",

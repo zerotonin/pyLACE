@@ -16,6 +16,8 @@ from pylace.detect.frame import (
     DEFAULT_THRESHOLD,
 )
 from pylace.detect.pipeline import run_detection, write_detections_csv
+from pylace.roi.mask import build_combined_mask, build_split_masks
+from pylace.roi.sidecar import default_rois_path, read_rois
 from pylace.tune.params import default_params_path, read_params
 
 DETECTIONS_SUFFIX = ".pylace_detections.csv"
@@ -69,36 +71,73 @@ def main(argv: list[str] | None = None) -> int:
     )
     print(
         f"  background: n_frames={background['n_frames']} "
-        f"start_frac={background['start_frac']} end_frac={background['end_frac']}"
+        f"start_frac={background['start_frac']} end_frac={background['end_frac']} "
+        f"polarity={background['polarity']}"
     )
-    from pylace.detect.background import load_or_build_background
+    from pylace.detect.background import load_or_build_background_pair
 
-    bg, bg_source = load_or_build_background(
+    bg, _trail, bg_source = load_or_build_background_pair(
         args.video,
         n_frames=background["n_frames"],
         start_frac=background["start_frac"],
         end_frac=background["end_frac"],
         force_rebuild=args.rebuild_background,
+        polarity=background["polarity"],
     )
     print(f"  background: {bg_source}")
 
-    results = run_detection(
-        args.video, sidecar,
-        threshold=detection["threshold"],
-        min_area=detection["min_area"],
-        max_area=detection["max_area"],
-        morph_kernel=detection["morph_kernel"],
-        dilate_iters=detection["dilate_iters"],
-        erode_iters=detection["erode_iters"],
-        every=args.every,
-        max_frames=args.max_frames,
+    plan = _resolve_roi_plan(args, sidecar)
+    for label, mask in plan:
+        if mask is not None:
+            kept = int(mask.sum())
+            total = int(mask.size)
+            print(
+                f"  rois[{label}]: {kept}/{total} pixels "
+                f"({100.0 * kept / total:.1f}%) inside ROI mask",
+            )
+
+    rows = _run_plan(
+        plan=plan,
+        video=args.video,
+        sidecar=sidecar,
+        out_path=out_path,
+        bg=bg,
+        detection=detection,
         start_frame=start_frame,
         end_frame=end_frame,
-        background=bg,
+        every=args.every,
+        max_frames=args.max_frames,
     )
-    rows = write_detections_csv(results, sidecar, out_path)
     print(f"Wrote {rows} detection rows.")
     return 0
+
+
+def _run_plan(
+    *, plan, video, sidecar, out_path, bg, detection,
+    start_frame, end_frame, every, max_frames,
+) -> int:
+    """Run detection for each (label, mask) entry in the ROI plan, into one CSV."""
+    def gen():
+        for label, mask in plan:
+            for fr in run_detection(
+                video, sidecar,
+                threshold=detection["threshold"],
+                min_area=detection["min_area"],
+                max_area=detection["max_area"],
+                morph_kernel=detection["morph_kernel"],
+                dilate_iters=detection["dilate_iters"],
+                erode_iters=detection["erode_iters"],
+                every=every,
+                max_frames=max_frames,
+                start_frame=start_frame,
+                end_frame=end_frame,
+                background=bg,
+                extra_mask=mask,
+            ):
+                fr.roi_label = label
+                yield fr
+
+    return write_detections_csv(gen(), sidecar, out_path)
 
 
 def _resolve_tuning_params(args: argparse.Namespace) -> tuple[dict, dict]:
@@ -119,7 +158,12 @@ def _resolve_tuning_params(args: argparse.Namespace) -> tuple[dict, dict]:
         "dilate_iters": DEFAULT_DILATE_ITERS,
         "erode_iters": DEFAULT_ERODE_ITERS,
     }
-    background: dict = {"n_frames": 50, "start_frac": 0.1, "end_frac": 0.9}
+    background: dict = {
+        "n_frames": 50,
+        "start_frac": 0.1,
+        "end_frac": 0.9,
+        "polarity": "dark_on_light",
+    }
 
     candidate = args.params if args.params else default_params_path(args.video)
     if candidate.exists():
@@ -136,6 +180,7 @@ def _resolve_tuning_params(args: argparse.Namespace) -> tuple[dict, dict]:
             "n_frames": tp.background.n_frames,
             "start_frac": tp.background.start_frac,
             "end_frac": tp.background.end_frac,
+            "polarity": tp.background.polarity,
         }
         print(f"Loaded tuned params from {candidate.name}.")
 
@@ -151,6 +196,35 @@ def _resolve_tuning_params(args: argparse.Namespace) -> tuple[dict, dict]:
         if value is not None:
             detection[key] = value
     return detection, background
+
+
+def _resolve_roi_plan(args: argparse.Namespace, sidecar):
+    """Decide what to detect against, returning a list of ``(label, mask)``.
+
+    - ``--no-rois`` or no sidecar: ``[("_merged", None)]`` (use arena mask only).
+    - merge mode: ``[("_merged", combined_mask)]``.
+    - split mode: one entry per add-ROI, label from ROI.label or ``roi_<i>``.
+    """
+    from pylace.detect.pipeline import MERGED_ROI_LABEL
+
+    if args.no_rois:
+        return [(MERGED_ROI_LABEL, None)]
+    candidate = args.rois if args.rois else default_rois_path(args.video)
+    if not candidate.exists():
+        return [(MERGED_ROI_LABEL, None)]
+
+    rois_sidecar = read_rois(candidate)
+    print(f"Loaded ROI sidecar from {candidate.name} (mode={rois_sidecar.roi_set.mode}).")
+    if rois_sidecar.roi_set.mode == "split":
+        pairs = build_split_masks(rois_sidecar.roi_set, sidecar.video.frame_size)
+        if not pairs:
+            print("  split mode but no add-ROIs found; falling back to whole arena.")
+            return [(MERGED_ROI_LABEL, None)]
+        return pairs
+    return [(
+        MERGED_ROI_LABEL,
+        build_combined_mask(rois_sidecar.roi_set, sidecar.video.frame_size),
+    )]
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -230,6 +304,20 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             "Force max-projection recompute even if a "
             "<video>.pylace_background.png sidecar already exists."
+        ),
+    )
+    p.add_argument(
+        "--rois", type=Path, default=None,
+        help=(
+            "ROI sidecar path. Defaults to <video>.pylace_rois.json if it "
+            "exists; the combined ROI mask is intersected with the arena "
+            "mask before detection runs."
+        ),
+    )
+    p.add_argument(
+        "--no-rois", action="store_true", dest="no_rois",
+        help=(
+            "Ignore any ROI sidecar and run detection on the whole arena."
         ),
     )
     return p

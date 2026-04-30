@@ -81,9 +81,9 @@ def test_save_load_background_round_trip(tmp_path: Path) -> None:
     assert np.array_equal(loaded, bg)
 
 
-def test_load_or_build_uses_sidecar_when_present(tmp_path: Path) -> None:
+def test_load_or_build_uses_sidecar_pair_when_present(tmp_path: Path) -> None:
     from pylace.detect.background import (
-        default_background_path,
+        default_background_paths,
         load_or_build_background,
         save_background_png,
     )
@@ -93,18 +93,24 @@ def test_load_or_build_uses_sidecar_when_present(tmp_path: Path) -> None:
     bright = np.full((h, w, 3), 220, dtype=np.uint8)
     _write_video(video, [bright] * 3)
 
-    # Pre-stage a deliberately distinctive saved background.
-    fake_bg = np.full((h, w), 99, dtype=np.uint8)
-    save_background_png(fake_bg, default_background_path(video))
+    fake_max = np.full((h, w), 99, dtype=np.uint8)
+    fake_min = np.full((h, w), 33, dtype=np.uint8)
+    max_path, min_path = default_background_paths(video)
+    save_background_png(fake_max, max_path)
+    save_background_png(fake_min, min_path)
 
-    bg, source = load_or_build_background(video)
+    bg, source = load_or_build_background(video, polarity="dark_on_light")
     assert source == "sidecar"
-    assert np.array_equal(bg, fake_bg)
+    assert np.array_equal(bg, fake_max)
+
+    bg2, source2 = load_or_build_background(video, polarity="light_on_dark")
+    assert source2 == "sidecar"
+    assert np.array_equal(bg2, fake_min)
 
 
-def test_load_or_build_force_rebuild_overwrites_sidecar(tmp_path: Path) -> None:
+def test_load_or_build_force_rebuild_overwrites_pair(tmp_path: Path) -> None:
     from pylace.detect.background import (
-        default_background_path,
+        default_background_paths,
         load_or_build_background,
         save_background_png,
     )
@@ -114,17 +120,57 @@ def test_load_or_build_force_rebuild_overwrites_sidecar(tmp_path: Path) -> None:
     bright = np.full((h, w, 3), 220, dtype=np.uint8)
     _write_video(video, [bright] * 5)
 
-    fake_bg = np.full((h, w), 99, dtype=np.uint8)
-    save_background_png(fake_bg, default_background_path(video))
+    max_path, min_path = default_background_paths(video)
+    fake = np.full((h, w), 99, dtype=np.uint8)
+    save_background_png(fake, max_path)
+    save_background_png(fake, min_path)
 
     bg, source = load_or_build_background(video, force_rebuild=True)
     assert source == "computed"
-    assert not np.array_equal(bg, fake_bg)
-    # Sidecar overwritten with the freshly computed bg.
-    on_disk = np.array(
-        __import__("cv2").imread(
-            str(default_background_path(video)),
-            __import__("cv2").IMREAD_GRAYSCALE,
-        )
-    )
-    assert np.array_equal(on_disk, bg)
+    assert max_path.exists() and min_path.exists()
+
+
+def test_min_projection_recovers_dark_surround_with_light_animal(tmp_path: Path) -> None:
+    from pylace.detect.background import build_min_projection_background
+
+    h, w = 64, 64
+    dark = np.full((h, w, 3), 30, dtype=np.uint8)
+    frames: list[np.ndarray] = []
+    for i in range(10):
+        f = dark.copy()
+        cx = 8 + i * 5
+        f[20:40, cx:cx + 10] = 220  # bright "animal"
+        frames.append(f)
+    video = tmp_path / "light_on_dark.mp4"
+    _write_video(video, frames)
+
+    bg = build_min_projection_background(video, n_frames=10)
+    assert bg.mean() < 60  # the dark background dominates
+
+
+def test_compute_projection_pair_returns_both(tmp_path: Path) -> None:
+    from pylace.detect.background import compute_projection_pair
+
+    h, w = 32, 32
+    frames: list[np.ndarray] = []
+    for value in (50, 100, 200):
+        frames.append(np.full((h, w, 3), value, dtype=np.uint8))
+    video = tmp_path / "pair.mp4"
+    _write_video(video, frames)
+
+    bg_max, bg_min = compute_projection_pair(video, n_frames=3)
+    assert bg_max.max() >= bg_min.max()
+    assert bg_max.mean() > bg_min.mean()
+
+
+def test_detection_and_trail_routes_by_polarity():
+    from pylace.detect.background import detection_and_trail
+
+    bg_max = np.full((4, 4), 200, dtype=np.uint8)
+    bg_min = np.full((4, 4), 50, dtype=np.uint8)
+    det, trail = detection_and_trail(bg_max, bg_min, "dark_on_light")
+    assert np.array_equal(det, bg_max)
+    assert np.array_equal(trail, bg_min)
+    det2, trail2 = detection_and_trail(bg_max, bg_min, "light_on_dark")
+    assert np.array_equal(det2, bg_min)
+    assert np.array_equal(trail2, bg_max)

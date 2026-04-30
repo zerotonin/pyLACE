@@ -6,6 +6,7 @@ import dataclasses
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Literal
 
 from pylace.detect.frame import (
     DEFAULT_DILATE_ITERS,
@@ -15,6 +16,8 @@ from pylace.detect.frame import (
     DEFAULT_MORPH_KERNEL,
     DEFAULT_THRESHOLD,
 )
+
+Polarity = Literal["dark_on_light", "light_on_dark"]
 
 SCHEMA_VERSION = 1
 PARAMS_SUFFIX = ".pylace_detect_params.json"
@@ -38,11 +41,20 @@ class DetectionParams:
 
 @dataclass
 class BackgroundParams:
-    """Max-projection background sampling parameters tunable in the GUI."""
+    """Background sampling parameters tunable in the GUI.
+
+    ``polarity`` selects which projection feeds detection: dark animals
+    on a bright arena use the max-projection; bright animals on a dark
+    arena use the min-projection. Both projections are always computed
+    and saved — the trail image (the "wrong" one for detection) shows
+    where the animal lives most of the time and is useful for
+    superimposing trajectories.
+    """
 
     n_frames: int = 50
     start_frac: float = 0.1
     end_frac: float = 0.9
+    polarity: Polarity = "dark_on_light"
 
 
 @dataclass
