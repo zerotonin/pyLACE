@@ -20,10 +20,12 @@ import numpy as np
 
 from pylace.detect.frame import Detection
 from pylace.tracking.constants import (
+    DEFAULT_AREA_COST_WEIGHT,
     DEFAULT_MAX_DISTANCE_PX,
     DEFAULT_MAX_MISSED_FRAMES,
+    DEFAULT_PERIMETER_COST_WEIGHT,
 )
-from pylace.tracking.hungarian import associate
+from pylace.tracking.hungarian import linear_assignment
 
 
 @dataclass
@@ -33,6 +35,8 @@ class Track:
     track_id: int
     last_position: tuple[float, float]
     last_frame_idx: int
+    last_area_px: float = 0.0
+    last_perimeter_px: float = 0.0
     age: int = 1
     missed_frames: int = 0
 
@@ -65,6 +69,8 @@ class Tracker:
         max_distance_px: float = DEFAULT_MAX_DISTANCE_PX,
         max_missed_frames: int = DEFAULT_MAX_MISSED_FRAMES,
         n_animals: int | None = None,
+        area_cost_weight: float = DEFAULT_AREA_COST_WEIGHT,
+        perimeter_cost_weight: float = DEFAULT_PERIMETER_COST_WEIGHT,
     ) -> None:
         if max_distance_px < 0:
             raise ValueError("max_distance_px must be >= 0.")
@@ -72,9 +78,15 @@ class Tracker:
             raise ValueError("max_missed_frames must be >= 0.")
         if n_animals is not None and n_animals < 1:
             raise ValueError("n_animals must be >= 1 (or None for dynamic-N).")
+        if area_cost_weight < 0:
+            raise ValueError("area_cost_weight must be >= 0.")
+        if perimeter_cost_weight < 0:
+            raise ValueError("perimeter_cost_weight must be >= 0.")
         self._max_distance_px = float(max_distance_px)
         self._max_missed_frames = int(max_missed_frames)
         self._n_animals = int(n_animals) if n_animals is not None else None
+        self._area_weight = float(area_cost_weight)
+        self._perimeter_weight = float(perimeter_cost_weight)
         self._tracks: dict[int, Track] = {}
         self._next_id: int = 0
 
@@ -97,15 +109,12 @@ class Tracker:
         any detection beyond the Nth that could not be matched to a
         track, since those are spurious under the user's known count.
         """
-        track_ids, track_positions = self._snapshot_tracks()
-        detection_positions = self._detection_positions(detections)
-
+        track_ids = list(self._tracks.keys())
+        cost = self._build_cost_matrix(track_ids, detections)
         match_threshold = (
             float("inf") if self.is_fixed_n else self._max_distance_px
         )
-        matches, unmatched_t, unmatched_d = associate(
-            track_positions, detection_positions, match_threshold,
-        )
+        matches, unmatched_t, unmatched_d = linear_assignment(cost, match_threshold)
 
         self._apply_matches(matches, track_ids, detections, frame_idx)
         self._increment_missed(unmatched_t, track_ids)
@@ -115,6 +124,51 @@ class Tracker:
         self._retire_dead_tracks()
         self._birth_new_tracks(unmatched_d, detections, frame_idx)
         return detections
+
+    def _build_cost_matrix(
+        self, track_ids: list[int], detections: list[Detection],
+    ) -> np.ndarray:
+        """Position cost + optional area + perimeter contributions."""
+        n_tracks = len(track_ids)
+        n_dets = len(detections)
+        if n_tracks == 0 or n_dets == 0:
+            return np.zeros((n_tracks, n_dets), dtype=np.float64)
+
+        track_positions = np.array(
+            [self._tracks[tid].last_position for tid in track_ids],
+            dtype=np.float64,
+        )
+        det_positions = np.array(
+            [(d.cx, d.cy) for d in detections], dtype=np.float64,
+        )
+        diff = track_positions[:, None, :] - det_positions[None, :, :]
+        cost = np.linalg.norm(diff, axis=-1)
+
+        if self._area_weight > 0.0:
+            track_areas = np.array(
+                [self._tracks[tid].last_area_px for tid in track_ids],
+                dtype=np.float64,
+            )
+            det_areas = np.array(
+                [d.area_px for d in detections], dtype=np.float64,
+            )
+            cost = cost + self._area_weight * np.abs(
+                track_areas[:, None] - det_areas[None, :],
+            )
+
+        if self._perimeter_weight > 0.0:
+            track_per = np.array(
+                [self._tracks[tid].last_perimeter_px for tid in track_ids],
+                dtype=np.float64,
+            )
+            det_per = np.array(
+                [d.perimeter_px for d in detections], dtype=np.float64,
+            )
+            cost = cost + self._perimeter_weight * np.abs(
+                track_per[:, None] - det_per[None, :],
+            )
+
+        return cost
 
     def _step_fixed_n(
         self,
@@ -132,22 +186,6 @@ class Tracker:
 
     # ── Internal ───────────────────────────────────────────────────────
 
-    def _snapshot_tracks(self) -> tuple[list[int], np.ndarray]:
-        track_ids = list(self._tracks.keys())
-        if not track_ids:
-            return track_ids, np.zeros((0, 2), dtype=np.float64)
-        positions = np.array(
-            [self._tracks[tid].last_position for tid in track_ids],
-            dtype=np.float64,
-        )
-        return track_ids, positions
-
-    @staticmethod
-    def _detection_positions(detections: list[Detection]) -> np.ndarray:
-        if not detections:
-            return np.zeros((0, 2), dtype=np.float64)
-        return np.array([(d.cx, d.cy) for d in detections], dtype=np.float64)
-
     def _apply_matches(
         self,
         matches: list[tuple[int, int]],
@@ -160,6 +198,8 @@ class Tracker:
             track = self._tracks[tid]
             d = detections[di]
             track.last_position = (d.cx, d.cy)
+            track.last_area_px = d.area_px
+            track.last_perimeter_px = d.perimeter_px
             track.last_frame_idx = frame_idx
             track.age += 1
             track.missed_frames = 0
@@ -195,6 +235,8 @@ class Tracker:
         self._tracks[tid] = Track(
             track_id=tid,
             last_position=(detection.cx, detection.cy),
+            last_area_px=detection.area_px,
+            last_perimeter_px=detection.perimeter_px,
             last_frame_idx=frame_idx,
         )
         detection.track_id = tid

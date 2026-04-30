@@ -17,8 +17,10 @@ from pylace.detect.frame import (
     DEFAULT_THRESHOLD,
 )
 from pylace.tracking.constants import (
+    DEFAULT_AREA_COST_WEIGHT,
     DEFAULT_MAX_DISTANCE_PX,
     DEFAULT_MAX_MISSED_FRAMES,
+    DEFAULT_PERIMETER_COST_WEIGHT,
 )
 
 Polarity = Literal["dark_on_light", "light_on_dark"]
@@ -76,6 +78,8 @@ class TrackingParams:
     max_missed_frames: int = DEFAULT_MAX_MISSED_FRAMES
     n_animals: int | None = None
     expected_animal_area_px: float | None = None
+    area_cost_weight: float = DEFAULT_AREA_COST_WEIGHT
+    perimeter_cost_weight: float = DEFAULT_PERIMETER_COST_WEIGHT
 
 
 @dataclass

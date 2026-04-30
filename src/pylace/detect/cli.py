@@ -20,8 +20,10 @@ from pylace.detect.pipeline import run_detection, write_detections_csv
 from pylace.roi.mask import build_combined_mask, build_split_masks
 from pylace.roi.sidecar import default_rois_path, read_rois
 from pylace.tracking.constants import (
+    DEFAULT_AREA_COST_WEIGHT,
     DEFAULT_MAX_DISTANCE_PX,
     DEFAULT_MAX_MISSED_FRAMES,
+    DEFAULT_PERIMETER_COST_WEIGHT,
 )
 from pylace.tracking.tracks import Tracker
 from pylace.tune.params import default_params_path, read_params
@@ -92,6 +94,10 @@ def main(argv: list[str] | None = None) -> int:
                 f"max_distance={tracking['max_distance_px']:.1f} px "
                 f"max_missed={tracking['max_missed_frames']}",
             )
+        print(
+            f"  cost weights: area={tracking['area_cost_weight']:.4f} "
+            f"perimeter={tracking['perimeter_cost_weight']:.4f}",
+        )
     else:
         print("  tracking: disabled (track_id falls back to per-frame index)")
     if tracking["chain_split_enabled"]:
@@ -159,6 +165,8 @@ def _run_plan(
                     max_distance_px=tracking["max_distance_px"],
                     max_missed_frames=tracking["max_missed_frames"],
                     n_animals=tracking["n_animals"],
+                    area_cost_weight=tracking["area_cost_weight"],
+                    perimeter_cost_weight=tracking["perimeter_cost_weight"],
                 )
                 if tracking["enabled"]
                 else None
@@ -233,6 +241,8 @@ def _resolve_tuning_params(args: argparse.Namespace) -> tuple[dict, dict]:
         "n_animals": None,
         "expected_animal_area_px": None,
         "chain_split_enabled": True,
+        "area_cost_weight": DEFAULT_AREA_COST_WEIGHT,
+        "perimeter_cost_weight": DEFAULT_PERIMETER_COST_WEIGHT,
     }
 
     candidate = args.params if args.params else default_params_path(args.video)
@@ -259,6 +269,8 @@ def _resolve_tuning_params(args: argparse.Namespace) -> tuple[dict, dict]:
             "n_animals": tp.tracking.n_animals,
             "expected_animal_area_px": tp.tracking.expected_animal_area_px,
             "chain_split_enabled": True,
+            "area_cost_weight": tp.tracking.area_cost_weight,
+            "perimeter_cost_weight": tp.tracking.perimeter_cost_weight,
         }
         print(f"Loaded tuned params from {candidate.name}.")
 
@@ -286,6 +298,10 @@ def _resolve_tuning_params(args: argparse.Namespace) -> tuple[dict, dict]:
         tracking["expected_animal_area_px"] = args.expected_animal_area
     if args.no_chain_split:
         tracking["chain_split_enabled"] = False
+    if args.cost_area_weight is not None:
+        tracking["area_cost_weight"] = args.cost_area_weight
+    if args.cost_perimeter_weight is not None:
+        tracking["perimeter_cost_weight"] = args.cost_perimeter_weight
     return detection, background, tracking
 
 
@@ -457,6 +473,24 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--no-chain-split", action="store_true", dest="no_chain_split",
         help="Disable chain splitting even if --expected-animal-area is set.",
+    )
+    p.add_argument(
+        "--cost-area-weight", type=float, default=None,
+        dest="cost_area_weight",
+        help=(
+            "Weight on |Δarea_px| in the Hungarian cost matrix. 0 disables "
+            "(legacy distance-only). Try 0.02 to make a 100 px² area "
+            "difference cost ~2 pixels-equivalent of distance."
+        ),
+    )
+    p.add_argument(
+        "--cost-perimeter-weight", type=float, default=None,
+        dest="cost_perimeter_weight",
+        help=(
+            "Weight on |Δperimeter_px| in the Hungarian cost matrix. "
+            "0 disables. Try 0.5 (1 px-equivalent per 2 px perimeter "
+            "difference)."
+        ),
     )
     return p
 

@@ -30,7 +30,8 @@ from pylace.tracking.tracks import Tracker
 CSV_COLUMNS = (
     "frame_idx", "roi_label", "track_id",
     "cx_px", "cy_px", "x_mm", "y_mm",
-    "area_px", "major_axis_px", "minor_axis_px", "orientation_deg",
+    "area_px", "perimeter_px",
+    "major_axis_px", "minor_axis_px", "orientation_deg",
 )
 
 MERGED_ROI_LABEL = "_merged"
@@ -184,7 +185,7 @@ def write_detections_csv(
                     fr.frame_idx, fr.roi_label, track_id,
                     f"{d.cx:.3f}", f"{d.cy:.3f}",
                     f"{x_mm:.4f}", f"{y_mm:.4f}",
-                    f"{d.area_px:.1f}",
+                    f"{d.area_px:.1f}", f"{d.perimeter_px:.2f}",
                     f"{d.major_axis_px:.3f}", f"{d.minor_axis_px:.3f}",
                     f"{d.orientation_deg:.2f}",
                 ])

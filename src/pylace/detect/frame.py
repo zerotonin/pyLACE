@@ -23,11 +23,15 @@ class Detection:
     ``track_id`` is set in place by :class:`pylace.tracking.Tracker`
     after detection. The sentinel ``-1`` means "no tracking applied";
     the CSV writer treats that as "use the per-frame index instead".
+
+    ``perimeter_px`` is the contour's arc length, used by the Hungarian
+    cost matrix when contour-similarity weighting is enabled.
     """
 
     cx: float
     cy: float
     area_px: float
+    perimeter_px: float
     major_axis_px: float
     minor_axis_px: float
     orientation_deg: float
@@ -166,6 +170,7 @@ def _contour_to_detection(c: np.ndarray, *, keep_contour: bool) -> Detection:
         cx=float(cx),
         cy=float(cy),
         area_px=float(cv2.contourArea(c)),
+        perimeter_px=float(cv2.arcLength(c, closed=True)),
         major_axis_px=float(major),
         minor_axis_px=float(minor),
         orientation_deg=float(angle),

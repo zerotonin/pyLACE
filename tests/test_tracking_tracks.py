@@ -13,9 +13,12 @@ from pylace.detect.frame import Detection
 from pylace.tracking.tracks import Tracker
 
 
-def _det(cx: float, cy: float) -> Detection:
+def _det(
+    cx: float, cy: float,
+    *, area_px: float = 100.0, perimeter_px: float = 40.0,
+) -> Detection:
     return Detection(
-        cx=cx, cy=cy, area_px=100.0,
+        cx=cx, cy=cy, area_px=area_px, perimeter_px=perimeter_px,
         major_axis_px=10.0, minor_axis_px=5.0,
         orientation_deg=0.0, contour=None,
     )
@@ -187,6 +190,59 @@ def test_fixed_n_birth_only_when_detections_appear():
     assert len(tracker.active_tracks) == 1
     tracker.step(6, [_det(11, 11), _det(50, 50)])
     assert len(tracker.active_tracks) == 2
+
+
+def test_area_cost_resolves_two_close_detections_with_different_sizes():
+    """Position-only would mis-pair; area weight tips the assignment correctly."""
+    # Track A is at (30, 30) with area 1000.
+    # Track B is at (32, 30) with area 5000.
+    # New detections: one at (31, 30) area 1100, one at (31, 30) area 4800.
+    # Position-only Hungarian sees the same distance for both pairings;
+    # adding area_cost_weight breaks the tie toward the right partner.
+    tracker = Tracker(n_animals=2, area_cost_weight=0.05)
+    tracker.step(0, [
+        _det(30, 30, area_px=1000),
+        _det(32, 30, area_px=5000),
+    ])
+    track_a = tracker.active_tracks[0]
+    track_b = tracker.active_tracks[1]
+
+    detections = [
+        _det(31, 30, area_px=1100),
+        _det(31, 30, area_px=4800),
+    ]
+    tracker.step(1, detections)
+    # The 1100-area detection should have stayed with track A (started 1000),
+    # and the 4800-area detection with track B (started 5000).
+    by_area = {round(d.area_px): d.track_id for d in detections}
+    assert by_area[1100] == track_a.track_id
+    assert by_area[4800] == track_b.track_id
+
+
+def test_perimeter_cost_resolves_when_areas_match_but_contours_differ():
+    tracker = Tracker(n_animals=2, perimeter_cost_weight=0.5)
+    tracker.step(0, [
+        _det(30, 30, perimeter_px=80),
+        _det(32, 30, perimeter_px=200),
+    ])
+    track_short = tracker.active_tracks[0]
+    track_long = tracker.active_tracks[1]
+
+    detections = [
+        _det(31, 30, perimeter_px=85),
+        _det(31, 30, perimeter_px=195),
+    ]
+    tracker.step(1, detections)
+    by_per = {round(d.perimeter_px): d.track_id for d in detections}
+    assert by_per[85] == track_short.track_id
+    assert by_per[195] == track_long.track_id
+
+
+def test_negative_cost_weights_raise():
+    with pytest.raises(ValueError):
+        Tracker(area_cost_weight=-0.1)
+    with pytest.raises(ValueError):
+        Tracker(perimeter_cost_weight=-0.1)
 
 
 def test_fixed_n_does_not_mark_unassigned_detections_with_track_id():
