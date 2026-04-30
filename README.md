@@ -4,7 +4,7 @@ A Python port of LACE — Limbless Animal traCkEr — a marker-free pose
 estimator for limbless animals (larval *Drosophila*, adult zebrafish),
 originally published as:
 
-> Geurten BRH (2022). LACE — Limbless Animal traCkEr: a marker-free
+> GARG et al.(2022). LACE — Limbless Animal traCkEr: a marker-free
 > pose estimator. *Frontiers in Behavioral Neuroscience*.
 > https://www.frontiersin.org/journals/behavioral-neuroscience/articles/10.3389/fnbeh.2022.819146/full
 
