@@ -12,6 +12,7 @@
 # ╚══════════════════════════════════════════════════════════════════╝
 """ROI builder + detector integration."""
 
+from pylace.roi.auto_roi import AutoRoiParams, auto_rois_from_diff
 from pylace.roi.geometry import ROI, ROIMode, ROIOperation, ROISet
 from pylace.roi.mask import build_combined_mask, build_split_masks
 from pylace.roi.sidecar import (
@@ -24,6 +25,7 @@ from pylace.roi.sidecar import (
 )
 
 __all__ = [
+    "AutoRoiParams",
     "ROI",
     "ROIMode",
     "ROIOperation",
@@ -31,6 +33,7 @@ __all__ = [
     "ROISidecar",
     "ROISidecarSchemaError",
     "SCHEMA_VERSION",
+    "auto_rois_from_diff",
     "build_combined_mask",
     "build_split_masks",
     "default_rois_path",

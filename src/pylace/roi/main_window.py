@@ -19,11 +19,19 @@ import cv2
 from PyQt6 import QtCore, QtGui, QtWidgets
 from PyQt6.QtCore import Qt
 
+import numpy as np
+
 from pylace.annotator.sidecar import (
     Sidecar,
     default_sidecar_path,
     read_sidecar,
 )
+from pylace.detect.arena_mask import arena_mask
+from pylace.detect.background import (
+    default_background_paths,
+    load_background_png,
+)
+from pylace.roi.auto_roi import AutoRoiParams, auto_rois_from_diff
 from pylace.roi.canvas import RoiCanvas, ToolName
 from pylace.roi.geometry import ROI, ROIMode, ROIOperation, ROISet
 from pylace.roi.sidecar import (
@@ -53,7 +61,9 @@ class RoiBuilderWindow(QtWidgets.QMainWindow):
         self._canvas = RoiCanvas(self)
         self._canvas.roiAdded.connect(self._on_roi_added)
         self._canvas.set_arena(arena_sidecar.arena if arena_sidecar else None)
-        self._load_first_frame()
+        self._first_frame_rgb = self._load_first_frame()
+        self._bg_max, self._bg_min = self._load_background_pair()
+        self._view_mode: str = "frame"  # "frame" | "bg_max" | "bg_min"
 
         self.setWindowTitle(f"pylace-roi — {video.name}")
         self.setCentralWidget(self._build_central())
@@ -62,10 +72,11 @@ class RoiBuilderWindow(QtWidgets.QMainWindow):
         self.statusBar().showMessage("Ready.")
 
         self._load_existing_sidecar()
+        self._apply_view_mode()
 
     # ── Setup ──────────────────────────────────────────────────────────
 
-    def _load_first_frame(self) -> None:
+    def _load_first_frame(self) -> np.ndarray:
         cap = cv2.VideoCapture(str(self._video))
         if not cap.isOpened():
             raise OSError(f"Cannot open video: {self._video}")
@@ -77,6 +88,24 @@ class RoiBuilderWindow(QtWidgets.QMainWindow):
         finally:
             cap.release()
         self._canvas.set_frame(rgb)
+        return rgb
+
+    def _load_background_pair(self) -> tuple[np.ndarray | None, np.ndarray | None]:
+        max_path, min_path = default_background_paths(self._video)
+        if not (max_path.exists() and min_path.exists()):
+            return None, None
+        try:
+            return load_background_png(max_path), load_background_png(min_path)
+        except OSError:
+            return None, None
+
+    def _apply_view_mode(self) -> None:
+        if self._view_mode == "bg_max" and self._bg_max is not None:
+            self._canvas.set_frame(cv2.cvtColor(self._bg_max, cv2.COLOR_GRAY2RGB))
+        elif self._view_mode == "bg_min" and self._bg_min is not None:
+            self._canvas.set_frame(cv2.cvtColor(self._bg_min, cv2.COLOR_GRAY2RGB))
+        else:
+            self._canvas.set_frame(self._first_frame_rgb)
 
     def _build_central(self) -> QtWidgets.QWidget:
         wrap = QtWidgets.QWidget(self)
@@ -92,8 +121,10 @@ class RoiBuilderWindow(QtWidgets.QMainWindow):
         panel = QtWidgets.QWidget(parent)
         v = QtWidgets.QVBoxLayout(panel)
         v.setContentsMargins(8, 8, 8, 8)
-        panel.setMinimumWidth(280)
+        panel.setMinimumWidth(300)
 
+        v.addWidget(self._build_view_group(panel))
+        v.addWidget(self._build_auto_group(panel))
         v.addWidget(self._build_mode_group(panel))
 
         self._list = QtWidgets.QListWidget(panel)
@@ -125,6 +156,51 @@ class RoiBuilderWindow(QtWidgets.QMainWindow):
         v.addLayout(save_row)
 
         return panel
+
+    def _build_view_group(self, parent: QtWidgets.QWidget) -> QtWidgets.QGroupBox:
+        box = QtWidgets.QGroupBox("View", parent)
+        v = QtWidgets.QVBoxLayout(box)
+        row = QtWidgets.QHBoxLayout()
+        row.addWidget(QtWidgets.QLabel("Show:", box))
+        self._cb_view = QtWidgets.QComboBox(box)
+        self._cb_view.addItem("First frame", "frame")
+        self._cb_view.addItem("Background max", "bg_max")
+        self._cb_view.addItem("Background min", "bg_min")
+        bg_available = self._bg_max is not None and self._bg_min is not None
+        if not bg_available:
+            for i in (1, 2):
+                self._cb_view.model().item(i).setEnabled(False)
+            self._cb_view.setToolTip(
+                "Background pair not on disk. Run pylace-tune or pylace-detect "
+                "on this video first to compute and save it.",
+            )
+        self._cb_view.currentIndexChanged.connect(self._on_view_changed)
+        row.addWidget(self._cb_view, stretch=1)
+        v.addLayout(row)
+        return box
+
+    def _build_auto_group(self, parent: QtWidgets.QWidget) -> QtWidgets.QGroupBox:
+        box = QtWidgets.QGroupBox("Auto-ROI", parent)
+        v = QtWidgets.QVBoxLayout(box)
+        hint = QtWidgets.QLabel(
+            "Generate polygons from the trail (max-vs-min bg diff). "
+            "Erodes specks, then dilates so the ROI is slightly larger "
+            "than the actual trail.",
+            box,
+        )
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: gray;")
+        v.addWidget(hint)
+        self._btn_auto = QtWidgets.QPushButton("Generate auto-ROIs", box)
+        self._btn_auto.clicked.connect(self._on_auto_roi)
+        if self._bg_max is None or self._bg_min is None:
+            self._btn_auto.setEnabled(False)
+            self._btn_auto.setToolTip(
+                "Background pair not on disk. Run pylace-tune or "
+                "pylace-detect first.",
+            )
+        v.addWidget(self._btn_auto)
+        return box
 
     def _build_mode_group(self, parent: QtWidgets.QWidget) -> QtWidgets.QGroupBox:
         box = QtWidgets.QGroupBox("Mode", parent)
@@ -190,6 +266,47 @@ class RoiBuilderWindow(QtWidgets.QMainWindow):
         self._canvas.set_roi_set(self._roi_set)
         self.statusBar().showMessage(
             f"Added {_describe_roi(roi)} (#{len(self._roi_set.rois) - 1}).", 4000,
+        )
+
+    def _on_view_changed(self, _index: int) -> None:
+        mode = self._cb_view.currentData()
+        if mode in ("bg_max", "bg_min") and (
+            self._bg_max is None or self._bg_min is None
+        ):
+            self.statusBar().showMessage("No background pair on disk.", 4000)
+            return
+        self._view_mode = mode or "frame"
+        self._apply_view_mode()
+
+    def _on_auto_roi(self) -> None:
+        if self._bg_max is None or self._bg_min is None:
+            self.statusBar().showMessage(
+                "No background pair — run pylace-tune first.", 5000,
+            )
+            return
+        if self._arena_sidecar is None:
+            self.statusBar().showMessage(
+                "Auto-ROI needs an arena sidecar. Run pylace-annotate first.",
+                5000,
+            )
+            return
+        h, w = self._bg_max.shape
+        a_mask = arena_mask(self._arena_sidecar.arena, frame_size=(w, h))
+        rois = auto_rois_from_diff(
+            self._bg_max, self._bg_min, a_mask, params=AutoRoiParams(),
+        )
+        if not rois:
+            self.statusBar().showMessage(
+                "Auto-ROI found nothing — try recomputing the background "
+                "or check polarity.", 6000,
+            )
+            return
+        for roi in rois:
+            self._roi_set.add(roi)
+        self._refresh_list()
+        self._canvas.set_roi_set(self._roi_set)
+        self.statusBar().showMessage(
+            f"Auto-ROI added {len(rois)} polygon(s).", 5000,
         )
 
     def _on_list_selection_changed(self, row: int) -> None:
