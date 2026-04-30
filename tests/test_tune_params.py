@@ -82,6 +82,52 @@ def test_read_tolerant_of_missing_new_fields(tmp_path: Path):
     assert params.detection.erode_iters == 0
 
 
+def test_tracking_params_default_to_enabled_with_sane_thresholds():
+    p = TuningParams.defaults()
+    assert p.tracking.enabled is True
+    assert p.tracking.max_distance_px == 50.0
+    assert p.tracking.max_missed_frames == 5
+
+
+def test_tracking_params_round_trip(tmp_path: Path):
+    from pylace.tune.params import TrackingParams
+
+    out = tmp_path / "with_tracking.json"
+    params = TuningParams(
+        detection=DetectionParams(),
+        background=BackgroundParams(),
+        tracking=TrackingParams(
+            enabled=False, max_distance_px=80.0, max_missed_frames=10,
+        ),
+    )
+    write_params(params, video_path=Path("/tmp/x.mp4"), video_sha256_hex="0" * 64,
+                 out_path=out)
+    loaded, _ = read_params(out)
+    assert loaded.tracking.enabled is False
+    assert loaded.tracking.max_distance_px == 80.0
+    assert loaded.tracking.max_missed_frames == 10
+
+
+def test_old_sidecar_without_tracking_block_loads_with_defaults(tmp_path: Path):
+    """Sidecars predating the tracking block fall back to defaults."""
+    out = tmp_path / "legacy.json"
+    out.write_text(json.dumps({
+        "schema_version": SCHEMA_VERSION,
+        "video": {"path": "/tmp/x.mp4", "sha256": "0" * 64},
+        "detection": {
+            "threshold": 25, "min_area": 20, "max_area": 5000,
+            "morph_kernel": 3, "dilate_iters": 0, "erode_iters": 0,
+        },
+        "background": {
+            "n_frames": 50, "start_frac": 0.1, "end_frac": 0.9,
+            "polarity": "dark_on_light",
+        },
+    }))
+    loaded, _ = read_params(out)
+    assert loaded.tracking.enabled is True
+    assert loaded.tracking.max_distance_px == 50.0
+
+
 def test_read_tolerant_of_unknown_fields(tmp_path: Path):
     """Future sidecars with extra keys do not break."""
     out = tmp_path / "future.json"

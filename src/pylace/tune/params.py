@@ -16,6 +16,10 @@ from pylace.detect.frame import (
     DEFAULT_MORPH_KERNEL,
     DEFAULT_THRESHOLD,
 )
+from pylace.tracking.constants import (
+    DEFAULT_MAX_DISTANCE_PX,
+    DEFAULT_MAX_MISSED_FRAMES,
+)
 
 Polarity = Literal["dark_on_light", "light_on_dark"]
 
@@ -58,15 +62,29 @@ class BackgroundParams:
 
 
 @dataclass
+class TrackingParams:
+    """Hungarian-tracker parameters tunable in the GUI / sidecar."""
+
+    enabled: bool = True
+    max_distance_px: float = DEFAULT_MAX_DISTANCE_PX
+    max_missed_frames: int = DEFAULT_MAX_MISSED_FRAMES
+
+
+@dataclass
 class TuningParams:
-    """Bundle of detection + background parameters saved as a sidecar."""
+    """Bundle of detection + background + tracking parameters."""
 
     detection: DetectionParams
     background: BackgroundParams
+    tracking: TrackingParams = dataclasses.field(default_factory=TrackingParams)
 
     @classmethod
     def defaults(cls) -> TuningParams:
-        return cls(detection=DetectionParams(), background=BackgroundParams())
+        return cls(
+            detection=DetectionParams(),
+            background=BackgroundParams(),
+            tracking=TrackingParams(),
+        )
 
 
 def write_params(
@@ -78,6 +96,7 @@ def write_params(
         "video": {"path": str(video_path), "sha256": video_sha256_hex},
         "detection": asdict(params.detection),
         "background": asdict(params.background),
+        "tracking": asdict(params.tracking),
     }
     out_path.write_text(json.dumps(payload, indent=2))
 
@@ -99,6 +118,9 @@ def read_params(in_path: Path) -> tuple[TuningParams, dict]:
         TuningParams(
             detection=_parse_dataclass(DetectionParams, payload["detection"]),
             background=_parse_dataclass(BackgroundParams, payload["background"]),
+            tracking=_parse_dataclass(
+                TrackingParams, payload.get("tracking", {}),
+            ),
         ),
         payload.get("video", {}),
     )
