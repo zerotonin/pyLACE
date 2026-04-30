@@ -73,11 +73,6 @@ class _DetectionRaster(QtWidgets.QWidget):
         self._colours = colours
         self.update()
 
-    def set_view_range(self, lo: int, hi: int) -> None:
-        self._range.lo = max(0, lo)
-        self._range.hi = max(self._range.lo + 1, hi)
-        self.update()
-
     def set_current_frame(self, frame: int) -> None:
         self._current = int(frame)
         self.update()
@@ -270,6 +265,9 @@ class FrameNavigationStrip(QtWidgets.QWidget):
     # ── Slots ─────────────────────────────────────────────────────────
 
     def _on_range_changed(self, lo: int, hi: int) -> None:
+        # Only the bottom scrubber's range follows the delimiters. The raster
+        # and the delimiter bar both stay anchored to the full movie span so
+        # the user keeps the global view while scrubbing a sub-window.
         self._scrub.blockSignals(True)
         self._scrub.setRange(lo, hi)
         if self._scrub.value() < lo:
@@ -277,7 +275,6 @@ class FrameNavigationStrip(QtWidgets.QWidget):
         elif self._scrub.value() > hi:
             self._scrub.setValue(hi)
         self._scrub.blockSignals(False)
-        self._raster.set_view_range(lo, hi)
         self._raster.set_current_frame(self._scrub.value())
         self._update_readout()
         self.currentFrameChanged.emit(self._scrub.value())
