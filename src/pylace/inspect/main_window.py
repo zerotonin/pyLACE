@@ -24,6 +24,7 @@ from pylace.detect.background import (
     default_background_paths,
     load_background_png,
 )
+from pylace.inspect.navigation import FrameNavigationStrip
 from pylace.inspect.palette import palette_bgr
 from pylace.inspect.traces import (
     TrackTrajectory,
@@ -108,12 +109,23 @@ class InspectorWindow(QtWidgets.QMainWindow):
     # ── Layout ─────────────────────────────────────────────────────────
 
     def _build_central(self) -> QtWidgets.QWidget:
-        splitter = QtWidgets.QSplitter(Qt.Orientation.Horizontal, self)
+        wrap = QtWidgets.QWidget(self)
+        v = QtWidgets.QVBoxLayout(wrap)
+        v.setContentsMargins(0, 0, 0, 0)
+
+        splitter = QtWidgets.QSplitter(Qt.Orientation.Horizontal, wrap)
         splitter.addWidget(self._build_scrub_pane())
         splitter.addWidget(self._build_overview_pane())
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 1)
-        return splitter
+        v.addWidget(splitter, stretch=1)
+
+        self._nav = FrameNavigationStrip(self._total_frames, parent=wrap)
+        self._nav.set_trajectories(self._trajectories, self._colours)
+        self._nav.set_current_frame(self._current_frame)
+        self._nav.currentFrameChanged.connect(self._on_frame_changed)
+        v.addWidget(self._nav)
+        return wrap
 
     def _build_scrub_pane(self) -> QtWidgets.QWidget:
         wrap = QtWidgets.QWidget(self)
@@ -158,21 +170,6 @@ class InspectorWindow(QtWidgets.QMainWindow):
         bar = self.addToolBar("Controls")
         bar.setMovable(False)
 
-        bar.addWidget(QtWidgets.QLabel(" Frame: "))
-        self._sl_frame = QtWidgets.QSlider(Qt.Orientation.Horizontal, bar)
-        self._sl_frame.setRange(0, max(0, self._total_frames - 1))
-        self._sl_frame.setValue(self._current_frame)
-        self._sl_frame.setMinimumWidth(360)
-        self._sl_frame.valueChanged.connect(self._on_frame_changed)
-        bar.addWidget(self._sl_frame)
-
-        self._sb_frame = QtWidgets.QSpinBox(bar)
-        self._sb_frame.setRange(0, max(0, self._total_frames - 1))
-        self._sb_frame.setValue(self._current_frame)
-        self._sb_frame.valueChanged.connect(self._sl_frame.setValue)
-        bar.addWidget(self._sb_frame)
-
-        bar.addSeparator()
         bar.addWidget(QtWidgets.QLabel(" Trail (s): "))
         self._sb_trail = QtWidgets.QDoubleSpinBox(bar)
         self._sb_trail.setRange(0.0, 120.0)
@@ -195,9 +192,6 @@ class InspectorWindow(QtWidgets.QMainWindow):
 
     def _on_frame_changed(self, value: int) -> None:
         self._current_frame = int(value)
-        self._sb_frame.blockSignals(True)
-        self._sb_frame.setValue(self._current_frame)
-        self._sb_frame.blockSignals(False)
         self._refresh_scrub()
         self._refresh_overview_marker()
 
@@ -217,8 +211,7 @@ class InspectorWindow(QtWidgets.QMainWindow):
         self._refresh_overview()
 
     def _step_frame(self, delta: int) -> None:
-        new = max(0, min(self._total_frames - 1, self._current_frame + delta))
-        self._sl_frame.setValue(new)
+        self._nav.step(delta)
 
     # ── Render ────────────────────────────────────────────────────────
 
