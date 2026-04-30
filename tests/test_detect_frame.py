@@ -172,6 +172,28 @@ def test_axis_ratio_filter_rejects_a_long_thin_streak():
     assert strict == []
 
 
+def test_centroid_stays_inside_mask_when_contour_is_clipped_at_boundary():
+    """A fly straddling the mask boundary must produce a centroid that's
+    still inside the mask — regression for an ROI leak where fitEllipse's
+    algebraic centre sat just outside the boundary on clipped contours.
+    """
+    h, w = 200, 200
+    bg = _bright_background(h, w)
+    frame = bg.copy()
+    cv2.ellipse(frame, (100, 100), (25, 10), 0, 0, 360, 30, thickness=-1)
+    mask_bool = np.zeros((h, w), dtype=bool)
+    mask_bool[100:, :] = True   # only bottom half of the fly survives
+    detections = detect_blobs(frame, bg, mask_bool, min_area=10, morph_kernel=0)
+    assert len(detections) == 1
+    d = detections[0]
+    cy_int = int(round(d.cy))
+    cx_int = int(round(d.cx))
+    assert mask_bool[cy_int, cx_int], (
+        f"clipped contour produced centroid at ({d.cx:.1f}, {d.cy:.1f}) "
+        "outside the mask"
+    )
+
+
 def test_dilate_can_merge_two_close_blobs():
     h, w = 80, 80
     bg = _bright_background(h, w)

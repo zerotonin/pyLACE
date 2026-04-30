@@ -178,12 +178,23 @@ def _filtered_contours(
 
 
 def _contour_to_detection(c: np.ndarray, *, keep_contour: bool) -> Detection:
-    (cx, cy), (axis_a, axis_b), angle = cv2.fitEllipse(c)
+    (ellipse_cx, ellipse_cy), (axis_a, axis_b), angle = cv2.fitEllipse(c)
     major = max(axis_a, axis_b)
     minor = min(axis_a, axis_b)
     area = float(cv2.contourArea(c))
     hull_area = float(cv2.contourArea(cv2.convexHull(c)))
     solidity = area / hull_area if hull_area > 0 else 1.0
+    # Use the contour's geometric centroid (image moments) rather than the
+    # fitted-ellipse centre. For a contour clipped at a mask boundary
+    # (half-moon shape), fitEllipse returns the centre of the *full*
+    # ellipse, which sits across the boundary; moments give the centroid
+    # of the actual contour points, which is always inside the contour.
+    M = cv2.moments(c)
+    if M["m00"] > 0:
+        cx = M["m10"] / M["m00"]
+        cy = M["m01"] / M["m00"]
+    else:
+        cx, cy = ellipse_cx, ellipse_cy
     return Detection(
         cx=float(cx),
         cy=float(cy),
