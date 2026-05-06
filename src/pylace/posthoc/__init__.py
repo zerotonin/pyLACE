@@ -16,6 +16,7 @@
 """Post-hoc trajectory cleaning and analysis."""
 
 from pylace.posthoc.analytics import compute_distance_to_wall
+from pylace.posthoc.audit import audit_track_identities
 from pylace.posthoc.clean import clean_trajectory
 from pylace.posthoc.heading import compute_yaw, resolve_headings
 from pylace.posthoc.io import (
@@ -42,6 +43,7 @@ from pylace.posthoc.multifly import (
 __all__ = [
     "CLEANED_EXTRA_COLUMNS",
     "DETECTION_COLUMNS",
+    "audit_track_identities",
     "clean_trajectory",
     "compute_distance_to_wall",
     "compute_yaw",

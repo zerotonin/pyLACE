@@ -1,0 +1,142 @@
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║  pyLACE — posthoc.audit_cli                                      ║
+# ║  « pylace-audit: re-tag IDs in a cleaned trajectory CSV »        ║
+# ╚══════════════════════════════════════════════════════════════════╝
+"""Command-line entry point for ``pylace-audit``."""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+import pandas as pd
+
+from pylace.annotator.sidecar import default_sidecar_path, read_sidecar
+from pylace.posthoc.audit import audit_track_identities
+from pylace.posthoc.io import (
+    trajectory_stem,
+    video_path_from_trajectory,
+    write_trajectory,
+)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+    if not args.trajectory.exists():
+        print(f"Trajectory CSV not found: {args.trajectory}", file=sys.stderr)
+        return 2
+
+    fps, pix_per_mm = _resolve_video_params(args)
+    if fps is None or pix_per_mm is None:
+        return 2
+
+    out_path = (
+        args.out if args.out is not None
+        else _default_audited_path(args.trajectory)
+    )
+    swap_log_path = (
+        args.swap_log if args.swap_log is not None
+        else out_path.with_name(out_path.name.replace(
+            ".pylace_audited.csv", ".pylace_audit_swaps.csv",
+        ))
+    )
+
+    print(f"pylace-audit: {args.trajectory.name} -> {out_path.name}")
+    print(
+        f"  fps={fps:.2f}  pix_per_mm={pix_per_mm:.4f}  "
+        f"contact={args.contact_mm:.2f} mm  window={args.window_s:.2f} s  "
+        f"swap_cost_ratio={args.swap_cost_ratio:.2f}",
+    )
+
+    df = pd.read_csv(args.trajectory)
+    n_tracks = df["track_id"].nunique()
+    print(f"  loaded {len(df)} rows across {n_tracks} tracks")
+
+    audited, swap_log = audit_track_identities(
+        df, fps=fps, pix_per_mm=pix_per_mm,
+        contact_threshold_mm=args.contact_mm,
+        window_s=args.window_s,
+        swap_cost_ratio=args.swap_cost_ratio,
+    )
+    write_trajectory(audited, out_path)
+    print(f"Wrote {len(audited)} rows to {out_path.name}")
+
+    swap_log.to_csv(swap_log_path, index=False)
+    print(
+        f"  {len(swap_log)} swap event(s) — log: {swap_log_path.name}",
+    )
+    if not swap_log.empty:
+        print()
+        print(swap_log.head(20).to_string(index=False))
+    return 0
+
+
+def _resolve_video_params(args: argparse.Namespace) -> tuple[float | None, float | None]:
+    fps = args.fps
+    pix_per_mm = args.pix_per_mm
+    sidecar_path = (
+        args.sidecar if args.sidecar
+        else default_sidecar_path(video_path_from_trajectory(args.trajectory))
+    )
+    if sidecar_path.exists():
+        sc = read_sidecar(sidecar_path)
+        if fps is None:
+            fps = float(sc.video.fps)
+        if pix_per_mm is None:
+            pix_per_mm = float(
+                sc.calibration.pixel_distance / sc.calibration.physical_mm,
+            )
+    if fps is None:
+        print(f"--fps not given and no sidecar at {sidecar_path}", file=sys.stderr)
+        return None, None
+    if pix_per_mm is None:
+        print(
+            f"--pix-per-mm not given and no sidecar at {sidecar_path}",
+            file=sys.stderr,
+        )
+        return None, None
+    return fps, pix_per_mm
+
+
+def _default_audited_path(trajectory: Path) -> Path:
+    return trajectory.with_name(trajectory_stem(trajectory) + ".pylace_audited.csv")
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="pylace-audit",
+        description=(
+            "Re-tag track_id in a cleaned trajectory CSV by globally "
+            "re-optimising assignments at proximity / gap events. Catches "
+            "post-merge ID swaps that local Hungarian missed."
+        ),
+    )
+    p.add_argument("trajectory", type=Path,
+                   help="pylace-clean CSV "
+                        "(typically <video>.pylace_trajectory.csv).")
+    p.add_argument("--out", type=Path, default=None,
+                   help="Output CSV (default: <video>.pylace_audited.csv).")
+    p.add_argument("--swap-log", type=Path, default=None, dest="swap_log",
+                   help="Path for the per-event swap log CSV.")
+    p.add_argument("--sidecar", type=Path, default=None,
+                   help="Arena sidecar JSON (for fps + calibration).")
+    p.add_argument("--fps", type=float, default=None,
+                   help="Override fps from the sidecar.")
+    p.add_argument("--pix-per-mm", type=float, default=None, dest="pix_per_mm",
+                   help="Override calibration from the sidecar.")
+    p.add_argument("--contact-mm", type=float, default=5.0, dest="contact_mm",
+                   help="Two tracks closer than this trigger an audit event.")
+    p.add_argument("--window-s", type=float, default=1.0, dest="window_s",
+                   help="Pre/post-event window half-width in seconds.")
+    p.add_argument("--swap-cost-ratio", type=float, default=0.7,
+                   dest="swap_cost_ratio",
+                   help="Commit a swap when its cost is below this fraction "
+                        "of the identity-permutation cost. Default 0.7 "
+                        "(= require 30%% improvement).")
+    return p
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

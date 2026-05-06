@@ -27,6 +27,7 @@ dev = ["pytest", "pytest-cov", "ruff"]
 
 [project.scripts]
 pylace-annotate = "pylace.annotator.cli:main"
+pylace-audit = "pylace.posthoc.audit_cli:main"
 pylace-clean = "pylace.posthoc.cli:main"
 pylace-detect = "pylace.detect.cli:main"
 pylace-explore = "pylace.posthoc.explorer_cli:main"
