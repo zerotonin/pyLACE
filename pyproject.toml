@@ -13,6 +13,7 @@ authors = [{ name = "Bart Geurten", email = "bart.geurten@gmail.com" }]
 dependencies = [
     "numpy",
     "scipy",
+    "pandas",
     "opencv-python",
     "matplotlib",
     "h5py",
@@ -26,6 +27,7 @@ dev = ["pytest", "pytest-cov", "ruff"]
 
 [project.scripts]
 pylace-annotate = "pylace.annotator.cli:main"
+pylace-clean = "pylace.posthoc.cli:main"
 pylace-detect = "pylace.detect.cli:main"
 pylace-inspect = "pylace.inspect.cli:main"
 pylace-roi = "pylace.roi.cli:main"
