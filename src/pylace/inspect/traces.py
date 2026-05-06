@@ -80,24 +80,31 @@ def render_full_trajectories(
 
     The polyline is broken whenever consecutive samples are more than
     ``max_gap_frames`` apart in time OR more than ``max_jump_px`` apart
-    in space, so an occlusion / chain-merge gap that the tracker bridged
-    via a long position jump does not draw a phantom line across the
-    arena. Defaults: 25 frames (≈ 1 s at typical fps) and 50 px (well
-    above any plausible per-frame fly motion).
+    in space. NaN positions (introduced by the post-hoc cleaner for
+    unbridged big gaps) are dropped before the segment splitter runs,
+    so a NaN never reaches ``astype(np.int32)``. Defaults: 25 frames
+    (≈ 1 s at typical fps) and 50 px (well above any plausible
+    per-frame fly motion).
     """
     for traj, colour in zip(trajectories, colours, strict=False):
         if traj.cx_px.size < 2:
             continue
+        valid = ~(np.isnan(traj.cx_px) | np.isnan(traj.cy_px))
+        if valid.sum() < 2:
+            continue
+        v_cx = traj.cx_px[valid]
+        v_cy = traj.cy_px[valid]
+        v_fr = traj.frame_indices[valid]
         for s, e in _segment_indices(
-            traj.frame_indices, traj.cx_px, traj.cy_px,
+            v_fr, v_cx, v_cy,
             max_gap_frames=max_gap_frames, max_jump_px=max_jump_px,
         ):
             if e - s < 2:
                 continue
             pts = np.column_stack(
                 (
-                    traj.cx_px[s:e].astype(np.int32),
-                    traj.cy_px[s:e].astype(np.int32),
+                    v_cx[s:e].astype(np.int32),
+                    v_cy[s:e].astype(np.int32),
                 ),
             ).reshape(-1, 1, 2)
             cv2.polylines(
@@ -114,7 +121,11 @@ def _segment_indices(
     max_gap_frames: int,
     max_jump_px: float,
 ) -> list[tuple[int, int]]:
-    """Return ``(start, end)`` half-open ranges split at frame OR position breaks."""
+    """Return ``(start, end)`` half-open ranges split at frame OR position breaks.
+
+    Caller must pass NaN-free ``cx``/``cy`` arrays — the splitter is
+    purely a frame-gap / position-jump detector.
+    """
     if frame_indices.size == 0:
         return []
     frame_gap = np.diff(frame_indices) > max_gap_frames
@@ -151,6 +162,10 @@ def render_trail(
     sel_frames = trajectory.frame_indices[mask]
     sel_cx = trajectory.cx_px[mask]
     sel_cy = trajectory.cy_px[mask]
+    valid = ~(np.isnan(sel_cx) | np.isnan(sel_cy))
+    sel_frames = sel_frames[valid]
+    sel_cx = sel_cx[valid]
+    sel_cy = sel_cy[valid]
     if sel_frames.size < 2:
         return
     for i in range(sel_frames.size - 1):
@@ -182,6 +197,8 @@ def render_current_markers(
         if idx.size == 0:
             continue
         i = int(idx[0])
+        if np.isnan(traj.cx_px[i]) or np.isnan(traj.cy_px[i]):
+            continue
         x = int(traj.cx_px[i])
         y = int(traj.cy_px[i])
         cv2.circle(bgr, (x, y), radius_px, colour, thickness=-1)
