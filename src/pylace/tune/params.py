@@ -20,6 +20,10 @@ from pylace.detect.frame import (
 )
 from pylace.tracking.constants import (
     DEFAULT_AREA_COST_WEIGHT,
+    DEFAULT_KALMAN_INITIAL_V_STD,
+    DEFAULT_KALMAN_Q_POS,
+    DEFAULT_KALMAN_Q_VEL,
+    DEFAULT_KALMAN_R_POS,
     DEFAULT_MAX_DISTANCE_PX,
     DEFAULT_MAX_MISSED_FRAMES,
     DEFAULT_PERIMETER_COST_WEIGHT,
@@ -84,6 +88,13 @@ class TrackingParams:
     expected_animal_area_px: float | None = None
     area_cost_weight: float = DEFAULT_AREA_COST_WEIGHT
     perimeter_cost_weight: float = DEFAULT_PERIMETER_COST_WEIGHT
+    # Kalman filter (Phase 4). q_pos / q_vel: per-frame process-noise
+    # stds in pixels. r_pos: measurement-noise std (px). initial_v_std:
+    # generous prior on velocity at track birth (px/frame).
+    kalman_q_pos: float = DEFAULT_KALMAN_Q_POS
+    kalman_q_vel: float = DEFAULT_KALMAN_Q_VEL
+    kalman_r_pos: float = DEFAULT_KALMAN_R_POS
+    kalman_initial_v_std: float = DEFAULT_KALMAN_INITIAL_V_STD
 
 
 @dataclass

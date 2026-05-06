@@ -1,66 +1,121 @@
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║  pyLACE — tracking.tracks                                        ║
-# ║  « stateful Hungarian tracker with track birth / death »         ║
+# ║  « Hungarian tracker over Kalman-predicted state »               ║
 # ╠══════════════════════════════════════════════════════════════════╣
-# ║  One Tracker per ROI run. Per-frame: build the cost matrix       ║
-# ║  between active tracks and new detections, run the optimal       ║
-# ║  pairing via :func:`associate`, accept matches under             ║
-# ║  ``max_distance_px``, increment the missed-frame counter for     ║
-# ║  unmatched tracks, retire any track unmatched for more than      ║
-# ║  ``max_missed_frames`` consecutive frames, and birth a new       ║
-# ║  track for each unmatched detection.                             ║
+# ║  One Tracker per ROI run. Each track owns a 4-state Kalman       ║
+# ║  filter (x, y, vx, vy). Per-frame loop:                          ║
+# ║                                                                  ║
+# ║    1. Predict every active track one step (advance state through ║
+# ║       F, inflate covariance through Q).                          ║
+# ║    2. Build a cost matrix between *predicted* track positions    ║
+# ║       and the new detections, plus optional area + perimeter     ║
+# ║       penalties.                                                 ║
+# ║    3. Hungarian assignment, gated by ``max_distance_px``         ║
+# ║       (Euclidean from predicted to measurement).                 ║
+# ║    4. Apply the standard Kalman update for matched tracks; let   ║
+# ║       unmatched tracks keep their predicted state (covariance    ║
+# ║       grows; a re-detection a few frames later still finds       ║
+# ║       them).                                                     ║
+# ║    5. Increment missed-frame counters; retire / birth as before. ║
+# ║                                                                  ║
+# ║  Two modes share the same ``step`` API:                          ║
+# ║                                                                  ║
+# ║    Dynamic-N (n_animals=None) — the legacy default. Tracks are   ║
+# ║      born for unmatched detections and retired after             ║
+# ║      ``max_missed_frames``.                                      ║
+# ║    Fixed-N — the LACE-paper assumption. Tracks are born for the  ║
+# ║      first N detections, then never replaced or retired. The     ║
+# ║      Hungarian runs unconstrained; spurious detections beyond    ║
+# ║      the Nth slot are dropped.                                   ║
+# ║                                                                  ║
+# ║  Bewley et al. SORT (ICIP 2016) uses exactly this 4-state CV +   ║
+# ║  Hungarian + max-distance gate combination at 260 Hz.            ║
 # ╚══════════════════════════════════════════════════════════════════╝
-"""Stateful frame-to-frame identity tracker."""
+"""Stateful frame-to-frame identity tracker over Kalman-predicted state."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
 from pylace.detect.frame import Detection
 from pylace.tracking.constants import (
     DEFAULT_AREA_COST_WEIGHT,
+    DEFAULT_KALMAN_INITIAL_V_STD,
+    DEFAULT_KALMAN_Q_POS,
+    DEFAULT_KALMAN_Q_VEL,
+    DEFAULT_KALMAN_R_POS,
     DEFAULT_MAX_DISTANCE_PX,
     DEFAULT_MAX_MISSED_FRAMES,
     DEFAULT_PERIMETER_COST_WEIGHT,
 )
 from pylace.tracking.hungarian import linear_assignment
+from pylace.tracking.kalman import (
+    H,
+    initial_covariance,
+    measurement_noise,
+    predict,
+    predicted_position,
+    predicted_velocity,
+    process_noise,
+    transition_matrix,
+    update,
+)
 
 
 @dataclass
 class Track:
-    """Per-track state held by the :class:`Tracker`."""
+    """Per-track state held by the :class:`Tracker`.
+
+    The 4-state Kalman filter ``state = [x, y, vx, vy]ᵀ`` and its
+    covariance live alongside the per-frame feature snapshots that
+    the cost matrix consumes. ``last_position`` is exposed as a
+    backwards-compatible read-only view of the filter's predicted
+    position so older callers keep working.
+    """
 
     track_id: int
-    last_position: tuple[float, float]
+    state: np.ndarray  # (4,) [x, y, vx, vy]
+    covariance: np.ndarray  # (4, 4)
     last_frame_idx: int
     last_area_px: float = 0.0
     last_perimeter_px: float = 0.0
     age: int = 1
     missed_frames: int = 0
 
+    @property
+    def position(self) -> tuple[float, float]:
+        """Current Kalman state's position; predicted between observations."""
+        return predicted_position(self.state)
+
+    @property
+    def velocity(self) -> tuple[float, float]:
+        """Current Kalman state's velocity (px/frame)."""
+        return predicted_velocity(self.state)
+
+    @property
+    def last_position(self) -> tuple[float, float]:
+        """Backwards-compatible alias of ``position``."""
+        return self.position
+
 
 class Tracker:
-    """Hungarian centroid tracker, dynamic-N or fixed-N.
+    """Hungarian centroid tracker with a per-track Kalman filter.
 
     Two modes share the same ``step`` API:
 
     - **Dynamic-N** (``n_animals=None``, the default). Tracks are born
       for unmatched detections; tracks unmatched for more than
-      ``max_missed_frames`` consecutive frames are retired. ``max_distance_px``
-      rejects implausible matches.
+      ``max_missed_frames`` consecutive frames are retired.
+      ``max_distance_px`` rejects implausible matches between the
+      predicted position and a candidate detection.
     - **Fixed-N** (``n_animals=N``). Tracks are born for the first N
       detections that the tracker sees, then never replaced. Unmatched
-      tracks stay alive forever; ``max_missed_frames`` is ignored. The
-      Hungarian runs unconstrained (the user has guaranteed there are
-      exactly N animals, so the tracker trusts the optimal pairing
-      regardless of distance). Unmatched detections beyond N are
-      dropped — they are spurious by the user's own count.
-
-      Fixed-N mode is what the LACE paper assumes: the user knows N, so
-      the tracker never silently births a phantom track when two flies
-      merge into one blob.
+      tracks stay alive forever (the Kalman keeps predicting them
+      forward); ``max_missed_frames`` is ignored. The Hungarian runs
+      unconstrained — the user has guaranteed N animals so the
+      tracker trusts the optimal pairing regardless of distance.
     """
 
     def __init__(
@@ -71,6 +126,10 @@ class Tracker:
         n_animals: int | None = None,
         area_cost_weight: float = DEFAULT_AREA_COST_WEIGHT,
         perimeter_cost_weight: float = DEFAULT_PERIMETER_COST_WEIGHT,
+        kalman_q_pos: float = DEFAULT_KALMAN_Q_POS,
+        kalman_q_vel: float = DEFAULT_KALMAN_Q_VEL,
+        kalman_r_pos: float = DEFAULT_KALMAN_R_POS,
+        kalman_initial_v_std: float = DEFAULT_KALMAN_INITIAL_V_STD,
     ) -> None:
         if max_distance_px < 0:
             raise ValueError("max_distance_px must be >= 0.")
@@ -87,6 +146,11 @@ class Tracker:
         self._n_animals = int(n_animals) if n_animals is not None else None
         self._area_weight = float(area_cost_weight)
         self._perimeter_weight = float(perimeter_cost_weight)
+        # Pre-build Kalman matrices; they are constant across frames.
+        self._F = transition_matrix(dt=1.0)
+        self._Q = process_noise(kalman_q_pos, kalman_q_vel)
+        self._R = measurement_noise(kalman_r_pos)
+        self._init_cov = initial_covariance(kalman_r_pos, kalman_initial_v_std)
         self._tracks: dict[int, Track] = {}
         self._next_id: int = 0
 
@@ -109,6 +173,15 @@ class Tracker:
         any detection beyond the Nth that could not be matched to a
         track, since those are spurious under the user's known count.
         """
+        # Predict every track one step before scoring against the new
+        # detections. ``state`` is now the predicted position; the
+        # cost matrix is built against this rather than the last
+        # observation.
+        for track in self._tracks.values():
+            track.state, track.covariance = predict(
+                track.state, track.covariance, self._F, self._Q,
+            )
+
         track_ids = list(self._tracks.keys())
         cost = self._build_cost_matrix(track_ids, detections)
         match_threshold = (
@@ -128,14 +201,14 @@ class Tracker:
     def _build_cost_matrix(
         self, track_ids: list[int], detections: list[Detection],
     ) -> np.ndarray:
-        """Position cost + optional area + perimeter contributions."""
+        """Position cost (Euclidean from predicted) plus optional features."""
         n_tracks = len(track_ids)
         n_dets = len(detections)
         if n_tracks == 0 or n_dets == 0:
             return np.zeros((n_tracks, n_dets), dtype=np.float64)
 
         track_positions = np.array(
-            [self._tracks[tid].last_position for tid in track_ids],
+            [(H @ self._tracks[tid].state).tolist() for tid in track_ids],
             dtype=np.float64,
         )
         det_positions = np.array(
@@ -197,7 +270,10 @@ class Tracker:
             tid = track_ids[ti]
             track = self._tracks[tid]
             d = detections[di]
-            track.last_position = (d.cx, d.cy)
+            measurement = np.array([d.cx, d.cy], dtype=np.float64)
+            track.state, track.covariance, _ = update(
+                track.state, track.covariance, measurement, self._R,
+            )
             track.last_area_px = d.area_px
             track.last_perimeter_px = d.perimeter_px
             track.last_frame_idx = frame_idx
@@ -232,9 +308,13 @@ class Tracker:
     def _birth(self, detection: Detection, frame_idx: int) -> None:
         tid = self._next_id
         self._next_id += 1
+        state = np.array(
+            [detection.cx, detection.cy, 0.0, 0.0], dtype=np.float64,
+        )
         self._tracks[tid] = Track(
             track_id=tid,
-            last_position=(detection.cx, detection.cy),
+            state=state,
+            covariance=self._init_cov.copy(),
             last_area_px=detection.area_px,
             last_perimeter_px=detection.perimeter_px,
             last_frame_idx=frame_idx,

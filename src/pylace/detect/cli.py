@@ -25,6 +25,10 @@ from pylace.roi.mask import build_combined_mask, build_split_masks
 from pylace.roi.sidecar import default_rois_path, read_rois
 from pylace.tracking.constants import (
     DEFAULT_AREA_COST_WEIGHT,
+    DEFAULT_KALMAN_INITIAL_V_STD,
+    DEFAULT_KALMAN_Q_POS,
+    DEFAULT_KALMAN_Q_VEL,
+    DEFAULT_KALMAN_R_POS,
     DEFAULT_MAX_DISTANCE_PX,
     DEFAULT_MAX_MISSED_FRAMES,
     DEFAULT_PERIMETER_COST_WEIGHT,
@@ -111,6 +115,12 @@ def main(argv: list[str] | None = None) -> int:
             f"  cost weights: area={tracking['area_cost_weight']:.4f} "
             f"perimeter={tracking['perimeter_cost_weight']:.4f}",
         )
+        print(
+            f"  kalman: q_pos={tracking['kalman_q_pos']:.2f} "
+            f"q_vel={tracking['kalman_q_vel']:.2f} "
+            f"r_pos={tracking['kalman_r_pos']:.2f} "
+            f"init_v_std={tracking['kalman_initial_v_std']:.1f}",
+        )
     else:
         print("  tracking: disabled (track_id falls back to per-frame index)")
     if tracking["chain_split_enabled"]:
@@ -185,6 +195,10 @@ def _run_plan(
                     n_animals=tracking["n_animals"],
                     area_cost_weight=tracking["area_cost_weight"],
                     perimeter_cost_weight=tracking["perimeter_cost_weight"],
+                    kalman_q_pos=tracking["kalman_q_pos"],
+                    kalman_q_vel=tracking["kalman_q_vel"],
+                    kalman_r_pos=tracking["kalman_r_pos"],
+                    kalman_initial_v_std=tracking["kalman_initial_v_std"],
                 )
                 if tracking["enabled"]
                 else None
@@ -303,6 +317,10 @@ def _resolve_tuning_params(args: argparse.Namespace) -> tuple[dict, dict]:
         "chain_split_enabled": True,
         "area_cost_weight": DEFAULT_AREA_COST_WEIGHT,
         "perimeter_cost_weight": DEFAULT_PERIMETER_COST_WEIGHT,
+        "kalman_q_pos": DEFAULT_KALMAN_Q_POS,
+        "kalman_q_vel": DEFAULT_KALMAN_Q_VEL,
+        "kalman_r_pos": DEFAULT_KALMAN_R_POS,
+        "kalman_initial_v_std": DEFAULT_KALMAN_INITIAL_V_STD,
     }
 
     candidate = args.params if args.params else default_params_path(args.video)
@@ -333,6 +351,10 @@ def _resolve_tuning_params(args: argparse.Namespace) -> tuple[dict, dict]:
             "chain_split_enabled": True,
             "area_cost_weight": tp.tracking.area_cost_weight,
             "perimeter_cost_weight": tp.tracking.perimeter_cost_weight,
+            "kalman_q_pos": tp.tracking.kalman_q_pos,
+            "kalman_q_vel": tp.tracking.kalman_q_vel,
+            "kalman_r_pos": tp.tracking.kalman_r_pos,
+            "kalman_initial_v_std": tp.tracking.kalman_initial_v_std,
         }
         print(f"Loaded tuned params from {candidate.name}.")
 
@@ -366,6 +388,14 @@ def _resolve_tuning_params(args: argparse.Namespace) -> tuple[dict, dict]:
         tracking["area_cost_weight"] = args.cost_area_weight
     if args.cost_perimeter_weight is not None:
         tracking["perimeter_cost_weight"] = args.cost_perimeter_weight
+    if args.kalman_q_pos is not None:
+        tracking["kalman_q_pos"] = args.kalman_q_pos
+    if args.kalman_q_vel is not None:
+        tracking["kalman_q_vel"] = args.kalman_q_vel
+    if args.kalman_r_pos is not None:
+        tracking["kalman_r_pos"] = args.kalman_r_pos
+    if args.kalman_initial_v_std is not None:
+        tracking["kalman_initial_v_std"] = args.kalman_initial_v_std
     return detection, background, tracking
 
 
@@ -576,6 +606,37 @@ def _build_parser() -> argparse.ArgumentParser:
             "Reject contours whose major / minor axis ratio exceeds this. "
             "0 disables. A real fly is ≈ 2–3; thin streak shadows are "
             "5+ — start with 5.0."
+        ),
+    )
+    p.add_argument(
+        "--kalman-q-pos", type=float, default=None, dest="kalman_q_pos",
+        help=(
+            f"Kalman per-frame position-drift std (px). Larger = more "
+            f"responsive but less smooth. Default {DEFAULT_KALMAN_Q_POS}."
+        ),
+    )
+    p.add_argument(
+        "--kalman-q-vel", type=float, default=None, dest="kalman_q_vel",
+        help=(
+            f"Kalman per-frame velocity-jitter std (px/frame). Roughly the "
+            f"rms acceleration the filter expects. Default {DEFAULT_KALMAN_Q_VEL}."
+        ),
+    )
+    p.add_argument(
+        "--kalman-r-pos", type=float, default=None, dest="kalman_r_pos",
+        help=(
+            f"Kalman per-axis measurement-noise std (px). The detector's "
+            f"centroid is accurate to ~ 1 px on a 1080p arena view; raise "
+            f"this if your detections look noisier. Default {DEFAULT_KALMAN_R_POS}."
+        ),
+    )
+    p.add_argument(
+        "--kalman-initial-v-std", type=float, default=None,
+        dest="kalman_initial_v_std",
+        help=(
+            f"Initial velocity prior at track birth (px/frame std). "
+            f"Generous enough to cover the fastest plausible per-frame "
+            f"motion. Default {DEFAULT_KALMAN_INITIAL_V_STD}."
         ),
     )
     return p

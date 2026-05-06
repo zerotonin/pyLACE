@@ -247,6 +247,64 @@ def test_negative_cost_weights_raise():
         Tracker(perimeter_cost_weight=-0.1)
 
 
+# ─────────────────────────────────────────────────────────────────
+#  Kalman motion model (Phase 4)
+# ─────────────────────────────────────────────────────────────────
+
+
+def test_kalman_state_acquires_velocity_after_a_few_observations():
+    """A track that consistently moves should pick up a non-zero velocity."""
+    tracker = Tracker(max_distance_px=50.0)
+    for fr in range(6):
+        # 4 px per frame in +x.
+        tracker.step(fr, [_det(10 + 4 * fr, 10)])
+    track = tracker.active_tracks[0]
+    vx, vy = track.velocity
+    assert 2.0 < vx < 6.0
+    assert abs(vy) < 1.0
+
+
+def test_kalman_predicts_through_a_short_gap_at_a_constant_velocity():
+    """A fly moving steadily should be re-acquired after a missed frame."""
+    # Velocity of 4 px / frame; max_distance_px=10 (tight enough that a
+    # raw last-position cost would reject the post-gap detection).
+    tracker = Tracker(max_distance_px=10.0, max_missed_frames=3)
+    for fr in range(6):
+        tracker.step(fr, [_det(10 + 4 * fr, 10)])
+    tid = tracker.active_tracks[0].track_id
+    # Frame 6 missed. Frame 7 has a detection 8 px from the predicted
+    # position (raw distance from frame-5's last_position = 12 px,
+    # which would be rejected by max_distance_px=10).
+    tracker.step(6, [])
+    f7 = [_det(10 + 4 * 7, 10)]  # 38, 10
+    kept = tracker.step(7, f7)
+    assert kept[0].track_id == tid
+
+
+def test_kalman_velocity_vanishes_for_a_stationary_track():
+    tracker = Tracker(max_distance_px=10.0)
+    for fr in range(20):
+        tracker.step(fr, [_det(20, 20)])
+    track = tracker.active_tracks[0]
+    vx, vy = track.velocity
+    assert abs(vx) < 0.5
+    assert abs(vy) < 0.5
+
+
+def test_kalman_does_not_break_fixed_n_chain_recovery():
+    """The Phase-4 upgrade must not regress the existing chain-recovery test."""
+    tracker = Tracker(n_animals=2)
+    tracker.step(0, [_det(10, 10), _det(50, 50)])
+    id_left = tracker.active_tracks[0].track_id
+    id_right = tracker.active_tracks[1].track_id
+    for fr in range(1, 31):
+        tracker.step(fr, [_det(30, 30)])
+    f31 = [_det(12, 11), _det(52, 49)]
+    kept = tracker.step(31, f31)
+    matched = {d.track_id for d in kept}
+    assert matched == {id_left, id_right}
+
+
 def test_fixed_n_does_not_mark_unassigned_detections_with_track_id():
     """Detections beyond the Nth slot keep ``track_id == -1`` and are dropped."""
     tracker = Tracker(n_animals=1)

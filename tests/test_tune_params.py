@@ -159,6 +159,42 @@ def test_tracking_params_cost_weights_default_to_zero():
     assert p.tracking.perimeter_cost_weight == 0.0
 
 
+def test_tracking_params_kalman_round_trip(tmp_path: Path):
+    from pylace.tune.params import TrackingParams
+
+    out = tmp_path / "with_kalman.json"
+    params = TuningParams(
+        detection=DetectionParams(),
+        background=BackgroundParams(),
+        tracking=TrackingParams(
+            kalman_q_pos=1.5, kalman_q_vel=2.0,
+            kalman_r_pos=0.7, kalman_initial_v_std=15.0,
+        ),
+    )
+    write_params(params, video_path=Path("/tmp/x.mp4"), video_sha256_hex="0" * 64,
+                 out_path=out)
+    loaded, _ = read_params(out)
+    assert loaded.tracking.kalman_q_pos == 1.5
+    assert loaded.tracking.kalman_q_vel == 2.0
+    assert loaded.tracking.kalman_r_pos == 0.7
+    assert loaded.tracking.kalman_initial_v_std == 15.0
+
+
+def test_tracking_params_kalman_defaults_are_sensible():
+    from pylace.tracking.constants import (
+        DEFAULT_KALMAN_INITIAL_V_STD,
+        DEFAULT_KALMAN_Q_POS,
+        DEFAULT_KALMAN_Q_VEL,
+        DEFAULT_KALMAN_R_POS,
+    )
+
+    p = TuningParams.defaults()
+    assert p.tracking.kalman_q_pos == DEFAULT_KALMAN_Q_POS
+    assert p.tracking.kalman_q_vel == DEFAULT_KALMAN_Q_VEL
+    assert p.tracking.kalman_r_pos == DEFAULT_KALMAN_R_POS
+    assert p.tracking.kalman_initial_v_std == DEFAULT_KALMAN_INITIAL_V_STD
+
+
 def test_detection_params_shape_filter_round_trip(tmp_path: Path):
     out = tmp_path / "shape.json"
     params = TuningParams(

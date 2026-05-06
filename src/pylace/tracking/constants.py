@@ -24,3 +24,29 @@ DEFAULT_MAX_MISSED_FRAMES: Final[int] = 5
 # behaviour is preserved unless a project explicitly opts in.
 DEFAULT_AREA_COST_WEIGHT: Final[float] = 0.0
 DEFAULT_PERIMETER_COST_WEIGHT: Final[float] = 0.0
+
+# ─────────────────────────────────────────────────────────────────
+#  Kalman motion model  « Phase 4 — predicted-position cost »
+# ─────────────────────────────────────────────────────────────────
+# Per-frame position-drift std (px). Small process noise that lets
+# the filter accommodate small irregular position errors the
+# constant-velocity model does not predict. Larger values make the
+# filter more responsive but less smooth.
+DEFAULT_KALMAN_Q_POS: Final[float] = 0.5
+
+# Per-frame velocity-jitter std (px/frame). Roughly the rms
+# acceleration the filter expects between frames. Drosophila
+# walking saccades are well below 1 px/frame² at typical fps; this
+# default is conservative.
+DEFAULT_KALMAN_Q_VEL: Final[float] = 0.5
+
+# Per-axis measurement noise std (px). The detector's centroid is
+# accurate to about 1 px on a 1080p arena view; raise this if your
+# detections look noisier (e.g. a low-contrast recording).
+DEFAULT_KALMAN_R_POS: Final[float] = 1.0
+
+# Initial velocity std at track birth (px/frame). Generous enough
+# to cover the fastest plausible per-frame motion of a fly. The
+# filter converges within a few observations regardless of the
+# exact value.
+DEFAULT_KALMAN_INITIAL_V_STD: Final[float] = 10.0
