@@ -21,6 +21,7 @@ from pylace.posthoc.heading import compute_yaw, resolve_headings
 from pylace.posthoc.io import (
     default_trajectory_path,
     read_detections,
+    video_path_from_trajectory,
     write_trajectory,
 )
 
@@ -88,7 +89,7 @@ def _resolve_video_params(args: argparse.Namespace) -> tuple[float | None, float
 
     sidecar_path = (
         args.sidecar if args.sidecar
-        else default_sidecar_path(_video_from_detections(args.detections))
+        else default_sidecar_path(video_path_from_trajectory(args.detections))
     )
     if not sidecar_path.exists():
         if fps is None:
@@ -110,13 +111,6 @@ def _resolve_video_params(args: argparse.Namespace) -> tuple[float | None, float
         if pix_per_mm is None:
             pix_per_mm = float(sc.calibration.pixel_distance / sc.calibration.physical_mm)
     return fps, pix_per_mm
-
-
-def _video_from_detections(detections: Path) -> Path:
-    name = detections.name
-    if name.endswith(".pylace_detections.csv"):
-        return detections.with_name(name[: -len(".pylace_detections.csv")])
-    return detections.with_suffix("")
 
 
 def _build_parser() -> argparse.ArgumentParser:

@@ -19,6 +19,10 @@ from pylace.posthoc.constants import (
     DEFAULT_BOUT_ON_MM_S,
     DEFAULT_THIGMOTAXIS_OUTER_FRAC,
 )
+from pylace.posthoc.io import (
+    trajectory_stem,
+    video_path_from_trajectory,
+)
 from pylace.posthoc.metrics import summarise_tracks
 from pylace.posthoc.multifly import (
     nearest_neighbour_distance,
@@ -112,7 +116,7 @@ def _resolve_video_params(args: argparse.Namespace):
     fps = args.fps
     sidecar_path = (
         args.sidecar if args.sidecar
-        else default_sidecar_path(_video_from_trajectory(args.trajectory))
+        else default_sidecar_path(video_path_from_trajectory(args.trajectory))
     )
     arena = None
     pix_per_mm = args.pix_per_mm
@@ -133,27 +137,12 @@ def _resolve_video_params(args: argparse.Namespace):
     return fps, arena, pix_per_mm
 
 
-def _video_from_trajectory(trajectory: Path) -> Path:
-    name = trajectory.name
-    if name.endswith(".pylace_trajectory.csv"):
-        return trajectory.with_name(name[: -len(".pylace_trajectory.csv")])
-    return trajectory.with_suffix("")
-
-
 def _default_summary_path(trajectory: Path) -> Path:
-    name = trajectory.name
-    if name.endswith(".pylace_trajectory.csv"):
-        stem = name[: -len(".pylace_trajectory.csv")]
-        return trajectory.with_name(stem + ".pylace_metrics.csv")
-    return trajectory.with_name(trajectory.stem + ".pylace_metrics.csv")
+    return trajectory.with_name(trajectory_stem(trajectory) + ".pylace_metrics.csv")
 
 
 def _default_multifly_path(trajectory: Path) -> Path:
-    name = trajectory.name
-    if name.endswith(".pylace_trajectory.csv"):
-        stem = name[: -len(".pylace_trajectory.csv")]
-        return trajectory.with_name(stem + ".pylace_multifly.csv")
-    return trajectory.with_name(trajectory.stem + ".pylace_multifly.csv")
+    return trajectory.with_name(trajectory_stem(trajectory) + ".pylace_multifly.csv")
 
 
 def _build_parser() -> argparse.ArgumentParser:

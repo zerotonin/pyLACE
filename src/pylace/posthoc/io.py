@@ -25,6 +25,13 @@ CLEANED_EXTRA_COLUMNS: tuple[str, ...] = (
 )
 
 TRAJECTORY_SUFFIX = ".pylace_trajectory.csv"
+AUDITED_SUFFIX = ".pylace_audited.csv"
+DETECTIONS_SUFFIX = ".pylace_detections.csv"
+KNOWN_TRAJECTORY_SUFFIXES = (
+    AUDITED_SUFFIX,
+    TRAJECTORY_SUFFIX,
+    DETECTIONS_SUFFIX,
+)
 
 
 def read_detections(csv_path: Path) -> pd.DataFrame:
@@ -51,7 +58,30 @@ def write_trajectory(df: pd.DataFrame, csv_path: Path) -> None:
 def default_trajectory_path(detections_csv: Path) -> Path:
     """Conventional output path next to the detections CSV."""
     name = detections_csv.name
-    if name.endswith(".pylace_detections.csv"):
-        stem = name[: -len(".pylace_detections.csv")]
+    if name.endswith(DETECTIONS_SUFFIX):
+        stem = name[: -len(DETECTIONS_SUFFIX)]
         return detections_csv.with_name(stem + TRAJECTORY_SUFFIX)
     return detections_csv.with_name(detections_csv.stem + TRAJECTORY_SUFFIX)
+
+
+def video_path_from_trajectory(trajectory_csv: Path) -> Path:
+    """Strip a known pylace suffix off the trajectory CSV name to recover the video path.
+
+    Accepts ``<video>.pylace_detections.csv``,
+    ``<video>.pylace_trajectory.csv``, or ``<video>.pylace_audited.csv``;
+    falls back to ``trajectory_csv.with_suffix("")`` for anything else.
+    """
+    name = trajectory_csv.name
+    for suffix in KNOWN_TRAJECTORY_SUFFIXES:
+        if name.endswith(suffix):
+            return trajectory_csv.with_name(name[: -len(suffix)])
+    return trajectory_csv.with_suffix("")
+
+
+def trajectory_stem(trajectory_csv: Path) -> str:
+    """Strip a known pylace suffix and return the bare basename (no extension)."""
+    name = trajectory_csv.name
+    for suffix in KNOWN_TRAJECTORY_SUFFIXES:
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
+    return trajectory_csv.stem

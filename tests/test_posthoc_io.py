@@ -96,3 +96,28 @@ def test_default_trajectory_path_handles_arbitrary_csv():
     in_path = Path("/tmp/random_name.csv")
     out = default_trajectory_path(in_path)
     assert out.name.endswith(".pylace_trajectory.csv")
+
+
+def test_video_path_from_trajectory_strips_known_suffixes():
+    from pylace.posthoc.io import video_path_from_trajectory
+
+    cases = {
+        "foo.mp4.pylace_detections.csv": "foo.mp4",
+        "foo.mp4.pylace_trajectory.csv": "foo.mp4",
+        "foo.mp4.pylace_audited.csv":    "foo.mp4",
+        "random_name.csv":               "random_name",
+    }
+    for in_name, expected in cases.items():
+        assert video_path_from_trajectory(Path("/tmp") / in_name).name == expected
+
+
+def test_trajectory_stem_strips_known_suffixes():
+    from pylace.posthoc.io import trajectory_stem
+
+    cases = {
+        "foo.mp4.pylace_detections.csv": "foo.mp4",
+        "foo.mp4.pylace_trajectory.csv": "foo.mp4",
+        "foo.mp4.pylace_audited.csv":    "foo.mp4",
+    }
+    for in_name, expected in cases.items():
+        assert trajectory_stem(Path("/tmp") / in_name) == expected
