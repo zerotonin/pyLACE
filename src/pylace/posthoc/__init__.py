@@ -33,6 +33,11 @@ from pylace.posthoc.metrics import (
     walk_stop_bouts,
     yaw_rate_summary,
 )
+from pylace.posthoc.multifly import (
+    nearest_neighbour_distance,
+    pairwise_distance_matrix,
+    polarisation,
+)
 
 __all__ = [
     "CLEANED_EXTRA_COLUMNS",
@@ -40,7 +45,10 @@ __all__ = [
     "clean_trajectory",
     "compute_distance_to_wall",
     "compute_yaw",
+    "nearest_neighbour_distance",
     "occupancy_heatmap",
+    "pairwise_distance_matrix",
+    "polarisation",
     "read_detections",
     "resolve_headings",
     "speed_summary",

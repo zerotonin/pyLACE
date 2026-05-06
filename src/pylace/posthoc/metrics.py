@@ -269,14 +269,27 @@ def summarise_track(
     *,
     fps: float,
     arena: Arena | None = None,
+    nn_distances: pd.DataFrame | None = None,
     on_threshold_mm_s: float = DEFAULT_BOUT_ON_MM_S,
     off_threshold_mm_s: float = DEFAULT_BOUT_OFF_MM_S,
     min_duration_s: float = DEFAULT_BOUT_MIN_DURATION_S,
     outer_band_frac: float = DEFAULT_THIGMOTAXIS_OUTER_FRAC,
 ) -> dict[str, float]:
-    """Compose all scalar metrics into one row of summary stats."""
+    """Compose all scalar metrics into one row of summary stats.
+
+    Args:
+        traj_track: Single-track cleaned trajectory.
+        fps: Frame rate.
+        arena: Optional arena geometry; required for thigmotaxis.
+        nn_distances: Optional long-form ``(frame_idx, track_id,
+            nn_distance_mm)`` DataFrame from
+            :func:`pylace.posthoc.multifly.nearest_neighbour_distance`.
+            When provided, adds ``nn_mean_mm`` and ``nn_p10_mm``
+            (10th percentile — typical close-approach distance).
+    """
+    tid = int(traj_track["track_id"].iloc[0])
     out: dict[str, float] = {
-        "track_id": int(traj_track["track_id"].iloc[0]),
+        "track_id": tid,
         "n_frames": int(len(traj_track)),
         "total_time_s": float(len(traj_track) / fps),
     }
@@ -298,6 +311,15 @@ def summarise_track(
         out["thigmotaxis_fraction"] = thigmotaxis_fraction(
             traj_track, arena, outer_band_frac=outer_band_frac,
         )
+    if nn_distances is not None:
+        nn_self = nn_distances[nn_distances["track_id"] == tid]["nn_distance_mm"]
+        nn_self = nn_self.dropna()
+        if not nn_self.empty:
+            out["nn_mean_mm"] = float(nn_self.mean())
+            out["nn_p10_mm"] = float(np.percentile(nn_self, 10))
+        else:
+            out["nn_mean_mm"] = float("nan")
+            out["nn_p10_mm"] = float("nan")
     return out
 
 
@@ -306,11 +328,15 @@ def summarise_tracks(
     *,
     fps: float,
     arena: Arena | None = None,
+    nn_distances: pd.DataFrame | None = None,
     **kwargs,
 ) -> pd.DataFrame:
     """Summary frame with one row per track, columns from ``summarise_track``."""
     rows = [
-        summarise_track(group, fps=fps, arena=arena, **kwargs)
+        summarise_track(
+            group, fps=fps, arena=arena,
+            nn_distances=nn_distances, **kwargs,
+        )
         for _, group in traj.groupby("track_id", sort=True)
     ]
     return pd.DataFrame(rows)
