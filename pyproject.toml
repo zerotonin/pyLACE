@@ -20,6 +20,7 @@ dependencies = [
     "pyyaml",
     "tqdm",
     "PyQt6",
+    "pyqtgraph",
 ]
 
 [project.optional-dependencies]
@@ -29,7 +30,9 @@ dev = ["pytest", "pytest-cov", "ruff"]
 pylace-annotate = "pylace.annotator.cli:main"
 pylace-clean = "pylace.posthoc.cli:main"
 pylace-detect = "pylace.detect.cli:main"
+pylace-explore = "pylace.posthoc.explorer_cli:main"
 pylace-inspect = "pylace.inspect.cli:main"
+pylace-metrics = "pylace.posthoc.metrics_cli:main"
 pylace-roi = "pylace.roi.cli:main"
 pylace-tune = "pylace.tune.cli:main"
 

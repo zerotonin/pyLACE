@@ -15,6 +15,7 @@
 # ╚══════════════════════════════════════════════════════════════════╝
 """Post-hoc trajectory cleaning and analysis."""
 
+from pylace.posthoc.analytics import compute_distance_to_wall
 from pylace.posthoc.clean import clean_trajectory
 from pylace.posthoc.heading import compute_yaw, resolve_headings
 from pylace.posthoc.io import (
@@ -23,13 +24,30 @@ from pylace.posthoc.io import (
     read_detections,
     write_trajectory,
 )
+from pylace.posthoc.metrics import (
+    occupancy_heatmap,
+    speed_summary,
+    summarise_track,
+    summarise_tracks,
+    thigmotaxis_fraction,
+    walk_stop_bouts,
+    yaw_rate_summary,
+)
 
 __all__ = [
     "CLEANED_EXTRA_COLUMNS",
     "DETECTION_COLUMNS",
     "clean_trajectory",
+    "compute_distance_to_wall",
     "compute_yaw",
+    "occupancy_heatmap",
     "read_detections",
     "resolve_headings",
+    "speed_summary",
+    "summarise_track",
+    "summarise_tracks",
+    "thigmotaxis_fraction",
+    "walk_stop_bouts",
     "write_trajectory",
+    "yaw_rate_summary",
 ]

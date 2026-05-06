@@ -50,3 +50,23 @@ DEFAULT_HEADING_FLIP_PENALTY: float = 90.0
 # want to preserve fast turns without de-jittering them away.
 DEFAULT_YAW_SG_WINDOW: int = 7
 DEFAULT_YAW_SG_POLYORDER: int = 2
+
+# ─────────────────────────────────────────────────────────────────
+#  Kinematic readouts (Phase 2)  « Branson / Robie / Anderson »
+# ─────────────────────────────────────────────────────────────────
+# Schmitt-trigger walk / stop classifier. The hysteresis between on
+# and off thresholds prevents bout fragmentation from speed jitter at
+# the boundary; minimum duration suppresses single-frame spurious
+# walks. Robie et al., J Exp Biol 2010.
+DEFAULT_BOUT_ON_MM_S: float = 2.5
+DEFAULT_BOUT_OFF_MM_S: float = 1.0
+DEFAULT_BOUT_MIN_DURATION_S: float = 0.1
+
+# 2D occupancy histogram resolution. 64 × 64 over the whole frame is
+# the convention for visualising arena-scale heatmaps.
+DEFAULT_OCCUPANCY_BINS: int = 64
+
+# Outer band fraction defining "wall zone" for thigmotaxis
+# computation. Soibam et al., PLoS ONE 2012, used 25%; 20% is the
+# slightly stricter Branson convention.
+DEFAULT_THIGMOTAXIS_OUTER_FRAC: float = 0.20
