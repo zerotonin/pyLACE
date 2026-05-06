@@ -1,14 +1,14 @@
 # ╔══════════════════════════════════════════════════════════════════╗
-# ║  pyLACE — tests.test_inspect_navigation                          ║
+# ║  pyLACE — tests.test_widgets_navigation                          ║
 # ║  « pure-logic helpers for the three-bar navigation widget »      ║
 # ╚══════════════════════════════════════════════════════════════════╝
-"""Tests for :class:`pylace.inspect.navigation.FrameRange`."""
+"""Tests for :class:`pylace.widgets.navigation.FrameRange`."""
 
 from __future__ import annotations
 
 import pytest
 
-from pylace.inspect.navigation import FrameRange
+from pylace.widgets.navigation import FrameRange
 
 
 def test_default_range_spans_full_movie():

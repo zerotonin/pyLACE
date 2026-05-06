@@ -30,7 +30,7 @@ from pylace.detect.background import (
     default_background_paths,
     load_background_png,
 )
-from pylace.inspect.navigation import FrameNavigationStrip
+from pylace.widgets.navigation import FrameNavigationStrip
 from pylace.inspect.palette import palette_bgr
 from pylace.inspect.traces import (
     TrackTrajectory,
@@ -200,6 +200,7 @@ class InspectorWindow(QtWidgets.QMainWindow):
 
         self._nav = FrameNavigationStrip(self._total_frames, parent=wrap)
         self._nav.set_trajectories(self._trajectories, self._colours)
+        self._nav.set_fps(self._fps)
         self._nav.set_current_frame(self._current_frame)
         self._nav.currentFrameChanged.connect(self._on_frame_changed)
         v.addWidget(self._nav)
