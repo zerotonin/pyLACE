@@ -73,19 +73,56 @@ def render_full_trajectories(
     colours: list[tuple[int, int, int]],
     *,
     line_thickness: int = 1,
+    max_gap_frames: int = 25,
+    max_jump_px: float = 50.0,
 ) -> None:
     """Draw every track's full trajectory as a polyline on ``bgr`` in place.
 
-    Used for the overview panel: a single static draw over the chosen
-    background image.
+    The polyline is broken whenever consecutive samples are more than
+    ``max_gap_frames`` apart in time OR more than ``max_jump_px`` apart
+    in space, so an occlusion / chain-merge gap that the tracker bridged
+    via a long position jump does not draw a phantom line across the
+    arena. Defaults: 25 frames (≈ 1 s at typical fps) and 50 px (well
+    above any plausible per-frame fly motion).
     """
     for traj, colour in zip(trajectories, colours, strict=False):
         if traj.cx_px.size < 2:
             continue
-        pts = np.column_stack(
-            (traj.cx_px.astype(np.int32), traj.cy_px.astype(np.int32)),
-        ).reshape(-1, 1, 2)
-        cv2.polylines(bgr, [pts], isClosed=False, color=colour, thickness=line_thickness)
+        for s, e in _segment_indices(
+            traj.frame_indices, traj.cx_px, traj.cy_px,
+            max_gap_frames=max_gap_frames, max_jump_px=max_jump_px,
+        ):
+            if e - s < 2:
+                continue
+            pts = np.column_stack(
+                (
+                    traj.cx_px[s:e].astype(np.int32),
+                    traj.cy_px[s:e].astype(np.int32),
+                ),
+            ).reshape(-1, 1, 2)
+            cv2.polylines(
+                bgr, [pts], isClosed=False, color=colour,
+                thickness=line_thickness,
+            )
+
+
+def _segment_indices(
+    frame_indices: np.ndarray,
+    cx: np.ndarray,
+    cy: np.ndarray,
+    *,
+    max_gap_frames: int,
+    max_jump_px: float,
+) -> list[tuple[int, int]]:
+    """Return ``(start, end)`` half-open ranges split at frame OR position breaks."""
+    if frame_indices.size == 0:
+        return []
+    frame_gap = np.diff(frame_indices) > max_gap_frames
+    pos_jump = np.hypot(np.diff(cx), np.diff(cy)) > max_jump_px
+    breaks = np.where(frame_gap | pos_jump)[0] + 1
+    starts = np.concatenate(([0], breaks))
+    ends = np.concatenate((breaks, [frame_indices.size]))
+    return list(zip(starts.tolist(), ends.tolist()))
 
 
 def render_trail(
@@ -97,12 +134,15 @@ def render_trail(
     *,
     line_thickness: int = 2,
     min_alpha: float = 0.1,
+    max_gap_frames: int = 5,
 ) -> None:
     """Draw an ``trail_frames``-long fading trail leading up to ``current_frame``.
 
-    Older segments are rendered in a darker shade of ``colour`` (intensity
-    decay rather than true alpha — looks correct on a video frame and
-    avoids per-segment image blends).
+    Segments whose endpoints are more than ``max_gap_frames`` apart are
+    skipped so the trail does not bridge an occlusion gap with a straight
+    line. Older segments are rendered in a darker shade of ``colour``
+    (intensity decay rather than true alpha — looks correct on a video
+    frame and avoids per-segment image blends).
     """
     if trail_frames <= 0 or trajectory.cx_px.size < 2:
         return
@@ -114,6 +154,8 @@ def render_trail(
     if sel_frames.size < 2:
         return
     for i in range(sel_frames.size - 1):
+        if int(sel_frames[i + 1]) - int(sel_frames[i]) > max_gap_frames:
+            continue
         age = current_frame - int(sel_frames[i])
         alpha = max(min_alpha, 1.0 - age / trail_frames)
         dimmed = tuple(int(round(c * alpha)) for c in colour)

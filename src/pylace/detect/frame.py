@@ -129,6 +129,7 @@ def detect_blobs_with_mask(
     contours = _filtered_contours(fg, min_area, max_area)
     if chain_splitter is not None:
         contours = chain_splitter.maybe_split(contours)
+    h, w = arena_mask.shape
     out: list[Detection] = []
     for c in contours:
         if len(c) < ELLIPSE_FIT_MIN_POINTS:
@@ -140,6 +141,13 @@ def detect_blobs_with_mask(
             ratio = det.major_axis_px / det.minor_axis_px
             if ratio > max_axis_ratio:
                 continue
+        # Final guard against centroids landing outside the mask. Moments
+        # cover the common case, but a non-convex contour (e.g. a C-shape
+        # clipped along a curved mask boundary) can still have a centroid
+        # outside its own concavity, and so outside the mask.
+        ix, iy = int(round(det.cx)), int(round(det.cy))
+        if not (0 <= ix < w and 0 <= iy < h and arena_mask[iy, ix]):
+            continue
         out.append(det)
     return out, fg
 
