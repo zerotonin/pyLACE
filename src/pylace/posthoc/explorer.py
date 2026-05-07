@@ -140,12 +140,17 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         out: list[TrackTrajectory] = []
         for tid in self._track_ids:
             g = self._tracks[tid]
+            heading = (
+                g["heading_deg"].to_numpy(dtype=np.float64)
+                if "heading_deg" in g.columns else None
+            )
             out.append(
                 TrackTrajectory(
                     track_id=tid,
                     frame_indices=g["frame_idx"].to_numpy(dtype=np.int64),
                     cx_px=g["cx_smooth_px"].to_numpy(dtype=np.float64),
                     cy_px=g["cy_smooth_px"].to_numpy(dtype=np.float64),
+                    heading_deg=heading,
                 ),
             )
         return out
@@ -177,10 +182,39 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         self._nav = FrameNavigationStrip(self._total_frames, parent=wrap)
         self._nav.set_trajectories(self._traj_objects, self._colours)
         self._nav.set_fps(self._fps)
+        self._apply_sidecar_trim_to_nav()
         self._nav.set_current_frame(self._current_frame)
         self._nav.currentFrameChanged.connect(self._on_nav_changed)
         v.addWidget(self._nav)
         return wrap
+
+    def _apply_sidecar_trim_to_nav(self) -> None:
+        """If the arena sidecar carries a trim, restrict the strip + plots."""
+        trim = getattr(self._sidecar, "trim", None)
+        if trim is None:
+            return
+        lo = (
+            int(round(trim.start_s * self._fps))
+            if trim.start_s is not None else 0
+        )
+        hi = (
+            int(round(trim.end_s * self._fps))
+            if trim.end_s is not None else self._total_frames - 1
+        )
+        lo = max(0, min(self._total_frames - 2, lo))
+        hi = max(lo + 1, min(self._total_frames - 1, hi))
+        bar = self._nav._range_bar
+        bar._lo = lo
+        bar._hi = hi
+        bar.update()
+        self._nav._scrub.setRange(lo, hi)
+        self._nav._scrub.setValue(max(lo, min(hi, self._current_frame)))
+        # Match the matplotlib x-limit too so the plots open at the
+        # trim window rather than the whole movie.
+        if hasattr(self, "_ax_speed"):
+            self._ax_speed.set_xlim(lo / self._fps, hi / self._fps)
+        # If the user's first_frame_idx is outside the trim, snap.
+        self._current_frame = max(lo, min(hi, self._current_frame))
 
     def _build_toolbar(self) -> QtWidgets.QWidget:
         wrap = QtWidgets.QWidget(self)

@@ -29,12 +29,18 @@ FREEHAND_OUTLINE_COLOR = (200, 220, 0)     # teal
 
 @dataclass
 class TrackTrajectory:
-    """All positions a track was detected at, indexed by absolute frame."""
+    """All positions a track was detected at, indexed by absolute frame.
+
+    ``heading_deg`` is optional — populated when the source CSV has a
+    ``heading_deg`` column (i.e. cleaned / audited trajectories) and
+    left as ``None`` for raw detection CSVs.
+    """
 
     track_id: int
     frame_indices: np.ndarray  # int (N,)
     cx_px: np.ndarray  # float (N,)
     cy_px: np.ndarray  # float (N,)
+    heading_deg: np.ndarray | None = None  # float (N,) or None
 
 
 def read_traces(csv_path: Path) -> list[TrackTrajectory]:
@@ -46,12 +52,17 @@ def read_traces(csv_path: Path) -> list[TrackTrajectory]:
     Returns:
         One ``TrackTrajectory`` per distinct ``track_id``, ordered by id.
     """
-    rows_by_track: dict[int, list[tuple[int, float, float]]] = defaultdict(list)
+    rows_by_track: dict[int, list[tuple[int, float, float, float]]] = defaultdict(list)
+    has_heading = False
     with csv_path.open() as f:
         reader = csv.DictReader(f)
+        if reader.fieldnames is not None:
+            has_heading = "heading_deg" in reader.fieldnames
         for row in reader:
+            heading = float(row["heading_deg"]) if has_heading else float("nan")
             rows_by_track[int(row["track_id"])].append(
-                (int(row["frame_idx"]), float(row["cx_px"]), float(row["cy_px"])),
+                (int(row["frame_idx"]), float(row["cx_px"]),
+                 float(row["cy_px"]), heading),
             )
     out: list[TrackTrajectory] = []
     for tid in sorted(rows_by_track.keys()):
@@ -62,6 +73,10 @@ def read_traces(csv_path: Path) -> list[TrackTrajectory]:
                 frame_indices=np.array([r[0] for r in rows], dtype=np.int64),
                 cx_px=np.array([r[1] for r in rows], dtype=np.float64),
                 cy_px=np.array([r[2] for r in rows], dtype=np.float64),
+                heading_deg=(
+                    np.array([r[3] for r in rows], dtype=np.float64)
+                    if has_heading else None
+                ),
             )
         )
     return out
@@ -190,8 +205,16 @@ def render_current_markers(
     *,
     radius_px: int = 6,
     label: bool = True,
+    show_orientation: bool = True,
+    orientation_length_px: int = 18,
 ) -> None:
-    """Mark each track's position at ``current_frame`` (if present) as a filled circle."""
+    """Mark each track's position at ``current_frame`` as a filled circle.
+
+    When ``show_orientation`` is True and the trajectory carries a
+    ``heading_deg`` array (cleaned / audited CSVs), a short arrow is
+    drawn from the centroid in the heading direction so the user can
+    see body axis at a glance.
+    """
     for traj, colour in zip(trajectories, colours, strict=False):
         idx = np.where(traj.frame_indices == current_frame)[0]
         if idx.size == 0:
@@ -201,6 +224,19 @@ def render_current_markers(
             continue
         x = int(traj.cx_px[i])
         y = int(traj.cy_px[i])
+        if (
+            show_orientation
+            and traj.heading_deg is not None
+            and i < traj.heading_deg.size
+            and not np.isnan(traj.heading_deg[i])
+        ):
+            theta = np.deg2rad(float(traj.heading_deg[i]))
+            tip_x = int(round(x + orientation_length_px * np.cos(theta)))
+            tip_y = int(round(y + orientation_length_px * np.sin(theta)))
+            cv2.arrowedLine(
+                bgr, (x, y), (tip_x, tip_y),
+                colour, thickness=2, tipLength=0.4,
+            )
         cv2.circle(bgr, (x, y), radius_px, colour, thickness=-1)
         cv2.circle(bgr, (x, y), radius_px, (0, 0, 0), thickness=1)
         if label:
