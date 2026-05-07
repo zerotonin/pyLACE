@@ -94,6 +94,12 @@ class TrackingParams:
     # to the major axis at the centroid (the LACE-paper rule).
     splitter_mode: str = "watershed"
     watershed_peak_distance_px: int = 8
+    # LACE-paper Hough rescue: when post-split detection count is
+    # below n_animals, fit ellipses to contour sub-arcs and accept
+    # those whose area sits within ``hough_area_tolerance`` of the
+    # expected animal area. Only fires in fixed-N mode.
+    hough_rescue_enabled: bool = True
+    hough_area_tolerance: float = 0.50
     # Kalman filter (Phase 4). q_pos / q_vel: per-frame process-noise
     # stds in pixels. r_pos: measurement-noise std (px). initial_v_std:
     # generous prior on velocity at track birth (px/frame).

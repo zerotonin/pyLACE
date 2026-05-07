@@ -57,6 +57,7 @@ def detect_blobs(
     max_axis_ratio: float = DEFAULT_MAX_AXIS_RATIO,
     keep_contour: bool = True,
     chain_splitter=None,
+    hough_rescuer=None,
 ) -> list[Detection]:
     """Per-frame blob detection on a grayscale frame.
 
@@ -90,6 +91,7 @@ def detect_blobs(
         min_solidity=min_solidity, max_axis_ratio=max_axis_ratio,
         keep_contour=keep_contour,
         chain_splitter=chain_splitter,
+        hough_rescuer=hough_rescuer,
     )
     return detections
 
@@ -109,6 +111,7 @@ def detect_blobs_with_mask(
     max_axis_ratio: float = DEFAULT_MAX_AXIS_RATIO,
     keep_contour: bool = True,
     chain_splitter=None,
+    hough_rescuer=None,
 ) -> tuple[list[Detection], np.ndarray]:
     """Like :func:`detect_blobs` but also returns the binary foreground mask.
 
@@ -149,6 +152,16 @@ def detect_blobs_with_mask(
         if not (0 <= ix < w and 0 <= iy < h and arena_mask[iy, ix]):
             continue
         out.append(det)
+    if hough_rescuer is not None:
+        out = hough_rescuer.maybe_rescue(out, fg)
+        # The rescuer can in principle place a candidate just outside
+        # the mask edge; keep the same final guard the contour path has.
+        out = [
+            d for d in out
+            if 0 <= int(round(d.cx)) < w
+            and 0 <= int(round(d.cy)) < h
+            and arena_mask[int(round(d.cy)), int(round(d.cx))]
+        ]
     return out, fg
 
 

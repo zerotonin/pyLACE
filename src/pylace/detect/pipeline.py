@@ -68,6 +68,7 @@ def run_detection(
     extra_mask: np.ndarray | None = None,
     tracker: Tracker | None = None,
     chain_splitter: ChainSplitter | None = None,
+    hough_rescuer=None,
 ) -> Iterator[FrameResult]:
     """Stream per-frame detections for a video against a sidecar.
 
@@ -127,6 +128,7 @@ def run_detection(
             every=every, max_frames=max_frames,
             start_frame=start_frame, end_frame=end_frame,
             tracker=tracker, chain_splitter=chain_splitter,
+            hough_rescuer=hough_rescuer,
         )
     finally:
         cap.release()
@@ -141,6 +143,7 @@ def _iter_frames(
     start_frame: int, end_frame: int | None,
     tracker: Tracker | None,
     chain_splitter: ChainSplitter | None,
+    hough_rescuer=None,
 ) -> Iterator[FrameResult]:
     if start_frame > 0:
         cap.set(cv2.CAP_PROP_POS_FRAMES, float(start_frame))
@@ -162,6 +165,7 @@ def _iter_frames(
                 min_solidity=min_solidity, max_axis_ratio=max_axis_ratio,
                 keep_contour=False,
                 chain_splitter=chain_splitter,
+                hough_rescuer=hough_rescuer,
             )
             if tracker is not None:
                 detections = tracker.step(idx, detections)

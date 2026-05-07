@@ -20,6 +20,7 @@ from pylace.detect.frame import (
     DEFAULT_THRESHOLD,
 )
 from pylace.detect.chain import ChainSplitter
+from pylace.detect.hough_rescue import HoughRescuer
 from pylace.detect.watershed import WatershedSplitter
 from pylace.detect.pipeline import run_detection, write_detections_csv
 from pylace.roi.mask import build_combined_mask, build_split_masks
@@ -159,6 +160,13 @@ def main(argv: list[str] | None = None) -> int:
             )
     else:
         print("  splitter: disabled")
+    if tracking.get("hough_rescue_enabled", True) and tracking.get("n_animals"):
+        print(
+            f"  hough rescue: enabled (target N={tracking['n_animals']}, "
+            f"area_tol=±{tracking.get('hough_area_tolerance', 0.5):.2f})",
+        )
+    else:
+        print("  hough rescue: disabled")
     from pylace.detect.background import load_or_build_background_pair
 
     bg, _trail, bg_source = load_or_build_background_pair(
@@ -230,6 +238,7 @@ def _run_plan(
                 if tracking["chain_split_enabled"]
                 else None
             )
+            hough_rescuer = _build_hough_rescuer(tracking)
             for fr in run_detection(
                 video, sidecar,
                 threshold=detection["threshold"],
@@ -248,6 +257,7 @@ def _run_plan(
                 extra_mask=mask,
                 tracker=tracker,
                 chain_splitter=chain_splitter,
+                hough_rescuer=hough_rescuer,
             ):
                 fr.roi_label = label
                 yield fr
@@ -270,6 +280,22 @@ def _run_plan(
         dynamic_ncols=True,
     )
     return write_detections_csv(progress, sidecar, out_path)
+
+
+def _build_hough_rescuer(tracking: dict):
+    """Build a HoughRescuer if enabled and we have a known target N."""
+    if not tracking.get("hough_rescue_enabled", True):
+        return None
+    n_animals = tracking.get("n_animals")
+    if n_animals is None:
+        # Hough rescue only makes sense in fixed-N mode — without N
+        # there's no way to know the per-frame deficit.
+        return None
+    return HoughRescuer(
+        target_n=int(n_animals),
+        expected_animal_area_px=tracking.get("expected_animal_area_px"),
+        area_tolerance=tracking.get("hough_area_tolerance", 0.50),
+    )
 
 
 def _build_splitter(tracking: dict):
@@ -354,6 +380,8 @@ def _resolve_tuning_params(args: argparse.Namespace) -> tuple[dict, dict]:
         "chain_split_enabled": True,
         "splitter_mode": "watershed",
         "watershed_peak_distance_px": 8,
+        "hough_rescue_enabled": True,
+        "hough_area_tolerance": 0.50,
         "area_cost_weight": DEFAULT_AREA_COST_WEIGHT,
         "perimeter_cost_weight": DEFAULT_PERIMETER_COST_WEIGHT,
         "kalman_q_pos": DEFAULT_KALMAN_Q_POS,
@@ -390,6 +418,8 @@ def _resolve_tuning_params(args: argparse.Namespace) -> tuple[dict, dict]:
             "chain_split_enabled": True,
             "splitter_mode": tp.tracking.splitter_mode,
             "watershed_peak_distance_px": tp.tracking.watershed_peak_distance_px,
+            "hough_rescue_enabled": tp.tracking.hough_rescue_enabled,
+            "hough_area_tolerance": tp.tracking.hough_area_tolerance,
             "area_cost_weight": tp.tracking.area_cost_weight,
             "perimeter_cost_weight": tp.tracking.perimeter_cost_weight,
             "kalman_q_pos": tp.tracking.kalman_q_pos,
@@ -429,6 +459,10 @@ def _resolve_tuning_params(args: argparse.Namespace) -> tuple[dict, dict]:
         tracking["splitter_mode"] = args.splitter
     if args.watershed_peak_distance is not None:
         tracking["watershed_peak_distance_px"] = args.watershed_peak_distance
+    if args.no_hough_rescue:
+        tracking["hough_rescue_enabled"] = False
+    if args.hough_area_tolerance is not None:
+        tracking["hough_area_tolerance"] = args.hough_area_tolerance
     if args.cost_area_weight is not None:
         tracking["area_cost_weight"] = args.cost_area_weight
     if args.cost_perimeter_weight is not None:
@@ -634,6 +668,23 @@ def _build_parser() -> argparse.ArgumentParser:
             "Watershed local-maximum suppression radius in pixels. Set well "
             "below the inter-fly centroid distance and above the half-width "
             "of a single fly. Default 8."
+        ),
+    )
+    p.add_argument(
+        "--no-hough-rescue", action="store_true", dest="no_hough_rescue",
+        help=(
+            "Disable the LACE-paper Hough rescue. When enabled (the default "
+            "in fixed-N mode), under-counted frames get extra ellipse "
+            "candidates fitted to contour sub-arcs before Hungarian runs."
+        ),
+    )
+    p.add_argument(
+        "--hough-area-tolerance", type=float, default=None,
+        dest="hough_area_tolerance",
+        help=(
+            "± fraction around the expected animal area that a rescue "
+            "candidate's fitted ellipse must fall within. Default 0.5 "
+            "(half-to-1.5× expected)."
         ),
     )
     p.add_argument(
