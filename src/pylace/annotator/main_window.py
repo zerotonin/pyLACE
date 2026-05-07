@@ -33,7 +33,6 @@ from pylace.annotator.sidecar import (
 
 SNAP_RADIUS_PX = 12.0
 HANDLE_SIZE_PX = 8
-CIRCLE_HANDLE_LABELS = ("centre", "east", "north", "west", "south")
 
 
 class FrameCanvas(QtWidgets.QWidget):
@@ -80,14 +79,17 @@ class FrameCanvas(QtWidgets.QWidget):
 
     def set_arena(self, arena: Arena | None) -> None:
         self._arena = arena
+        self._emit_status()
         self.update()
 
     def set_world_frame(self, frame: WorldFrame | None) -> None:
         self._world_frame = frame
+        self._emit_status()
         self.update()
 
     def set_calibration(self, cal: Calibration | None) -> None:
         self._calibration = cal
+        self._emit_status()
         self.update()
 
     def set_mode(self, mode: str) -> None:
@@ -292,12 +294,14 @@ class FrameCanvas(QtWidgets.QWidget):
         if self._arena is None:
             return
         if isinstance(self._arena, Circle):
-            i = self._index_of_nearest(
-                [v for _, v in self._arena.origin_candidates()], p,
-            )
+            candidates = self._arena.origin_candidates()
+            i = self._index_of_nearest([v for _, v in candidates], p)
             if i is None:
                 return
-            self._drag_kind = CIRCLE_HANDLE_LABELS[i]
+            # Pull the label directly from origin_candidates so the
+            # drag_kind always matches the handle the user clicked,
+            # regardless of the order Circle uses for its candidate list.
+            self._drag_kind = candidates[i][0]
             self._drag_index = i
             self._mode = "drag_handle"
             return
@@ -443,6 +447,9 @@ class AnnotatorWindow(QtWidgets.QMainWindow):
 
         self.canvas = FrameCanvas(self)
         self.canvas.statusChanged.connect(self._on_status)
+        self.canvas.statusChanged.connect(
+            lambda _: self._update_step_indicators(),
+        )
         self._load_first_frame()
 
         self.setWindowTitle(f"pylace-annotate — {video.name}")
@@ -451,6 +458,11 @@ class AnnotatorWindow(QtWidgets.QMainWindow):
 
         self._build_toolbar()
         self._load_existing_sidecar()
+        # Snapshot of the on-disk state (matches _current_state() if a
+        # sidecar was loaded, all-None otherwise). closeEvent uses this
+        # to decide whether unsaved changes warrant a warning.
+        self._saved_state = self._current_state()
+        self._update_step_indicators()
 
     def _load_video_meta(self) -> VideoMeta:
         size, fps = probe_video(self._video)
@@ -481,16 +493,19 @@ class AnnotatorWindow(QtWidgets.QMainWindow):
         toolbar = self.addToolBar("Tools")
         toolbar.setMovable(False)
 
+        self._arena_status = self._add_step_indicator(toolbar, "Arena")
         self._circle_action = self._add_mode_action(toolbar, "Circle", "draw_circle")
         self._rect_action = self._add_mode_action(toolbar, "Rectangle", "draw_rectangle")
         self._polygon_action = self._add_mode_action(toolbar, "Polygon", "draw_polygon")
         toolbar.addSeparator()
 
-        origin_action = QtGui.QAction("Origin", self)
+        self._origin_status = self._add_step_indicator(toolbar, "Origin")
+        origin_action = QtGui.QAction("Set origin", self)
         origin_action.triggered.connect(self._start_origin_pick)
         toolbar.addAction(origin_action)
 
-        calibrate_action = QtGui.QAction("Calibrate", self)
+        self._calibrate_status = self._add_step_indicator(toolbar, "Calibrate")
+        calibrate_action = QtGui.QAction("Set calibration", self)
         calibrate_action.triggered.connect(self._start_calibration)
         toolbar.addAction(calibrate_action)
 
@@ -522,6 +537,83 @@ class AnnotatorWindow(QtWidgets.QMainWindow):
         toolbar.addAction(action)
         return action
 
+    def _add_step_indicator(
+        self, toolbar: QtWidgets.QToolBar, name: str,
+    ) -> QtWidgets.QLabel:
+        """Toolbar status pill for one of the three required steps."""
+        label = QtWidgets.QLabel(f"✗ {name}", self)
+        label.setStyleSheet(
+            "QLabel {"
+            "  color: #c0392b;"
+            "  font-weight: bold;"
+            "  padding: 2px 8px;"
+            "  margin-right: 2px;"
+            "}"
+        )
+        label.setToolTip(f"{name}: not set yet")
+        action = QtWidgets.QWidgetAction(self)
+        action.setDefaultWidget(label)
+        toolbar.addAction(action)
+        return label
+
+    def _set_step_indicator(self, label: QtWidgets.QLabel, name: str, done: bool) -> None:
+        if done:
+            label.setText(f"✓ {name}")
+            label.setStyleSheet(
+                "QLabel {"
+                "  color: #1e8449;"
+                "  font-weight: bold;"
+                "  padding: 2px 8px;"
+                "  margin-right: 2px;"
+                "}"
+            )
+            label.setToolTip(f"{name}: complete")
+        else:
+            label.setText(f"✗ {name}")
+            label.setStyleSheet(
+                "QLabel {"
+                "  color: #c0392b;"
+                "  font-weight: bold;"
+                "  padding: 2px 8px;"
+                "  margin-right: 2px;"
+                "}"
+            )
+            label.setToolTip(f"{name}: not set yet")
+
+    def _update_step_indicators(self) -> None:
+        self._set_step_indicator(
+            self._arena_status, "Arena",
+            self.canvas.arena() is not None,
+        )
+        self._set_step_indicator(
+            self._origin_status, "Origin",
+            self.canvas.world_frame() is not None,
+        )
+        self._set_step_indicator(
+            self._calibrate_status, "Calibrate",
+            self.canvas.calibration() is not None,
+        )
+
+    def _missing_steps(self) -> list[str]:
+        missing = []
+        if self.canvas.arena() is None:
+            missing.append("Arena (draw a Circle / Rectangle / Polygon on the frame)")
+        if self.canvas.world_frame() is None:
+            missing.append("Origin (click Set origin then click a point on the arena)")
+        if self.canvas.calibration() is None:
+            missing.append(
+                "Calibration (click Set calibration; for a circle the diameter "
+                "in mm; for polygons click two points whose real distance you know)",
+            )
+        return missing
+
+    def _current_state(self):
+        return (
+            self.canvas.arena(),
+            self.canvas.world_frame(),
+            self.canvas.calibration(),
+        )
+
     def _start_origin_pick(self) -> None:
         if self.canvas.arena() is None:
             self.statusBar().showMessage("Draw an arena first.", 3000)
@@ -551,6 +643,9 @@ class AnnotatorWindow(QtWidgets.QMainWindow):
             pixel_distance=2.0 * circle.r,
         )
         self.canvas.set_calibration(cal)
+        # Belt-and-braces refresh in case the canvas's status signal
+        # arrives on a different event-loop tick than the dialog return.
+        self._update_step_indicators()
 
     def _on_y_up_toggled(self, checked: bool) -> None:
         existing = self.canvas.world_frame()
@@ -584,22 +679,77 @@ class AnnotatorWindow(QtWidgets.QMainWindow):
         if sidecar.arena is not None:
             self.canvas.set_mode("edit")
 
-    def _save(self) -> None:
-        arena = self.canvas.arena()
-        world = self.canvas.world_frame()
-        cal = self.canvas.calibration()
-        if arena is None:
-            self.statusBar().showMessage("No arena defined.", 3000)
-            return
-        if world is None:
-            self.statusBar().showMessage("Origin not set.", 3000)
-            return
-        if cal is None:
-            self.statusBar().showMessage("Calibration not set.", 3000)
-            return
-        sidecar = Sidecar(video=self._video_meta, arena=arena, world_frame=world, calibration=cal)
+    def _save(self) -> bool:
+        """Try to write the sidecar; return True on success, False otherwise."""
+        missing = self._missing_steps()
+        if missing:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Cannot save annotation",
+                "The annotation is incomplete. Please finish:\n\n"
+                + "\n".join(f"  •  {step}" for step in missing),
+            )
+            return False
+        sidecar = Sidecar(
+            video=self._video_meta,
+            arena=self.canvas.arena(),
+            world_frame=self.canvas.world_frame(),
+            calibration=self.canvas.calibration(),
+        )
         write_sidecar(sidecar, self._out_path)
+        self._saved_state = self._current_state()
         self.statusBar().showMessage(f"Saved {self._out_path}.", 5000)
+        return True
+
+    def closeEvent(self, event: QtGui.QCloseEvent) -> None:  # noqa: N802
+        if not self._has_unsaved_work():
+            super().closeEvent(event)
+            return
+        missing = self._missing_steps()
+        if missing:
+            text = (
+                "Annotation is incomplete and not yet saved. "
+                "Closing now will discard your work.\n\n"
+                "Still missing:\n"
+                + "\n".join(f"  •  {step}" for step in missing)
+                + "\n\nQuit anyway?"
+            )
+            buttons = (
+                QtWidgets.QMessageBox.StandardButton.Discard
+                | QtWidgets.QMessageBox.StandardButton.Cancel
+            )
+            choice = QtWidgets.QMessageBox.question(
+                self, "Annotation incomplete", text, buttons,
+                QtWidgets.QMessageBox.StandardButton.Cancel,
+            )
+            if choice == QtWidgets.QMessageBox.StandardButton.Discard:
+                super().closeEvent(event)
+            else:
+                event.ignore()
+            return
+        # All three steps are set but the on-disk file is out of date.
+        choice = QtWidgets.QMessageBox.question(
+            self, "Save before quitting?",
+            "You have unsaved annotation changes. Save now?",
+            QtWidgets.QMessageBox.StandardButton.Save
+            | QtWidgets.QMessageBox.StandardButton.Discard
+            | QtWidgets.QMessageBox.StandardButton.Cancel,
+            QtWidgets.QMessageBox.StandardButton.Save,
+        )
+        if choice == QtWidgets.QMessageBox.StandardButton.Save:
+            if self._save():
+                super().closeEvent(event)
+            else:
+                event.ignore()
+        elif choice == QtWidgets.QMessageBox.StandardButton.Discard:
+            super().closeEvent(event)
+        else:
+            event.ignore()
+
+    def _has_unsaved_work(self) -> bool:
+        if all(s is None for s in self._current_state()):
+            return False  # blank canvas, nothing to lose
+        return self._current_state() != self._saved_state
 
     def _on_status(self, text: str) -> None:
         self.statusBar().showMessage(text)
