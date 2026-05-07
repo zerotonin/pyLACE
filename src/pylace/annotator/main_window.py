@@ -504,7 +504,30 @@ class AnnotatorWindow(QtWidgets.QMainWindow):
         v.setContentsMargins(0, 0, 0, 0)
         v.addWidget(self.canvas, stretch=1)
         v.addWidget(self._build_view_panel(wrap))
+        v.addWidget(self._build_nav_strip(wrap))
         return wrap
+
+    def _build_nav_strip(self, parent: QtWidgets.QWidget) -> QtWidgets.QWidget:
+        from pylace.widgets.navigation import FrameNavigationStrip
+        total = self._probe_total_frames()
+        self._nav = FrameNavigationStrip(total, parent=parent)
+        self._nav.set_fps(self._video_meta.fps)
+        self._nav.set_current_frame(self._frame_index)
+        self._nav.currentFrameChanged.connect(self._on_nav_frame_changed)
+        # The strip's internal range-delimiter is the trim semantic for
+        # us; wire its rangeChanged to update _trim.
+        self._nav._range_bar.rangeChanged.connect(self._on_nav_range_changed)
+        return self._nav
+
+    def _probe_total_frames(self) -> int:
+        import cv2
+
+        cap = cv2.VideoCapture(str(self._video))
+        try:
+            n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        finally:
+            cap.release()
+        return max(1, n)
 
     def _build_view_panel(self, parent: QtWidgets.QWidget) -> QtWidgets.QWidget:
         wrap = QtWidgets.QWidget(parent)
@@ -524,19 +547,6 @@ class AnnotatorWindow(QtWidgets.QMainWindow):
         )
         self._cb_view.currentIndexChanged.connect(self._on_view_changed)
         h.addWidget(self._cb_view)
-
-        h.addSpacing(8)
-        h.addWidget(QtWidgets.QLabel("Frame:", wrap))
-        total = max(1, int(self._video_meta.fps * 600))  # generous upper bound
-        self._sb_frame = QtWidgets.QSpinBox(wrap)
-        self._sb_frame.setRange(0, max(0, total - 1))
-        self._sb_frame.setValue(int(self._frame_index))
-        self._sb_frame.setToolTip(
-            "Source frame index for the Sample frame view. Has no effect "
-            "in Background max/min view.",
-        )
-        self._sb_frame.valueChanged.connect(self._on_frame_index_changed)
-        h.addWidget(self._sb_frame)
 
         h.addSpacing(12)
         h.addWidget(QtWidgets.QLabel("Trim start (s):", wrap))
@@ -565,6 +575,21 @@ class AnnotatorWindow(QtWidgets.QMainWindow):
         self._sb_trim_end.valueChanged.connect(self._on_trim_changed)
         h.addWidget(self._sb_trim_end)
 
+        set_start = QtWidgets.QPushButton("Set start = current", wrap)
+        set_start.setToolTip(
+            "Take the scrubber's current frame as the trim start.",
+        )
+        set_start.clicked.connect(self._on_set_trim_start_to_current)
+        h.addWidget(set_start)
+
+        set_end = QtWidgets.QPushButton("Set end = current", wrap)
+        set_end.setToolTip(
+            "Take the scrubber's current frame as the trim end.",
+        )
+        set_end.clicked.connect(self._on_set_trim_end_to_current)
+        h.addWidget(set_end)
+
+        h.addSpacing(8)
         recompute = QtWidgets.QPushButton("Recompute background", wrap)
         recompute.setToolTip(
             "Sample the current trim range and rebuild the max/min "
@@ -740,13 +765,28 @@ class AnnotatorWindow(QtWidgets.QMainWindow):
         self._view_mode = mode
         self._apply_view_mode()
 
-    def _on_frame_index_changed(self, value: int) -> None:
-        if self._view_mode != "frame":
-            return
-        self._frame_index = int(value)
-        self._first_frame_rgb = self._load_first_frame()
+    def _on_nav_frame_changed(self, frame: int) -> None:
+        """Strip scrubber moved → load that frame onto the canvas."""
+        self._frame_index = int(frame)
+        if self._view_mode == "frame":
+            self._first_frame_rgb = self._load_first_frame()
+
+    def _on_nav_range_changed(self, lo: int, hi: int) -> None:
+        """Strip's yellow handles moved → push into _trim + spinboxes."""
+        from pylace.annotator.sidecar import Trim
+        fps = max(1.0, float(self._video_meta.fps))
+        total = self._probe_total_frames()
+        # The strip always carves a non-trivial sub-range out of the
+        # total movie span. Treat lo == 0 as "no start trim" and
+        # hi == total - 1 as "no end trim", so dragging the handles
+        # in to the very edges clears the corresponding bound.
+        start_s = (lo / fps) if lo > 0 else None
+        end_s = (hi / fps) if hi < total - 1 else None
+        self._trim = Trim(start_s=start_s, end_s=end_s)
+        self._sync_view_widgets_from_state()
 
     def _on_trim_changed(self, _value: float) -> None:
+        """Spinbox edited → push into _trim + nav strip's range bar."""
         from pylace.annotator.sidecar import Trim
         s = float(self._sb_trim_start.value())
         e = float(self._sb_trim_end.value())
@@ -754,7 +794,50 @@ class AnnotatorWindow(QtWidgets.QMainWindow):
             start_s=s if s > 0.0 else None,
             end_s=e if e > 0.0 else None,
         )
+        self._sync_nav_range_from_trim()
         self._on_status(self.canvas._status_text())  # refresh status bar
+
+    def _sync_nav_range_from_trim(self) -> None:
+        """Push current ``_trim`` into the nav strip's range delimiter."""
+        if not hasattr(self, "_nav"):
+            return
+        fps = max(1.0, float(self._video_meta.fps))
+        total = self._probe_total_frames()
+        lo = int(round((self._trim.start_s or 0.0) * fps))
+        hi = int(round((self._trim.end_s or (total / fps)) * fps))
+        lo = max(0, min(total - 2, lo))
+        hi = max(lo + 1, min(total - 1, hi))
+        bar = self._nav._range_bar
+        bar.blockSignals(True)
+        bar._lo = lo
+        bar._hi = hi
+        bar.update()
+        bar.blockSignals(False)
+        # Reset the scrubber's range to the new sub-window so scrubbing
+        # naturally stays inside the trim.
+        self._nav._scrub.blockSignals(True)
+        self._nav._scrub.setRange(lo, hi)
+        cur = max(lo, min(hi, self._nav.current_frame()))
+        self._nav._scrub.setValue(cur)
+        self._nav._scrub.blockSignals(False)
+
+    def _on_set_trim_start_to_current(self) -> None:
+        """Snap trim start to whatever frame the scrubber is on."""
+        from pylace.annotator.sidecar import Trim
+        fps = max(1.0, float(self._video_meta.fps))
+        cur_s = float(self._frame_index) / fps
+        self._trim = Trim(start_s=cur_s, end_s=self._trim.end_s)
+        self._sync_view_widgets_from_state()
+        self._sync_nav_range_from_trim()
+
+    def _on_set_trim_end_to_current(self) -> None:
+        """Snap trim end to whatever frame the scrubber is on."""
+        from pylace.annotator.sidecar import Trim
+        fps = max(1.0, float(self._video_meta.fps))
+        cur_s = float(self._frame_index) / fps
+        self._trim = Trim(start_s=self._trim.start_s, end_s=cur_s)
+        self._sync_view_widgets_from_state()
+        self._sync_nav_range_from_trim()
 
     def _on_recompute_bg(self) -> None:
         from pylace.detect.background import compute_projection_pair, save_background_png, default_background_paths
@@ -902,6 +985,7 @@ class AnnotatorWindow(QtWidgets.QMainWindow):
             self.canvas.set_mode("edit")
         if sidecar.trim is not None:
             self._trim = sidecar.trim
+            self._sync_nav_range_from_trim()
 
     def _save(self) -> bool:
         """Try to write the sidecar; return True on success, False otherwise."""
