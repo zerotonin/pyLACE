@@ -56,8 +56,10 @@ class TuneWindow(QtWidgets.QMainWindow):
         self._params_path = params_path
         self._params = self._load_or_default_params()
 
+        from pylace.roi.geometry import ROISet
         self._arena_mask = arena_mask(sidecar.arena, sidecar.video.frame_size)
         self._roi_mask: np.ndarray | None = None
+        self._roi_set: ROISet | None = None
         self._mask = self._arena_mask
         self._load_roi_mask_from_disk()
         self._background: np.ndarray | None = None
@@ -78,6 +80,7 @@ class TuneWindow(QtWidgets.QMainWindow):
 
         self._show_mask = False
         self._show_arena = True
+        self._show_roi = True
         self._show_contours = False
         self._show_ellipses = True
         self._show_centroids = True
@@ -146,14 +149,17 @@ class TuneWindow(QtWidgets.QMainWindow):
         path = default_rois_path(self._video)
         if not path.exists():
             self._roi_mask = None
+            self._roi_set = None
             self._mask = self._arena_mask
             return
         try:
             sidecar = read_rois(path)
         except (ROISidecarSchemaError, ValueError, OSError):
             self._roi_mask = None
+            self._roi_set = None
             self._mask = self._arena_mask
             return
+        self._roi_set = sidecar.roi_set
         fs = self._sidecar.video.frame_size
         if sidecar.roi_set.mode == "split":
             pairs = build_split_masks(sidecar.roi_set, fs)
@@ -533,6 +539,13 @@ class TuneWindow(QtWidgets.QMainWindow):
             dv, "Arena outline", self._show_arena,
             tip="Draws the calibrated arena boundary on the overlay.",
         )
+        self._cb_roi = self._check(
+            dv, "ROI outline", self._show_roi,
+            tip="Draws the ROI sidecar's outlines on the overlay (green for "
+                "add ROIs, red for subtract, teal for the freehand mask). "
+                "The detection footprint is always arena ∩ ROI; this toggle "
+                "just controls visibility.",
+        )
         self._cb_contours = self._check(
             dv, "Contours", self._show_contours,
             tip="Draws each detection's raw OpenCV contour.",
@@ -553,7 +566,7 @@ class TuneWindow(QtWidgets.QMainWindow):
                 "the Detection info panel below.",
         )
         for cb in (
-            self._cb_mask, self._cb_arena, self._cb_contours,
+            self._cb_mask, self._cb_arena, self._cb_roi, self._cb_contours,
             self._cb_ellipses, self._cb_centroids, self._cb_numbers,
         ):
             cb.toggled.connect(self._on_display_toggled)
@@ -727,6 +740,7 @@ class TuneWindow(QtWidgets.QMainWindow):
     def _on_display_toggled(self) -> None:
         self._show_mask = self._cb_mask.isChecked()
         self._show_arena = self._cb_arena.isChecked()
+        self._show_roi = self._cb_roi.isChecked()
         self._show_contours = self._cb_contours.isChecked()
         self._show_ellipses = self._cb_ellipses.isChecked()
         self._show_centroids = self._cb_centroids.isChecked()
@@ -1018,7 +1032,9 @@ class TuneWindow(QtWidgets.QMainWindow):
         overlay = render_overlay(
             frame, self._sidecar.arena, detections,
             foreground_mask=fg_mask if self._show_mask else None,
+            roi_set=self._roi_set,
             show_arena=self._show_arena,
+            show_roi=self._show_roi,
             show_contours=self._show_contours,
             show_ellipses=self._show_ellipses,
             show_centroids=self._show_centroids,
@@ -1062,7 +1078,9 @@ class TuneWindow(QtWidgets.QMainWindow):
     def _render_static_image(self, gray: np.ndarray, *, label: str) -> None:
         overlay = render_overlay(
             gray, self._sidecar.arena, [],
+            roi_set=self._roi_set,
             show_arena=self._show_arena,
+            show_roi=self._show_roi,
             show_contours=False, show_ellipses=False, show_centroids=False,
         )
         self._set_pixmap(overlay)

@@ -7,6 +7,8 @@ import numpy as np
 
 from pylace.annotator.geometry import Arena, Circle
 from pylace.detect.frame import Detection
+from pylace.inspect.traces import render_roi_outlines as _render_roi_outlines
+from pylace.roi.geometry import ROISet
 
 ARENA_COLOR = (0, 220, 220)        # cyan
 CONTOUR_COLOR = (0, 255, 0)        # green
@@ -22,7 +24,9 @@ def render_overlay(
     detections: list[Detection],
     *,
     foreground_mask: np.ndarray | None = None,
+    roi_set: ROISet | None = None,
     show_arena: bool = True,
+    show_roi: bool = False,
     show_contours: bool = True,
     show_ellipses: bool = True,
     show_centroids: bool = True,
@@ -38,9 +42,14 @@ def render_overlay(
             frame; if provided, foreground pixels get a subtle tint to
             reveal which pixels survived threshold + morphology before
             contour fitting.
-        show_arena, show_contours, show_ellipses, show_centroids,
-        show_numbers: Toggles. ``show_numbers`` labels each detection
-            with its track_id (if assigned) or per-frame index.
+        roi_set: Optional ``ROISet`` whose outlines are drawn when
+            ``show_roi`` is True (green for add ROIs, red for
+            subtract, teal for the freehand mask), reusing the same
+            helper the inspector uses so the look is consistent.
+        show_arena, show_roi, show_contours, show_ellipses,
+        show_centroids, show_numbers: Toggles. ``show_numbers``
+            labels each detection with its track_id (if assigned)
+            or per-frame index.
 
     Returns:
         ``(H, W, 3)`` BGR ``uint8`` image.
@@ -50,6 +59,8 @@ def render_overlay(
         _tint_mask(bgr, foreground_mask, MASK_TINT)
     if show_arena:
         _draw_arena(bgr, arena)
+    if show_roi and roi_set is not None and not roi_set.is_empty():
+        _render_roi_outlines(bgr, roi_set)
     for idx, d in enumerate(detections):
         if show_contours and d.contour is not None:
             cv2.drawContours(bgr, [d.contour], -1, CONTOUR_COLOR, 1)
