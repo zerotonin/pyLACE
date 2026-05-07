@@ -20,6 +20,7 @@ from pylace.detect.frame import (
     DEFAULT_THRESHOLD,
 )
 from pylace.detect.chain import ChainSplitter
+from pylace.detect.watershed import WatershedSplitter
 from pylace.detect.pipeline import run_detection, write_detections_csv
 from pylace.roi.mask import build_combined_mask, build_split_masks
 from pylace.roi.sidecar import default_rois_path, read_rois
@@ -64,21 +65,35 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     fps = sidecar.video.fps
-    start_frame = (
-        int(round(args.start * fps)) if args.start is not None else 0
+    # CLI flags override; sidecar.trim provides the default; otherwise
+    # whole video.
+    trim = sidecar.trim
+    start_s = (
+        args.start if args.start is not None
+        else (trim.start_s if trim is not None else None)
     )
-    end_frame = (
-        int(round(args.end * fps)) if args.end is not None else None
+    end_s = (
+        args.end if args.end is not None
+        else (trim.end_s if trim is not None else None)
     )
+    start_frame = int(round(start_s * fps)) if start_s is not None else 0
+    end_frame = int(round(end_s * fps)) if end_s is not None else None
     if end_frame is not None and end_frame <= start_frame:
         print("--end must be after --start.", file=sys.stderr)
         return 2
 
     print(f"pylace-detect: {args.video.name} -> {out_path.name}")
-    if args.start is not None or args.end is not None:
-        end_repr = f"{args.end:.2f}s" if args.end is not None else "end"
-        start_repr = f"{args.start:.2f}s" if args.start is not None else "start"
-        print(f"  window: {start_repr} -> {end_repr}  (frames {start_frame}..{end_frame})")
+    if start_s is not None or end_s is not None:
+        source = (
+            "CLI flag" if (args.start is not None or args.end is not None)
+            else "sidecar.trim"
+        )
+        end_repr = f"{end_s:.2f}s" if end_s is not None else "end"
+        start_repr = f"{start_s:.2f}s" if start_s is not None else "start"
+        print(
+            f"  window: {start_repr} -> {end_repr}  "
+            f"(frames {start_frame}..{end_frame})  [{source}]",
+        )
     print(
         f"  detection: threshold={detection['threshold']} "
         f"min_area={detection['min_area']} max_area={detection['max_area']} "
@@ -124,19 +139,26 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print("  tracking: disabled (track_id falls back to per-frame index)")
     if tracking["chain_split_enabled"]:
+        mode = tracking.get("splitter_mode", "watershed")
+        extra = ""
+        if mode == "watershed":
+            extra = (
+                f"  (watershed, peak_distance="
+                f"{tracking.get('watershed_peak_distance_px', 8)} px)"
+            )
         if tracking["expected_animal_area_px"] is not None:
             print(
-                f"  chain split: expected_animal_area="
+                f"  splitter ({mode}): expected_animal_area="
                 f"{tracking['expected_animal_area_px']:.0f} px² "
-                "(threshold 1.5×)",
+                f"(threshold 1.5×){extra}",
             )
         else:
             print(
-                "  chain split: enabled, expected area auto-learned from "
-                "first 50 frames",
+                f"  splitter ({mode}): enabled, expected area "
+                f"auto-learned from first 50 frames{extra}",
             )
     else:
-        print("  chain split: disabled")
+        print("  splitter: disabled")
     from pylace.detect.background import load_or_build_background_pair
 
     bg, _trail, bg_source = load_or_build_background_pair(
@@ -204,9 +226,7 @@ def _run_plan(
                 else None
             )
             chain_splitter = (
-                ChainSplitter(
-                    expected_animal_area_px=tracking["expected_animal_area_px"],
-                )
+                _build_splitter(tracking)
                 if tracking["chain_split_enabled"]
                 else None
             )
@@ -250,6 +270,23 @@ def _run_plan(
         dynamic_ncols=True,
     )
     return write_detections_csv(progress, sidecar, out_path)
+
+
+def _build_splitter(tracking: dict):
+    """Pick the splitter implementation honouring the ``splitter_mode`` knob."""
+    mode = tracking.get("splitter_mode", "watershed")
+    if mode == "chain":
+        return ChainSplitter(
+            expected_animal_area_px=tracking["expected_animal_area_px"],
+        )
+    if mode == "watershed":
+        return WatershedSplitter(
+            expected_animal_area_px=tracking["expected_animal_area_px"],
+            peak_min_distance_px=tracking.get("watershed_peak_distance_px", 8),
+        )
+    raise ValueError(
+        f"Unknown splitter_mode: {mode!r} (expected 'watershed' or 'chain').",
+    )
 
 
 def _estimate_total_frames(
@@ -315,6 +352,8 @@ def _resolve_tuning_params(args: argparse.Namespace) -> tuple[dict, dict]:
         "n_animals": None,
         "expected_animal_area_px": None,
         "chain_split_enabled": True,
+        "splitter_mode": "watershed",
+        "watershed_peak_distance_px": 8,
         "area_cost_weight": DEFAULT_AREA_COST_WEIGHT,
         "perimeter_cost_weight": DEFAULT_PERIMETER_COST_WEIGHT,
         "kalman_q_pos": DEFAULT_KALMAN_Q_POS,
@@ -349,6 +388,8 @@ def _resolve_tuning_params(args: argparse.Namespace) -> tuple[dict, dict]:
             "n_animals": tp.tracking.n_animals,
             "expected_animal_area_px": tp.tracking.expected_animal_area_px,
             "chain_split_enabled": True,
+            "splitter_mode": tp.tracking.splitter_mode,
+            "watershed_peak_distance_px": tp.tracking.watershed_peak_distance_px,
             "area_cost_weight": tp.tracking.area_cost_weight,
             "perimeter_cost_weight": tp.tracking.perimeter_cost_weight,
             "kalman_q_pos": tp.tracking.kalman_q_pos,
@@ -384,6 +425,10 @@ def _resolve_tuning_params(args: argparse.Namespace) -> tuple[dict, dict]:
         tracking["expected_animal_area_px"] = args.expected_animal_area
     if args.no_chain_split:
         tracking["chain_split_enabled"] = False
+    if args.splitter is not None:
+        tracking["splitter_mode"] = args.splitter
+    if args.watershed_peak_distance is not None:
+        tracking["watershed_peak_distance_px"] = args.watershed_peak_distance
     if args.cost_area_weight is not None:
         tracking["area_cost_weight"] = args.cost_area_weight
     if args.cost_perimeter_weight is not None:
@@ -570,7 +615,26 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--no-chain-split", action="store_true", dest="no_chain_split",
-        help="Disable chain splitting even if --expected-animal-area is set.",
+        help="Disable splitting of merged contours entirely.",
+    )
+    p.add_argument(
+        "--splitter", choices=("watershed", "chain"), default=None, dest="splitter",
+        help=(
+            "Algorithm used to split a merged-fly blob whose area exceeds "
+            "1.5× expected. 'watershed' (default) seeds a distance-transform "
+            "watershed at local peaks — handles N≥3 contacts and side-by-"
+            "side merges. 'chain' is the legacy LACE-paper rule: cut "
+            "perpendicular to the major axis at the centroid."
+        ),
+    )
+    p.add_argument(
+        "--watershed-peak-distance", type=int, default=None,
+        dest="watershed_peak_distance",
+        help=(
+            "Watershed local-maximum suppression radius in pixels. Set well "
+            "below the inter-fly centroid distance and above the half-width "
+            "of a single fly. Default 8."
+        ),
     )
     p.add_argument(
         "--cost-area-weight", type=float, default=None,

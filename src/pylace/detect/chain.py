@@ -62,8 +62,18 @@ class ChainSplitter:
     def is_learning(self) -> bool:
         return self._learning
 
-    def maybe_split(self, contours: list[np.ndarray]) -> list[np.ndarray]:
-        """Return contours with any oversized one replaced by its two halves."""
+    def maybe_split(
+        self,
+        contours: list[np.ndarray],
+        fg_mask: np.ndarray | None = None,
+    ) -> list[np.ndarray]:
+        """Return contours with any oversized one replaced by its two halves.
+
+        ``fg_mask`` is accepted but ignored — it exists so the chain
+        splitter and the watershed splitter share the same signature
+        and the caller can hold an opaque ``Splitter`` reference.
+        """
+        del fg_mask  # explicit acknowledgement that we don't use it.
         if self._learning:
             self._observe(contours)
             return contours

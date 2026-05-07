@@ -128,7 +128,7 @@ def detect_blobs_with_mask(
     )
     contours = _filtered_contours(fg, min_area, max_area)
     if chain_splitter is not None:
-        contours = chain_splitter.maybe_split(contours)
+        contours = chain_splitter.maybe_split(contours, fg)
     h, w = arena_mask.shape
     out: list[Detection] = []
     for c in contours:

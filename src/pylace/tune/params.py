@@ -88,6 +88,12 @@ class TrackingParams:
     expected_animal_area_px: float | None = None
     area_cost_weight: float = DEFAULT_AREA_COST_WEIGHT
     perimeter_cost_weight: float = DEFAULT_PERIMETER_COST_WEIGHT
+    # Splitter for oversized merged-fly contours. "watershed" runs
+    # cv2.watershed seeded by distance-transform peaks (handles N≥3
+    # contacts and side-by-side merges); "chain" cuts perpendicular
+    # to the major axis at the centroid (the LACE-paper rule).
+    splitter_mode: str = "watershed"
+    watershed_peak_distance_px: int = 8
     # Kalman filter (Phase 4). q_pos / q_vel: per-frame process-noise
     # stds in pixels. r_pos: measurement-noise std (px). initial_v_std:
     # generous prior on velocity at track birth (px/frame).
