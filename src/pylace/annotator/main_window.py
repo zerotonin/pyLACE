@@ -445,23 +445,31 @@ class AnnotatorWindow(QtWidgets.QMainWindow):
         self._frame_index = frame_index
         self._video_meta = self._load_video_meta()
 
+        from pylace.annotator.sidecar import Trim
+        self._trim = Trim()
+        self._bg_max: np.ndarray | None = None
+        self._bg_min: np.ndarray | None = None
+        self._view_mode: str = "frame"  # "frame" | "bg_max" | "bg_min"
+
         self.canvas = FrameCanvas(self)
         self.canvas.statusChanged.connect(self._on_status)
         self.canvas.statusChanged.connect(
             lambda _: self._update_step_indicators(),
         )
-        self._load_first_frame()
+        self._first_frame_rgb = self._load_first_frame()
 
         self.setWindowTitle(f"pylace-annotate — {video.name}")
-        self.setCentralWidget(self.canvas)
+        self.setCentralWidget(self._build_central())
         self.statusBar().showMessage("Ready.")
 
         self._build_toolbar()
         self._load_existing_sidecar()
+        self._maybe_load_cached_bg_pair()
         # Snapshot of the on-disk state (matches _current_state() if a
         # sidecar was loaded, all-None otherwise). closeEvent uses this
         # to decide whether unsaved changes warrant a warning.
         self._saved_state = self._current_state()
+        self._sync_view_widgets_from_state()
         self._update_step_indicators()
 
     def _load_video_meta(self) -> VideoMeta:
@@ -473,7 +481,7 @@ class AnnotatorWindow(QtWidgets.QMainWindow):
             fps=fps,
         )
 
-    def _load_first_frame(self) -> None:
+    def _load_first_frame(self) -> np.ndarray:
         import cv2
 
         cap = cv2.VideoCapture(str(self._video))
@@ -488,6 +496,85 @@ class AnnotatorWindow(QtWidgets.QMainWindow):
         finally:
             cap.release()
         self.canvas.set_frame(frame_rgb)
+        return frame_rgb
+
+    def _build_central(self) -> QtWidgets.QWidget:
+        wrap = QtWidgets.QWidget(self)
+        v = QtWidgets.QVBoxLayout(wrap)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.addWidget(self.canvas, stretch=1)
+        v.addWidget(self._build_view_panel(wrap))
+        return wrap
+
+    def _build_view_panel(self, parent: QtWidgets.QWidget) -> QtWidgets.QWidget:
+        wrap = QtWidgets.QWidget(parent)
+        h = QtWidgets.QHBoxLayout(wrap)
+        h.setContentsMargins(6, 4, 6, 4)
+
+        h.addWidget(QtWidgets.QLabel("View:", wrap))
+        self._cb_view = QtWidgets.QComboBox(wrap)
+        self._cb_view.addItem("Sample frame", "frame")
+        self._cb_view.addItem("Background max", "bg_max")
+        self._cb_view.addItem("Background min", "bg_min")
+        self._cb_view.setToolTip(
+            "Draw the arena on a single sample frame OR on a max/min "
+            "background projection over the trim range. The projection "
+            "averages out a slightly-misaligned start so the arena "
+            "boundary you draw is robust to a wobbly first second.",
+        )
+        self._cb_view.currentIndexChanged.connect(self._on_view_changed)
+        h.addWidget(self._cb_view)
+
+        h.addSpacing(8)
+        h.addWidget(QtWidgets.QLabel("Frame:", wrap))
+        total = max(1, int(self._video_meta.fps * 600))  # generous upper bound
+        self._sb_frame = QtWidgets.QSpinBox(wrap)
+        self._sb_frame.setRange(0, max(0, total - 1))
+        self._sb_frame.setValue(int(self._frame_index))
+        self._sb_frame.setToolTip(
+            "Source frame index for the Sample frame view. Has no effect "
+            "in Background max/min view.",
+        )
+        self._sb_frame.valueChanged.connect(self._on_frame_index_changed)
+        h.addWidget(self._sb_frame)
+
+        h.addSpacing(12)
+        h.addWidget(QtWidgets.QLabel("Trim start (s):", wrap))
+        self._sb_trim_start = QtWidgets.QDoubleSpinBox(wrap)
+        self._sb_trim_start.setRange(0.0, 1e9)
+        self._sb_trim_start.setDecimals(2)
+        self._sb_trim_start.setSpecialValueText("auto")
+        self._sb_trim_start.setToolTip(
+            "Start of the useful interval in seconds. Saved into the "
+            "arena sidecar and read by pylace-detect as the default "
+            "--start. Leave at 0 (auto) for whole-video detection.",
+        )
+        self._sb_trim_start.valueChanged.connect(self._on_trim_changed)
+        h.addWidget(self._sb_trim_start)
+
+        h.addWidget(QtWidgets.QLabel("end (s):", wrap))
+        self._sb_trim_end = QtWidgets.QDoubleSpinBox(wrap)
+        self._sb_trim_end.setRange(0.0, 1e9)
+        self._sb_trim_end.setDecimals(2)
+        self._sb_trim_end.setSpecialValueText("auto")
+        self._sb_trim_end.setToolTip(
+            "End of the useful interval in seconds. Saved into the "
+            "arena sidecar and read by pylace-detect as the default "
+            "--end. Leave at 0 (auto) for whole-video detection.",
+        )
+        self._sb_trim_end.valueChanged.connect(self._on_trim_changed)
+        h.addWidget(self._sb_trim_end)
+
+        recompute = QtWidgets.QPushButton("Recompute background", wrap)
+        recompute.setToolTip(
+            "Sample the current trim range and rebuild the max/min "
+            "projection pair. Caches to <video>.pylace_background_*.png.",
+        )
+        recompute.clicked.connect(self._on_recompute_bg)
+        h.addWidget(recompute)
+
+        h.addStretch(1)
+        return wrap
 
     def _build_toolbar(self) -> None:
         toolbar = self.addToolBar("Tools")
@@ -612,7 +699,142 @@ class AnnotatorWindow(QtWidgets.QMainWindow):
             self.canvas.arena(),
             self.canvas.world_frame(),
             self.canvas.calibration(),
+            (self._trim.start_s, self._trim.end_s),
         )
+
+    # ── Trim + view-mode plumbing ──────────────────────────────────────
+
+    def _sync_view_widgets_from_state(self) -> None:
+        """Push the current _trim values back into the spinboxes."""
+        if not hasattr(self, "_sb_trim_start"):
+            return
+        self._sb_trim_start.blockSignals(True)
+        self._sb_trim_start.setValue(self._trim.start_s or 0.0)
+        self._sb_trim_start.blockSignals(False)
+        self._sb_trim_end.blockSignals(True)
+        self._sb_trim_end.setValue(self._trim.end_s or 0.0)
+        self._sb_trim_end.blockSignals(False)
+        # Disable bg-view options if no projection is loaded yet.
+        bg_ready = self._bg_max is not None and self._bg_min is not None
+        for i in (1, 2):
+            self._cb_view.model().item(i).setEnabled(bg_ready)
+        if not bg_ready:
+            self._cb_view.setToolTip(
+                "Click Recompute background to sample the trim range and "
+                "build the max/min projection pair.",
+            )
+
+    def _on_view_changed(self, _index: int) -> None:
+        mode = self._cb_view.currentData() or "frame"
+        if mode in ("bg_max", "bg_min") and (
+            self._bg_max is None or self._bg_min is None
+        ):
+            self.statusBar().showMessage(
+                "No background pair on disk. Click Recompute background.",
+                4000,
+            )
+            self._cb_view.blockSignals(True)
+            self._cb_view.setCurrentIndex(0)
+            self._cb_view.blockSignals(False)
+            return
+        self._view_mode = mode
+        self._apply_view_mode()
+
+    def _on_frame_index_changed(self, value: int) -> None:
+        if self._view_mode != "frame":
+            return
+        self._frame_index = int(value)
+        self._first_frame_rgb = self._load_first_frame()
+
+    def _on_trim_changed(self, _value: float) -> None:
+        from pylace.annotator.sidecar import Trim
+        s = float(self._sb_trim_start.value())
+        e = float(self._sb_trim_end.value())
+        self._trim = Trim(
+            start_s=s if s > 0.0 else None,
+            end_s=e if e > 0.0 else None,
+        )
+        self._on_status(self.canvas._status_text())  # refresh status bar
+
+    def _on_recompute_bg(self) -> None:
+        from pylace.detect.background import compute_projection_pair, save_background_png, default_background_paths
+
+        total_s = self._video_meta.frame_size and (
+            # n_frames cannot be derived without an extra cv2.VideoCapture;
+            # estimate from fps × probed frame count.
+            None
+        )
+        # Convert (start_s, end_s) → (start_frac, end_frac).
+        start_frac, end_frac = self._trim_fractions()
+        try:
+            self.statusBar().showMessage(
+                "Computing background pair (this can take a few seconds)…",
+            )
+            QtWidgets.QApplication.processEvents()
+            self._bg_max, self._bg_min = compute_projection_pair(
+                self._video, n_frames=50,
+                start_frac=start_frac, end_frac=end_frac,
+            )
+        except (OSError, ValueError) as exc:
+            self.statusBar().showMessage(f"Could not compute bg: {exc}", 6000)
+            return
+        # Cache to disk.
+        max_path, min_path = default_background_paths(self._video)
+        try:
+            save_background_png(self._bg_max, max_path)
+            save_background_png(self._bg_min, min_path)
+        except OSError as exc:
+            self.statusBar().showMessage(
+                f"Computed but could not cache: {exc}", 6000,
+            )
+        self.statusBar().showMessage(
+            f"Background pair updated (cached to {max_path.name} / {min_path.name}).",
+            5000,
+        )
+        # Re-enable bg view options.
+        for i in (1, 2):
+            self._cb_view.model().item(i).setEnabled(True)
+        self._apply_view_mode()
+
+    def _maybe_load_cached_bg_pair(self) -> None:
+        from pylace.detect.background import default_background_paths, load_background_png
+        max_path, min_path = default_background_paths(self._video)
+        if not (max_path.exists() and min_path.exists()):
+            return
+        try:
+            self._bg_max = load_background_png(max_path)
+            self._bg_min = load_background_png(min_path)
+        except OSError:
+            self._bg_max = None
+            self._bg_min = None
+
+    def _trim_fractions(self) -> tuple[float, float]:
+        """Convert ``_trim`` start/end seconds to (start_frac, end_frac)."""
+        # Probe total frame count once via cv2 — fps is already known.
+        import cv2
+
+        cap = cv2.VideoCapture(str(self._video))
+        try:
+            n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        finally:
+            cap.release()
+        if n <= 0 or self._video_meta.fps <= 0:
+            return 0.1, 0.9
+        duration_s = n / self._video_meta.fps
+        s = self._trim.start_s if self._trim.start_s is not None else 0.0
+        e = self._trim.end_s if self._trim.end_s is not None else duration_s
+        s = max(0.0, min(duration_s - 1e-3, s))
+        e = max(s + 1e-3, min(duration_s, e))
+        return s / duration_s, e / duration_s
+
+    def _apply_view_mode(self) -> None:
+        import cv2
+        if self._view_mode == "bg_max" and self._bg_max is not None:
+            self.canvas.set_frame(cv2.cvtColor(self._bg_max, cv2.COLOR_GRAY2RGB))
+        elif self._view_mode == "bg_min" and self._bg_min is not None:
+            self.canvas.set_frame(cv2.cvtColor(self._bg_min, cv2.COLOR_GRAY2RGB))
+        else:
+            self.canvas.set_frame(self._first_frame_rgb)
 
     def _start_origin_pick(self) -> None:
         if self.canvas.arena() is None:
@@ -678,6 +900,8 @@ class AnnotatorWindow(QtWidgets.QMainWindow):
         self._y_up_action.setChecked(sidecar.world_frame.y_axis == "up")
         if sidecar.arena is not None:
             self.canvas.set_mode("edit")
+        if sidecar.trim is not None:
+            self._trim = sidecar.trim
 
     def _save(self) -> bool:
         """Try to write the sidecar; return True on success, False otherwise."""
@@ -695,6 +919,7 @@ class AnnotatorWindow(QtWidgets.QMainWindow):
             arena=self.canvas.arena(),
             world_frame=self.canvas.world_frame(),
             calibration=self.canvas.calibration(),
+            trim=self._trim if not self._trim.is_empty() else None,
         )
         write_sidecar(sidecar, self._out_path)
         self._saved_state = self._current_state()

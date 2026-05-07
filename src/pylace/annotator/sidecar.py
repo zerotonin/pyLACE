@@ -36,6 +36,25 @@ class VideoMeta:
 
 
 @dataclass
+class Trim:
+    """Optional time-range trim on the source video.
+
+    ``start_s`` / ``end_s`` are the bounds of the useful interval in
+    seconds. Either may be ``None`` (open on that side). The downstream
+    tools (pylace-detect, etc.) read these as defaults that the user can
+    still override with ``--start`` / ``--end``. The annotator also uses
+    them to bound the sample range for the optional background
+    projection it can show as the drawing canvas.
+    """
+
+    start_s: float | None = None
+    end_s: float | None = None
+
+    def is_empty(self) -> bool:
+        return self.start_s is None and self.end_s is None
+
+
+@dataclass
 class Sidecar:
     """Full annotation payload written next to a video."""
 
@@ -43,6 +62,7 @@ class Sidecar:
     arena: Arena
     world_frame: WorldFrame
     calibration: Calibration
+    trim: Trim | None = None
 
 
 def write_sidecar(sidecar: Sidecar, out_path: Path) -> None:
@@ -97,7 +117,7 @@ def default_sidecar_path(video: Path) -> Path:
 
 
 def _sidecar_to_dict(sidecar: Sidecar) -> dict:
-    return {
+    out = {
         "schema_version": SCHEMA_VERSION,
         "video": {
             "path": sidecar.video.path,
@@ -123,6 +143,12 @@ def _sidecar_to_dict(sidecar: Sidecar) -> dict:
             "mm_per_pixel": sidecar.calibration.mm_per_pixel,
         },
     }
+    if sidecar.trim is not None and not sidecar.trim.is_empty():
+        out["trim"] = {
+            "start_s": sidecar.trim.start_s,
+            "end_s": sidecar.trim.end_s,
+        }
+    return out
 
 
 def _sidecar_from_dict(payload: dict) -> Sidecar:
@@ -130,6 +156,21 @@ def _sidecar_from_dict(payload: dict) -> Sidecar:
     w = payload["world_frame"]
     c = payload["calibration"]
     ref = c.get("reference_vertices")
+    trim_dict = payload.get("trim")
+    trim = (
+        Trim(
+            start_s=(
+                float(trim_dict["start_s"])
+                if trim_dict.get("start_s") is not None else None
+            ),
+            end_s=(
+                float(trim_dict["end_s"])
+                if trim_dict.get("end_s") is not None else None
+            ),
+        )
+        if trim_dict
+        else None
+    )
     return Sidecar(
         video=VideoMeta(
             path=v["path"],
@@ -149,6 +190,7 @@ def _sidecar_from_dict(payload: dict) -> Sidecar:
             pixel_distance=float(c["pixel_distance"]),
             reference_vertices=tuple(ref) if ref is not None else None,
         ),
+        trim=trim,
     )
 
 
