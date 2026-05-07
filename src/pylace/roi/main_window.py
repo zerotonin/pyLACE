@@ -1,50 +1,37 @@
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║  pyLACE — roi.main_window                                        ║
-# ║  « ROI builder QMainWindow with shape tools + list panel »       ║
+# ║  « pylace-roi standalone window — thin shell around RoiEditPanel ║
 # ╠══════════════════════════════════════════════════════════════════╣
-# ║  Toolbar holds the three shape tools and the mode toggle. Right  ║
-# ║  panel is a list of existing ROIs with a per-row op toggle and   ║
-# ║  delete; selecting an item highlights it on the canvas. Save /   ║
-# ║  Save as / Load mirror the annotator and tuner conventions so    ║
-# ║  the user has the same muscle memory across the suite.           ║
+# ║  The editor itself lives in pylace.roi.panel as a reusable       ║
+# ║  QWidget so the same widget can be embedded in pylace-tune's     ║
+# ║  Edit ROIs… dialog. This module just wraps the panel in a        ║
+# ║  QMainWindow with a status bar and Ctrl+Q.                       ║
 # ╚══════════════════════════════════════════════════════════════════╝
-"""ROI builder main window."""
+"""Thin QMainWindow shell around RoiEditPanel for pylace-roi."""
 
 from __future__ import annotations
 
 import sys
 from pathlib import Path
 
-import cv2
-from PyQt6 import QtCore, QtGui, QtWidgets
-from PyQt6.QtCore import Qt
-
-import numpy as np
+from PyQt6 import QtGui, QtWidgets
 
 from pylace.annotator.sidecar import (
     Sidecar,
     default_sidecar_path,
     read_sidecar,
 )
-from pylace.detect.arena_mask import arena_mask
-from pylace.detect.background import (
-    default_background_paths,
-    load_background_png,
-)
-from pylace.roi.auto_roi import AutoRoiParams, auto_rois_from_diff
-from pylace.roi.canvas import RoiCanvas, ToolName
-from pylace.roi.geometry import ROI, ROIMode, ROIOperation, ROISet
-from pylace.roi.sidecar import (
-    ROISidecar,
-    ROISidecarSchemaError,
-    default_rois_path,
-    read_rois,
-    write_rois,
-)
+from pylace.roi.panel import RoiEditPanel
+from pylace.roi.sidecar import default_rois_path
 
 
 class RoiBuilderWindow(QtWidgets.QMainWindow):
-    """Top-level window for ``pylace-roi``."""
+    """Top-level window for ``pylace-roi``.
+
+    Hosts a :class:`RoiEditPanel` as the central widget; everything
+    interesting lives there. The window itself just owns the title,
+    the status bar, and the window-level Ctrl+Q.
+    """
 
     def __init__(
         self,
@@ -53,394 +40,22 @@ class RoiBuilderWindow(QtWidgets.QMainWindow):
         arena_sidecar: Sidecar | None,
     ) -> None:
         super().__init__()
-        self._video = video
-        self._rois_path = rois_path
-        self._arena_sidecar = arena_sidecar
-        self._roi_set: ROISet = ROISet()
-
-        self._canvas = RoiCanvas(self)
-        self._canvas.roiAdded.connect(self._on_roi_added)
-        self._canvas.set_arena(arena_sidecar.arena if arena_sidecar else None)
-        self._first_frame_rgb = self._load_first_frame()
-        self._bg_max, self._bg_min = self._load_background_pair()
-        self._view_mode: str = "frame"  # "frame" | "bg_max" | "bg_min"
-
         self.setWindowTitle(f"pylace-roi — {video.name}")
-        self.setCentralWidget(self._build_central())
-
-        self._build_toolbar()
+        self._panel = RoiEditPanel(
+            video=video, rois_path=rois_path,
+            arena_sidecar=arena_sidecar, parent=self,
+        )
+        self._panel.statusMessage.connect(self._on_panel_status)
+        self.setCentralWidget(self._panel)
         self.statusBar().showMessage("Ready.")
-
-        self._load_existing_sidecar()
-        self._apply_view_mode()
-
-    # ── Setup ──────────────────────────────────────────────────────────
-
-    def _load_first_frame(self) -> np.ndarray:
-        cap = cv2.VideoCapture(str(self._video))
-        if not cap.isOpened():
-            raise OSError(f"Cannot open video: {self._video}")
-        try:
-            ok, bgr = cap.read()
-            if not ok:
-                raise OSError(f"Cannot read first frame of {self._video}.")
-            rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
-        finally:
-            cap.release()
-        self._canvas.set_frame(rgb)
-        return rgb
-
-    def _load_background_pair(self) -> tuple[np.ndarray | None, np.ndarray | None]:
-        max_path, min_path = default_background_paths(self._video)
-        if not (max_path.exists() and min_path.exists()):
-            return None, None
-        try:
-            return load_background_png(max_path), load_background_png(min_path)
-        except OSError:
-            return None, None
-
-    def _apply_view_mode(self) -> None:
-        if self._view_mode == "bg_max" and self._bg_max is not None:
-            self._canvas.set_frame(cv2.cvtColor(self._bg_max, cv2.COLOR_GRAY2RGB))
-        elif self._view_mode == "bg_min" and self._bg_min is not None:
-            self._canvas.set_frame(cv2.cvtColor(self._bg_min, cv2.COLOR_GRAY2RGB))
-        else:
-            self._canvas.set_frame(self._first_frame_rgb)
-
-    def _build_central(self) -> QtWidgets.QWidget:
-        wrap = QtWidgets.QWidget(self)
-        h = QtWidgets.QHBoxLayout(wrap)
-        scroll = QtWidgets.QScrollArea(wrap)
-        scroll.setWidget(self._canvas)
-        scroll.setWidgetResizable(False)
-        h.addWidget(scroll, stretch=1)
-        h.addWidget(self._build_right_panel(wrap))
-        return wrap
-
-    def _build_right_panel(self, parent: QtWidgets.QWidget) -> QtWidgets.QWidget:
-        panel = QtWidgets.QWidget(parent)
-        v = QtWidgets.QVBoxLayout(panel)
-        v.setContentsMargins(8, 8, 8, 8)
-        panel.setMinimumWidth(300)
-
-        v.addWidget(self._build_view_group(panel))
-        v.addWidget(self._build_auto_group(panel))
-        v.addWidget(self._build_mode_group(panel))
-
-        self._list = QtWidgets.QListWidget(panel)
-        self._list.currentRowChanged.connect(self._on_list_selection_changed)
-        v.addWidget(QtWidgets.QLabel("ROIs:", panel))
-        v.addWidget(self._list, stretch=1)
-
-        op_row = QtWidgets.QHBoxLayout()
-        toggle = QtWidgets.QPushButton("Toggle op (add ↔ subtract)", panel)
-        toggle.clicked.connect(self._on_toggle_op)
-        op_row.addWidget(toggle)
-        delete = QtWidgets.QPushButton("Delete", panel)
-        delete.setShortcut(QtGui.QKeySequence("Del"))
-        delete.clicked.connect(self._on_delete_selected)
-        op_row.addWidget(delete)
-        v.addLayout(op_row)
-
-        save_row = QtWidgets.QHBoxLayout()
-        save = QtWidgets.QPushButton("Save", panel)
-        save.setShortcut(QtGui.QKeySequence("Ctrl+S"))
-        save.clicked.connect(self._on_save)
-        save_row.addWidget(save)
-        save_as = QtWidgets.QPushButton("Save as…", panel)
-        save_as.clicked.connect(self._on_save_as)
-        save_row.addWidget(save_as)
-        load = QtWidgets.QPushButton("Load…", panel)
-        load.clicked.connect(self._on_load)
-        save_row.addWidget(load)
-        v.addLayout(save_row)
-
-        return panel
-
-    def _build_view_group(self, parent: QtWidgets.QWidget) -> QtWidgets.QGroupBox:
-        box = QtWidgets.QGroupBox("View", parent)
-        v = QtWidgets.QVBoxLayout(box)
-        row = QtWidgets.QHBoxLayout()
-        row.addWidget(QtWidgets.QLabel("Show:", box))
-        self._cb_view = QtWidgets.QComboBox(box)
-        self._cb_view.addItem("First frame", "frame")
-        self._cb_view.addItem("Background max", "bg_max")
-        self._cb_view.addItem("Background min", "bg_min")
-        bg_available = self._bg_max is not None and self._bg_min is not None
-        if not bg_available:
-            for i in (1, 2):
-                self._cb_view.model().item(i).setEnabled(False)
-            self._cb_view.setToolTip(
-                "Background pair not on disk. Run pylace-tune or pylace-detect "
-                "on this video first to compute and save it.",
-            )
-        self._cb_view.currentIndexChanged.connect(self._on_view_changed)
-        row.addWidget(self._cb_view, stretch=1)
-        v.addLayout(row)
-        return box
-
-    def _build_auto_group(self, parent: QtWidgets.QWidget) -> QtWidgets.QGroupBox:
-        box = QtWidgets.QGroupBox("Auto-ROI", parent)
-        v = QtWidgets.QVBoxLayout(box)
-        hint = QtWidgets.QLabel(
-            "Generate polygons from the trail (max-vs-min bg diff). "
-            "Erodes specks, then dilates so the ROI is slightly larger "
-            "than the actual trail.",
-            box,
-        )
-        hint.setWordWrap(True)
-        hint.setStyleSheet("color: gray;")
-        v.addWidget(hint)
-        self._btn_auto = QtWidgets.QPushButton("Generate auto-ROIs", box)
-        self._btn_auto.clicked.connect(self._on_auto_roi)
-        if self._bg_max is None or self._bg_min is None:
-            self._btn_auto.setEnabled(False)
-            self._btn_auto.setToolTip(
-                "Background pair not on disk. Run pylace-tune or "
-                "pylace-detect first.",
-            )
-        v.addWidget(self._btn_auto)
-        return box
-
-    def _build_mode_group(self, parent: QtWidgets.QWidget) -> QtWidgets.QGroupBox:
-        box = QtWidgets.QGroupBox("Mode", parent)
-        v = QtWidgets.QVBoxLayout(box)
-        self._rb_merge = QtWidgets.QRadioButton("Merge (single combined mask)", box)
-        self._rb_merge.setChecked(True)
-        self._rb_merge.toggled.connect(
-            lambda on: on and self._set_mode("merge"),
-        )
-        v.addWidget(self._rb_merge)
-        self._rb_split = QtWidgets.QRadioButton(
-            "Split (each ROI as its own sub-video)", box,
-        )
-        self._rb_split.setToolTip(
-            "Each add-ROI runs detection independently and gets its own "
-            "roi_label in the output CSV. Subtract ROIs are ignored in "
-            "split mode (not meaningful as sub-videos).",
-        )
-        self._rb_split.toggled.connect(
-            lambda on: on and self._set_mode("split"),
-        )
-        v.addWidget(self._rb_split)
-        return box
-
-    def _build_toolbar(self) -> None:
-        bar = self.addToolBar("Tools")
-        bar.setMovable(False)
-
-        circle = QtGui.QAction("Circle", self)
-        circle.setShortcut(QtGui.QKeySequence("C"))
-        circle.triggered.connect(lambda: self._canvas.set_tool("circle"))
-        bar.addAction(circle)
-
-        rect = QtGui.QAction("Rectangle", self)
-        rect.setShortcut(QtGui.QKeySequence("R"))
-        rect.triggered.connect(lambda: self._canvas.set_tool("rectangle"))
-        bar.addAction(rect)
-
-        poly = QtGui.QAction("Polygon", self)
-        poly.setShortcut(QtGui.QKeySequence("P"))
-        poly.triggered.connect(lambda: self._canvas.set_tool("polygon"))
-        bar.addAction(poly)
-
-        bar.addSeparator()
-
-        brush = QtGui.QAction("Brush", self)
-        brush.setShortcut(QtGui.QKeySequence("B"))
-        brush.setToolTip("Paint freehand pixels into the ROI mask (B).")
-        brush.triggered.connect(lambda: self._canvas.set_tool("brush"))
-        bar.addAction(brush)
-
-        eraser = QtGui.QAction("Eraser", self)
-        eraser.setShortcut(QtGui.QKeySequence("E"))
-        eraser.setToolTip("Erase freehand pixels from the ROI mask (E).")
-        eraser.triggered.connect(lambda: self._canvas.set_tool("eraser"))
-        bar.addAction(eraser)
-
-        bar.addWidget(QtWidgets.QLabel(" Brush size:"))
-        self._sb_brush = QtWidgets.QSpinBox()
-        self._sb_brush.setRange(1, 200)
-        self._sb_brush.setValue(12)
-        self._sb_brush.valueChanged.connect(self._canvas.set_brush_radius)
-        bar.addWidget(self._sb_brush)
-
-        bar.addSeparator()
-
-        clear_tool = QtGui.QAction("No tool", self)
-        clear_tool.setShortcut(QtGui.QKeySequence("Esc"))
-        clear_tool.triggered.connect(lambda: self._canvas.set_tool(None))
-        bar.addAction(clear_tool)
-
-        bar.addSeparator()
 
         quit_act = QtGui.QAction("Quit", self)
         quit_act.setShortcut(QtGui.QKeySequence("Ctrl+Q"))
         quit_act.triggered.connect(self.close)
-        bar.addAction(quit_act)
+        self.addAction(quit_act)
 
-    # ── Slots ─────────────────────────────────────────────────────────
-
-    def _on_roi_added(self, roi: ROI) -> None:
-        self._roi_set.add(roi)
-        self._refresh_list()
-        self._canvas.set_roi_set(self._roi_set)
-        self.statusBar().showMessage(
-            f"Added {_describe_roi(roi)} (#{len(self._roi_set.rois) - 1}).", 4000,
-        )
-
-    def _on_view_changed(self, _index: int) -> None:
-        mode = self._cb_view.currentData()
-        if mode in ("bg_max", "bg_min") and (
-            self._bg_max is None or self._bg_min is None
-        ):
-            self.statusBar().showMessage("No background pair on disk.", 4000)
-            return
-        self._view_mode = mode or "frame"
-        self._apply_view_mode()
-
-    def _on_auto_roi(self) -> None:
-        if self._bg_max is None or self._bg_min is None:
-            self.statusBar().showMessage(
-                "No background pair — run pylace-tune first.", 5000,
-            )
-            return
-        if self._arena_sidecar is None:
-            self.statusBar().showMessage(
-                "Auto-ROI needs an arena sidecar. Run pylace-annotate first.",
-                5000,
-            )
-            return
-        h, w = self._bg_max.shape
-        a_mask = arena_mask(self._arena_sidecar.arena, frame_size=(w, h))
-        rois = auto_rois_from_diff(
-            self._bg_max, self._bg_min, a_mask, params=AutoRoiParams(),
-        )
-        if not rois:
-            self.statusBar().showMessage(
-                "Auto-ROI found nothing — try recomputing the background "
-                "or check polarity.", 6000,
-            )
-            return
-        for roi in rois:
-            self._roi_set.add(roi)
-        self._refresh_list()
-        self._canvas.set_roi_set(self._roi_set)
-        self.statusBar().showMessage(
-            f"Auto-ROI added {len(rois)} polygon(s).", 5000,
-        )
-
-    def _on_list_selection_changed(self, row: int) -> None:
-        self._canvas.set_selected(row)
-
-    def _on_toggle_op(self) -> None:
-        index = self._list.currentRow()
-        if index < 0 or index >= len(self._roi_set.rois):
-            return
-        roi = self._roi_set.rois[index]
-        roi.operation = "subtract" if roi.operation == "add" else "add"
-        self._refresh_list()
-        self._list.setCurrentRow(index)
-        self._canvas.set_roi_set(self._roi_set)
-
-    def _on_delete_selected(self) -> None:
-        index = self._list.currentRow()
-        if index < 0:
-            return
-        self._roi_set.remove_at(index)
-        self._refresh_list()
-        self._canvas.set_roi_set(self._roi_set)
-
-    def _on_save(self) -> None:
-        self._write_to(self._rois_path)
-        self.statusBar().showMessage(f"Saved to {self._rois_path.name}", 5000)
-
-    def _on_save_as(self) -> None:
-        path_str, _ = QtWidgets.QFileDialog.getSaveFileName(
-            self, "Save ROI preset",
-            str(self._rois_path.parent / "preset.pylace_rois.json"),
-            "pyLACE ROIs (*.json);;All files (*)",
-        )
-        if not path_str:
-            return
-        self._write_to(Path(path_str))
-        self.statusBar().showMessage(f"Saved to {Path(path_str).name}", 5000)
-
-    def _on_load(self) -> None:
-        path_str, _ = QtWidgets.QFileDialog.getOpenFileName(
-            self, "Load ROI preset", str(self._rois_path.parent),
-            "pyLACE ROIs (*.json);;All files (*)",
-        )
-        if not path_str:
-            return
-        try:
-            sidecar = read_rois(Path(path_str))
-        except (ROISidecarSchemaError, ValueError, OSError) as exc:
-            self.statusBar().showMessage(f"Cannot load: {exc}", 7000)
-            return
-        self._roi_set = sidecar.roi_set
-        self._refresh_list()
-        self._canvas.set_roi_set(self._roi_set)
-        self._sync_mode_radios()
-        self.statusBar().showMessage(f"Loaded {Path(path_str).name}", 5000)
-
-    def _set_mode(self, mode: ROIMode) -> None:
-        self._roi_set.mode = mode
-
-    # ── Internal ───────────────────────────────────────────────────────
-
-    def _load_existing_sidecar(self) -> None:
-        if not self._rois_path.exists():
-            return
-        try:
-            sidecar = read_rois(self._rois_path)
-        except ROISidecarSchemaError as exc:
-            self.statusBar().showMessage(f"Existing ROI sidecar ignored: {exc}", 7000)
-            return
-        self._roi_set = sidecar.roi_set
-        self._refresh_list()
-        self._canvas.set_roi_set(self._roi_set)
-        self._sync_mode_radios()
-
-    def _refresh_list(self) -> None:
-        self._list.blockSignals(True)
-        self._list.clear()
-        for index, roi in enumerate(self._roi_set.rois):
-            self._list.addItem(_format_list_row(index, roi))
-        self._list.blockSignals(False)
-        if self._roi_set.rois:
-            self._list.setCurrentRow(min(self._list.count() - 1, max(0, self._list.currentRow())))
-
-    def _sync_mode_radios(self) -> None:
-        if self._roi_set.mode == "split":
-            self._rb_split.setChecked(True)
-        else:
-            self._rb_merge.setChecked(True)
-
-    def _write_to(self, path: Path) -> None:
-        sha = (
-            self._arena_sidecar.video.sha256 if self._arena_sidecar else ""
-        )
-        sidecar = ROISidecar(
-            video_path=str(self._video),
-            video_sha256=sha,
-            roi_set=self._roi_set,
-        )
-        write_rois(sidecar, path)
-
-
-# ─────────────────────────────────────────────────────────────────
-#  Formatting helpers
-# ─────────────────────────────────────────────────────────────────
-
-def _describe_roi(roi: ROI) -> str:
-    return f"{type(roi.shape).__name__.lower()} ({roi.operation})"
-
-
-def _format_list_row(index: int, roi: ROI) -> str:
-    glyph = "+" if roi.operation == "add" else "−"
-    label = f' "{roi.label}"' if roi.label else ""
-    return f"{glyph}  #{index}: {type(roi.shape).__name__}{label}"
+    def _on_panel_status(self, text: str, ms: int) -> None:
+        self.statusBar().showMessage(text, ms)
 
 
 def run(video: Path, rois_path: Path | None = None) -> int:

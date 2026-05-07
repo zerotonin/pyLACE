@@ -56,7 +56,10 @@ class TuneWindow(QtWidgets.QMainWindow):
         self._params_path = params_path
         self._params = self._load_or_default_params()
 
-        self._mask = arena_mask(sidecar.arena, sidecar.video.frame_size)
+        self._arena_mask = arena_mask(sidecar.arena, sidecar.video.frame_size)
+        self._roi_mask: np.ndarray | None = None
+        self._mask = self._arena_mask
+        self._load_roi_mask_from_disk()
         self._background: np.ndarray | None = None
         self._trail: np.ndarray | None = None
         self._bg_max: np.ndarray | None = None
@@ -130,6 +133,47 @@ class TuneWindow(QtWidgets.QMainWindow):
         self._sample_frames()
         self._load_or_compute_background()
         self._render_current()
+
+    def _load_roi_mask_from_disk(self) -> None:
+        """Pick up <video>.pylace_rois.json if present so the preview honours it."""
+        from pylace.roi.mask import build_combined_mask, build_split_masks
+        from pylace.roi.sidecar import (
+            ROISidecarSchemaError,
+            default_rois_path,
+            read_rois,
+        )
+
+        path = default_rois_path(self._video)
+        if not path.exists():
+            self._roi_mask = None
+            self._mask = self._arena_mask
+            return
+        try:
+            sidecar = read_rois(path)
+        except (ROISidecarSchemaError, ValueError, OSError):
+            self._roi_mask = None
+            self._mask = self._arena_mask
+            return
+        fs = self._sidecar.video.frame_size
+        if sidecar.roi_set.mode == "split":
+            pairs = build_split_masks(sidecar.roi_set, fs)
+            if pairs:
+                # OR all split masks for the live preview; the actual
+                # pylace-detect run still honours per-ROI splitting.
+                combined = pairs[0][1].copy()
+                for _, m in pairs[1:]:
+                    combined |= m
+            else:
+                combined = None
+        elif sidecar.roi_set.is_empty():
+            combined = None
+        else:
+            combined = build_combined_mask(sidecar.roi_set, fs)
+        self._roi_mask = combined
+        if combined is not None:
+            self._mask = self._arena_mask & combined
+        else:
+            self._mask = self._arena_mask
 
     def _load_or_compute_background(self) -> None:
         """Prefer the saved max+min sidecars over a fresh recompute at startup."""
@@ -248,6 +292,15 @@ class TuneWindow(QtWidgets.QMainWindow):
         )
         edit_bg.clicked.connect(self._on_edit_background)
         v.addWidget(edit_bg)
+
+        edit_rois = QtWidgets.QPushButton("Edit ROIs…", wrap)
+        edit_rois.setToolTip(
+            "Open the ROI editor as a dialog. The same widget as "
+            "pylace-roi; on Apply the ROI sidecar is saved next to the "
+            "video and the live preview re-renders against the new mask.",
+        )
+        edit_rois.clicked.connect(self._on_edit_rois)
+        v.addWidget(edit_rois)
 
         return wrap
 
@@ -757,6 +810,27 @@ class TuneWindow(QtWidgets.QMainWindow):
             f"Saved params to {self._params_path.name}", 5000,
         )
         return True
+
+    def _on_edit_rois(self) -> None:
+        """Pop the ROI editor as a modal dialog; reload + re-render on apply."""
+        from pylace.roi.panel import RoiEditDialog
+        from pylace.roi.sidecar import default_rois_path
+
+        dlg = RoiEditDialog(
+            video=self._video,
+            rois_path=default_rois_path(self._video),
+            arena_sidecar=self._sidecar,
+            parent=self,
+        )
+        if dlg.exec() != QtWidgets.QDialog.DialogCode.Accepted:
+            return
+        # The dialog has saved on Apply. Reload + re-render against the
+        # new mask, and invalidate the aggregate cache since the
+        # detection footprint changed.
+        self._load_roi_mask_from_disk()
+        self._invalidate_aggregate_cache()
+        self._render_current()
+        self.statusBar().showMessage("ROI mask updated.", 4000)
 
     def _on_edit_background(self) -> None:
         if self._background is None:
