@@ -83,10 +83,26 @@ class TuneWindow(QtWidgets.QMainWindow):
 
         self._aggregate_cache_key: tuple | None = None
         self._aggregate_cache: dict[str, list[float]] | None = None
+        self._dirty = False
 
         self.setWindowTitle(f"pylace-tune — {video.name}")
         self._build_ui()
+        self._install_frame_shortcuts()
         self._initial_load()
+
+    def _install_frame_shortcuts(self) -> None:
+        """Window-level Left / Right shortcuts for frame stepping."""
+        prev_action = QtGui.QAction("Previous frame", self)
+        prev_action.setShortcut(QtGui.QKeySequence(Qt.Key.Key_Left))
+        prev_action.setShortcutContext(Qt.ShortcutContext.WindowShortcut)
+        prev_action.triggered.connect(lambda: self._step_frame(-1))
+        self.addAction(prev_action)
+
+        next_action = QtGui.QAction("Next frame", self)
+        next_action.setShortcut(QtGui.QKeySequence(Qt.Key.Key_Right))
+        next_action.setShortcutContext(Qt.ShortcutContext.WindowShortcut)
+        next_action.triggered.connect(lambda: self._step_frame(1))
+        self.addAction(next_action)
 
     # ── Loading helpers ────────────────────────────────────────────────
 
@@ -156,16 +172,38 @@ class TuneWindow(QtWidgets.QMainWindow):
 
         nav = QtWidgets.QHBoxLayout()
         nav.addWidget(QtWidgets.QLabel("Frame"))
+
+        self._btn_prev = QtWidgets.QToolButton(wrap)
+        self._btn_prev.setText("◀")
+        self._btn_prev.setToolTip("Previous frame (Left arrow)")
+        self._btn_prev.clicked.connect(lambda: self._step_frame(-1))
+        nav.addWidget(self._btn_prev)
+
         self._frame_slider = QtWidgets.QSlider(Qt.Orientation.Horizontal, wrap)
         self._frame_slider.setMinimum(0)
         self._frame_slider.setMaximum(0)
         self._frame_slider.valueChanged.connect(self._on_frame_changed)
         nav.addWidget(self._frame_slider, stretch=1)
+
+        self._btn_next = QtWidgets.QToolButton(wrap)
+        self._btn_next.setText("▶")
+        self._btn_next.setToolTip("Next frame (Right arrow)")
+        self._btn_next.clicked.connect(lambda: self._step_frame(1))
+        nav.addWidget(self._btn_next)
+
         self._frame_index_label = QtWidgets.QLabel("0 / 0", wrap)
         nav.addWidget(self._frame_index_label)
         v.addLayout(nav)
 
         return wrap
+
+    def _step_frame(self, delta: int) -> None:
+        if not self._frames:
+            return
+        target = max(0, min(len(self._frames) - 1, self._current + int(delta)))
+        if target == self._current:
+            return
+        self._frame_slider.setValue(target)
 
     def _build_right_panel(self) -> QtWidgets.QWidget:
         wrap = QtWidgets.QWidget(self)
@@ -583,7 +621,21 @@ class TuneWindow(QtWidgets.QMainWindow):
 
     # ── Event handlers ─────────────────────────────────────────────────
 
+    def _mark_dirty(self) -> None:
+        if not self._dirty:
+            self._dirty = True
+            base = self.windowTitle()
+            if not base.startswith("● "):
+                self.setWindowTitle(f"● {base}")
+
+    def _mark_clean(self) -> None:
+        self._dirty = False
+        base = self.windowTitle()
+        if base.startswith("● "):
+            self.setWindowTitle(base[2:])
+
     def _on_detection_changed(self) -> None:
+        self._mark_dirty()
         self._params = TuningParams(
             detection=DetectionParams(
                 threshold=self._sb_threshold.value(),
@@ -602,6 +654,7 @@ class TuneWindow(QtWidgets.QMainWindow):
         self._render_current()
 
     def _on_tracking_changed(self) -> None:
+        self._mark_dirty()
         n = self._sb_n_animals.value()
         area = float(self._sb_expected_area.value())
         self._params = TuningParams(
@@ -632,6 +685,7 @@ class TuneWindow(QtWidgets.QMainWindow):
         self._render_current()
 
     def _on_polarity_changed(self, _index: int) -> None:
+        self._mark_dirty()
         new_polarity = self._cb_polarity.currentData() or "dark_on_light"
         self._params = TuningParams(
             detection=self._params.detection,
@@ -647,6 +701,7 @@ class TuneWindow(QtWidgets.QMainWindow):
         self._render_current()
 
     def _on_rebuild_background(self) -> None:
+        self._mark_dirty()
         self._params = TuningParams(
             detection=self._params.detection,
             background=BackgroundParams(
@@ -684,16 +739,24 @@ class TuneWindow(QtWidgets.QMainWindow):
         self._current = max(0, min(len(self._frames) - 1, int(idx)))
         self._render_current()
 
-    def _on_save_params(self) -> None:
-        write_params(
-            self._params,
-            video_path=self._video,
-            video_sha256_hex=self._sidecar.video.sha256,
-            out_path=self._params_path,
-        )
+    def _on_save_params(self) -> bool:
+        try:
+            write_params(
+                self._params,
+                video_path=self._video,
+                video_sha256_hex=self._sidecar.video.sha256,
+                out_path=self._params_path,
+            )
+        except OSError as exc:
+            QtWidgets.QMessageBox.warning(
+                self, "Save failed", f"Could not write params:\n{exc}",
+            )
+            return False
+        self._mark_clean()
         self.statusBar().showMessage(
             f"Saved params to {self._params_path.name}", 5000,
         )
+        return True
 
     def _on_edit_background(self) -> None:
         if self._background is None:
@@ -746,6 +809,9 @@ class TuneWindow(QtWidgets.QMainWindow):
             video_sha256_hex=self._sidecar.video.sha256,
             out_path=target,
         )
+        # Saving a preset to a *different* path doesn't update the
+        # canonical sidecar, so we don't clear the dirty flag — the
+        # main params file may still be out of date.
         self.statusBar().showMessage(f"Saved preset to {target.name}", 5000)
 
     def _on_load_preset(self) -> None:
@@ -765,6 +831,10 @@ class TuneWindow(QtWidgets.QMainWindow):
         self._sync_widgets_from_params()
         self._rebuild_background()
         self._render_current()
+        # The loaded preset is, by definition, what's now on disk in
+        # ``params_path`` only if path_str == self._params_path. We can't
+        # know cheaply, so leave the dirty flag in its current state and
+        # let the user save explicitly if they want to apply.
         self.statusBar().showMessage(f"Loaded preset {Path(path_str).name}", 5000)
 
     def _sync_widgets_from_params(self) -> None:
@@ -1044,6 +1114,30 @@ class TuneWindow(QtWidgets.QMainWindow):
         super().resizeEvent(event)
         if self._frames and self._background is not None:
             self._render_current()
+
+    def closeEvent(self, event: QtGui.QCloseEvent) -> None:  # noqa: N802
+        if not self._dirty:
+            super().closeEvent(event)
+            return
+        choice = QtWidgets.QMessageBox.question(
+            self,
+            "Save tuning changes?",
+            "You have unsaved tuning changes. Save them to "
+            f"{self._params_path.name} before quitting?",
+            QtWidgets.QMessageBox.StandardButton.Save
+            | QtWidgets.QMessageBox.StandardButton.Discard
+            | QtWidgets.QMessageBox.StandardButton.Cancel,
+            QtWidgets.QMessageBox.StandardButton.Save,
+        )
+        if choice == QtWidgets.QMessageBox.StandardButton.Save:
+            if self._on_save_params():
+                super().closeEvent(event)
+            else:
+                event.ignore()
+        elif choice == QtWidgets.QMessageBox.StandardButton.Discard:
+            super().closeEvent(event)
+        else:
+            event.ignore()
 
 
 def run(
