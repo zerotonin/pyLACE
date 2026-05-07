@@ -1,34 +1,45 @@
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║  pyLACE — posthoc.audit                                          ║
-# ║  « sliding-window identity audit on motion-residual cost »       ║
+# ║  « sliding-window identity audit on Kalman-Mahalanobis cost »    ║
 # ╠══════════════════════════════════════════════════════════════════╣
-# ║  Phase 6 lite of the post-hoc roadmap. The Hungarian tracker     ║
-# ║  in pyLACE makes assignments one frame at a time; when two       ║
-# ║  flies merge into a chain blob and re-emerge a few frames        ║
-# ║  later, the local minimum-cost match at the separation moment    ║
-# ║  may pick the wrong post-merge mapping. After the fact, motion   ║
-# ║  continuity over the next ~ second exposes the swap because a    ║
-# ║  fly's extrapolated pre-merge motion no longer matches the       ║
-# ║  centroid that was assigned its label.                           ║
+# ║  Phase 6 of the post-hoc roadmap. The Hungarian tracker in       ║
+# ║  pyLACE makes assignments one frame at a time; when two flies    ║
+# ║  merge into a chain blob and re-emerge a few frames later, the   ║
+# ║  local minimum-cost match at the separation moment may pick the  ║
+# ║  wrong post-merge mapping. After the fact, motion continuity     ║
+# ║  over the next ~ second exposes the swap because a fly's         ║
+# ║  predicted pre-merge motion no longer matches the centroid that  ║
+# ║  was assigned its label.                                         ║
 # ║                                                                  ║
 # ║  This module finds those "uncertainty events" (proximity         ║
-# ║  contacts, NaN gaps), evaluates every permutation of post-event  ║
-# ║  labels against the predicted-from-pre-event position, and       ║
-# ║  commits a swap when a non-identity permutation reduces the      ║
-# ║  motion residual by more than ``swap_cost_ratio``. Costs only    ║
-# ║  use the position columns the cleaner already produces — no      ║
-# ║  Kalman dependency. The motion model is a median-velocity        ║
-# ║  predictor over the pre-event window; that is "lite" enough to   ║
-# ║  ship today without Phase 4 yet a substantial improvement over  ║
-# ║  pure local Hungarian.                                           ║
+# ║  contacts, NaN gaps), then for each event:                       ║
+# ║    1. Replays a 4-state Kalman filter over the pre-event window  ║
+# ║       per track (the same filter the tracker uses, fed only      ║
+# ║       positions from the cleaned trajectory).                    ║
+# ║    2. Predicts forward through the post-event window.            ║
+# ║    3. Computes the squared Mahalanobis distance of the actual    ║
+# ║       post-event position to the predicted state, under every    ║
+# ║       permutation of post-event labels.                          ║
+# ║    4. Commits the lowest-cost permutation iff it is non-identity ║
+# ║       AND its mean Mahalanobis² is below ``swap_cost_ratio ×     ║
+# ║       identity_cost`` (default 0.7 ⇒ require 30 % cost           ║
+# ║       reduction).                                                ║
 # ║                                                                  ║
-# ║  References: Zhang/Li/Nevatia 2008 (min-cost flow MOT); Lenz et  ║
-# ║  al. ICCV 2015 (sliding-window relaxation); Wang et al. 2019     ║
-# ║  (muSSP fast min-cost flow). This is a pragmatic O(N!) audit at  ║
-# ║  per-event granularity rather than a full graph solve, which is  ║
-# ║  appropriate for fixed-N runs at N ≤ 8.                          ║
+# ║  Mahalanobis² scales with the inverse innovation covariance, so  ║
+# ║  it discriminates much more sharply than the median-velocity    ║
+# ║  Euclidean predictor used by the earlier "lite" version —        ║
+# ║  particularly important for cool flies that barely move (the    ║
+# ║  predictor sees ~ zero pre-event velocity and Euclidean cost     ║
+# ║  alone struggles to tell two stationary tracks apart by          ║
+# ║  motion).                                                        ║
+# ║                                                                  ║
+# ║  References: Bewley et al. SORT (ICIP 2016) for the 4-state CV   ║
+# ║  filter; Zhang/Li/Nevatia 2008 (min-cost flow MOT); Lenz et al.  ║
+# ║  ICCV 2015 (sliding-window relaxation). This is a pragmatic      ║
+# ║  O(N!) audit at per-event granularity rather than a full graph   ║
+# ║  solve, which is appropriate for fixed-N runs at N ≤ 8.          ║
 # ╚══════════════════════════════════════════════════════════════════╝
-"""Identity audit: re-tag track IDs by motion-residual permutation search."""
+"""Identity audit: re-tag track IDs by Kalman-Mahalanobis permutation search."""
 
 from __future__ import annotations
 
@@ -37,6 +48,22 @@ from itertools import permutations
 
 import numpy as np
 import pandas as pd
+
+from pylace.tracking.constants import (
+    DEFAULT_KALMAN_INITIAL_V_STD,
+    DEFAULT_KALMAN_Q_POS,
+    DEFAULT_KALMAN_Q_VEL,
+    DEFAULT_KALMAN_R_POS,
+)
+from pylace.tracking.kalman import (
+    initial_covariance,
+    mahalanobis_sq,
+    measurement_noise,
+    predict,
+    process_noise,
+    transition_matrix,
+    update,
+)
 
 
 @dataclass(frozen=True)
@@ -58,6 +85,10 @@ def audit_track_identities(
     window_s: float = 1.0,
     swap_cost_ratio: float = 0.7,
     coalesce_window_frames: int | None = None,
+    kalman_q_pos: float = DEFAULT_KALMAN_Q_POS,
+    kalman_q_vel: float = DEFAULT_KALMAN_Q_VEL,
+    kalman_r_pos: float = DEFAULT_KALMAN_R_POS,
+    kalman_initial_v_std: float = DEFAULT_KALMAN_INITIAL_V_STD,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Re-tag ``track_id`` by re-optimising at proximity / gap events.
 
@@ -73,7 +104,7 @@ def audit_track_identities(
         window_s: Half-width of the pre-event and post-event windows
             in seconds. Default 1 s.
         swap_cost_ratio: A non-identity permutation is committed only
-            if its motion-residual cost is below
+            if its mean post-event Mahalanobis² is below
             ``swap_cost_ratio × identity_cost``. Default 0.7
             (= 30% improvement). Lower → more conservative,
             higher → more aggressive.
@@ -81,6 +112,12 @@ def audit_track_identities(
             are merged into a single block. Defaults to ``round(fps *
             window_s)`` frames so a half-second gap is treated as one
             event.
+        kalman_q_pos, kalman_q_vel: Per-frame process-noise stds for
+            the Kalman motion model used to score post-event
+            assignments. Default to the same values as the tracker.
+        kalman_r_pos: Per-axis measurement-noise std (px).
+        kalman_initial_v_std: Initial velocity prior at filter
+            initialisation (px/frame).
 
     Returns:
         ``(relabelled_traj, swap_log)``. ``relabelled_traj`` is a
@@ -108,6 +145,13 @@ def audit_track_identities(
     if coalesce_window_frames is None:
         coalesce_window_frames = window_frames
     contact_threshold_px = contact_threshold_mm * pix_per_mm
+
+    # Kalman matrices, built once and shared across all event evaluations.
+    F = transition_matrix(dt=1.0)
+    Q = process_noise(kalman_q_pos, kalman_q_vel)
+    R = measurement_noise(kalman_r_pos)
+    init_cov = initial_covariance(kalman_r_pos, kalman_initial_v_std)
+    kalman = (F, Q, R, init_cov)
 
     # Wide-form positions, columns ordered by sorted track_id. After this
     # column i always corresponds to whichever label is currently sitting
@@ -139,7 +183,9 @@ def audit_track_identities(
         if pre_hi - pre_lo < 3 or post_hi - post_lo < 3:
             continue
 
-        cost_id = _block_cost(cx, cy, pre_lo, pre_hi, post_lo, post_hi, identity)
+        cost_id = _block_cost(
+            cx, cy, pre_lo, pre_hi, post_lo, post_hi, identity, kalman,
+        )
         if cost_id <= 0.0:
             continue
 
@@ -148,7 +194,9 @@ def audit_track_identities(
         for perm in permutations(range(n_tracks)):
             if perm == identity:
                 continue
-            cost = _block_cost(cx, cy, pre_lo, pre_hi, post_lo, post_hi, perm)
+            cost = _block_cost(
+                cx, cy, pre_lo, pre_hi, post_lo, post_hi, perm, kalman,
+            )
             if cost < best_cost:
                 best_cost = cost
                 best_perm = perm
@@ -250,12 +298,41 @@ def _find_event_blocks(
     return blocks
 
 
+def _default_kalman_matrices() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """``(F, Q, R, init_cov)`` at the package defaults — used by tests."""
+    F = transition_matrix(dt=1.0)
+    Q = process_noise(DEFAULT_KALMAN_Q_POS, DEFAULT_KALMAN_Q_VEL)
+    R = measurement_noise(DEFAULT_KALMAN_R_POS)
+    init_cov = initial_covariance(DEFAULT_KALMAN_R_POS, DEFAULT_KALMAN_INITIAL_V_STD)
+    return F, Q, R, init_cov
+
+
 def _block_cost(
     cx: np.ndarray, cy: np.ndarray,
     pre_lo: int, pre_hi: int, post_lo: int, post_hi: int,
     perm: tuple[int, ...],
+    kalman: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None = None,
 ) -> float:
-    """Mean predicted-vs-actual residual over the post window for ``perm``."""
+    """Mean post-event Mahalanobis² of the perm assignment.
+
+    For each track ``i``:
+      1. Initialise a Kalman filter at the first valid pre-event
+         observation.
+      2. Replay predict + update through the pre-event window so the
+         filter learns the per-track motion model.
+      3. Predict forward to the first post-event frame.
+      4. Score the post-event measurements for column ``perm[i]`` by
+         their squared Mahalanobis distance from the predicted state;
+         keep predicting (no update) so the cost reflects pure
+         prediction quality, not measurement-driven adaptation.
+
+    The returned cost is the per-track mean Mahalanobis², averaged
+    across the active tracks.
+    """
+    if kalman is None:
+        kalman = _default_kalman_matrices()
+    F, Q, R, init_cov = kalman
+
     n_tracks = cx.shape[1]
     total = 0.0
     n_active = 0
@@ -265,30 +342,45 @@ def _block_cost(
         valid_pre = ~(np.isnan(pre_x) | np.isnan(pre_y))
         if valid_pre.sum() < 2:
             continue
-        # Median per-frame velocity (NaN-tolerant).
-        vx = float(np.nanmedian(np.diff(pre_x)))
-        vy = float(np.nanmedian(np.diff(pre_y)))
-        if not (np.isfinite(vx) and np.isfinite(vy)):
-            continue
-        # Last observed pre-event position.
-        last_idx_local = int(np.where(valid_pre)[0][-1])
-        last_x = float(pre_x[last_idx_local])
-        last_y = float(pre_y[last_idx_local])
-        last_frame_offset = pre_lo + last_idx_local
+
+        first_idx = int(np.where(valid_pre)[0][0])
+        last_idx = int(np.where(valid_pre)[0][-1])
+        state = np.array(
+            [float(pre_x[first_idx]), float(pre_y[first_idx]), 0.0, 0.0],
+            dtype=np.float64,
+        )
+        cov = init_cov.copy()
+        # Replay pre-event window: predict every frame, update on
+        # observed frames.
+        for j in range(first_idx + 1, pre_hi - pre_lo):
+            state, cov = predict(state, cov, F, Q)
+            if not (np.isnan(pre_x[j]) or np.isnan(pre_y[j])):
+                z = np.array([pre_x[j], pre_y[j]], dtype=np.float64)
+                state, cov, _ = update(state, cov, z, R)
+
+        # Bridge to the first post-event frame.
+        steps = post_lo - (pre_lo + last_idx)
+        for _ in range(max(1, steps)):
+            state, cov = predict(state, cov, F, Q)
 
         actual_x = cx[post_lo:post_hi, perm[i]]
         actual_y = cy[post_lo:post_hi, perm[i]]
-        valid_post = ~(np.isnan(actual_x) | np.isnan(actual_y))
-        if valid_post.sum() < 2:
+        m_sq_sum = 0.0
+        n_post_valid = 0
+        for j in range(actual_x.size):
+            if not (np.isnan(actual_x[j]) or np.isnan(actual_y[j])):
+                z = np.array([actual_x[j], actual_y[j]], dtype=np.float64)
+                m_sq = mahalanobis_sq(state, cov, z, R)
+                m_sq_sum += m_sq
+                n_post_valid += 1
+            # Predict-only forward; no update so the cost reflects
+            # pure prediction quality, not measurement-driven
+            # adaptation that would dampen differences between perms.
+            if j + 1 < actual_x.size:
+                state, cov = predict(state, cov, F, Q)
+        if n_post_valid == 0:
             continue
-        post_offsets = np.arange(post_lo, post_hi) - last_frame_offset
-        pred_x = last_x + vx * post_offsets
-        pred_y = last_y + vy * post_offsets
-        res = np.hypot(
-            actual_x[valid_post] - pred_x[valid_post],
-            actual_y[valid_post] - pred_y[valid_post],
-        )
-        total += float(np.mean(res))
+        total += m_sq_sum / n_post_valid
         n_active += 1
 
     if n_active == 0:

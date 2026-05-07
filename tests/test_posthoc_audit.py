@@ -228,3 +228,35 @@ def test_audit_rejects_invalid_swap_cost_ratio():
     with pytest.raises(ValueError, match="swap_cost_ratio"):
         audit_track_identities(df, fps=10.0, pix_per_mm=1.0,
                                 swap_cost_ratio=1.5)
+
+
+def test_audit_kalman_catches_a_swap_between_two_stationary_tracks():
+    """Two near-stationary flies trade IDs — the lite median-velocity
+    predictor produced near-zero velocity for both pre-event so the
+    cost was indifferent to the swap. The Kalman version uses
+    Mahalanobis² which depends on the spatial covariance, not motion,
+    so the swap is sharply detected.
+    """
+    n = 40
+    swap_at = 20
+    # Track 0 sits near (5, 5). Track 1 sits near (5, 80).
+    cx0 = np.full(n, 5.0); cy0 = np.full(n, 5.0)
+    cx1 = np.full(n, 5.0); cy1 = np.full(n, 80.0)
+    # Inject a swap.
+    cx0[swap_at:], cx1[swap_at:] = cx1[swap_at:].copy(), cx0[swap_at:].copy()
+    cy0[swap_at:], cy1[swap_at:] = cy1[swap_at:].copy(), cy0[swap_at:].copy()
+    # Force a contact event near the swap so the auditor visits it.
+    cy0[swap_at - 1] = 40.0
+    cy1[swap_at - 1] = 40.0
+    df = _build_two_track_df(cx0, cy0, cx1, cy1)
+    audited, log = audit_track_identities(
+        df, fps=10.0, pix_per_mm=1.0,
+        contact_threshold_mm=50.0, window_s=1.0,
+        swap_cost_ratio=0.9,
+    )
+    assert not log.empty, "Kalman audit should have caught the swap"
+    # Track 0 should sit at y ≈ 5 throughout (except the contact frame).
+    by_track = audited.groupby("track_id")
+    cy0_audited = by_track.get_group(0)["cy_smooth_px"].to_numpy()
+    far = np.arange(n) != (swap_at - 1)
+    assert np.allclose(cy0_audited[far], 5.0, atol=1e-6)

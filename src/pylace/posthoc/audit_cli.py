@@ -19,6 +19,12 @@ from pylace.posthoc.io import (
     video_path_from_trajectory,
     write_trajectory,
 )
+from pylace.tracking.constants import (
+    DEFAULT_KALMAN_INITIAL_V_STD,
+    DEFAULT_KALMAN_Q_POS,
+    DEFAULT_KALMAN_Q_VEL,
+    DEFAULT_KALMAN_R_POS,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -59,6 +65,10 @@ def main(argv: list[str] | None = None) -> int:
         contact_threshold_mm=args.contact_mm,
         window_s=args.window_s,
         swap_cost_ratio=args.swap_cost_ratio,
+        kalman_q_pos=args.kalman_q_pos,
+        kalman_q_vel=args.kalman_q_vel,
+        kalman_r_pos=args.kalman_r_pos,
+        kalman_initial_v_std=args.kalman_initial_v_std,
     )
     write_trajectory(audited, out_path)
     print(f"Wrote {len(audited)} rows to {out_path.name}")
@@ -135,6 +145,23 @@ def _build_parser() -> argparse.ArgumentParser:
                    help="Commit a swap when its cost is below this fraction "
                         "of the identity-permutation cost. Default 0.7 "
                         "(= require 30%% improvement).")
+    p.add_argument("--kalman-q-pos", type=float, default=DEFAULT_KALMAN_Q_POS,
+                   dest="kalman_q_pos",
+                   help=f"Audit Kalman position-drift std (px). "
+                        f"Default {DEFAULT_KALMAN_Q_POS}.")
+    p.add_argument("--kalman-q-vel", type=float, default=DEFAULT_KALMAN_Q_VEL,
+                   dest="kalman_q_vel",
+                   help=f"Audit Kalman velocity-jitter std (px/frame). "
+                        f"Default {DEFAULT_KALMAN_Q_VEL}.")
+    p.add_argument("--kalman-r-pos", type=float, default=DEFAULT_KALMAN_R_POS,
+                   dest="kalman_r_pos",
+                   help=f"Audit Kalman measurement-noise std (px). "
+                        f"Default {DEFAULT_KALMAN_R_POS}.")
+    p.add_argument("--kalman-initial-v-std", type=float,
+                   default=DEFAULT_KALMAN_INITIAL_V_STD,
+                   dest="kalman_initial_v_std",
+                   help=f"Audit Kalman initial velocity prior (px/frame). "
+                        f"Default {DEFAULT_KALMAN_INITIAL_V_STD}.")
     return p
 
 
