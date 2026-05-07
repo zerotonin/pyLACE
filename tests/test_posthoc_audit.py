@@ -325,6 +325,122 @@ def test_audit_rejects_invalid_max_jump_mm():
                                 max_jump_mm=-1.0)
 
 
+def test_audit_appearance_breaks_kalman_ties(tmp_path):
+    """Two identically-positioned identical-area flies, distinguishable only by appearance.
+
+    Constructs a CSV where positions and areas are *symmetric* (so
+    Kalman-Mahalanobis alone cannot favour either permutation), then
+    injects an appearance fingerprint sidecar that's only consistent
+    with the swap perm. The audit must commit the swap.
+    """
+    n = 60
+    swap_at = 30
+    # Two stationary tracks at (50, 50) and (150, 50). Identical areas.
+    cx0 = np.full(n, 50.0); cy0 = np.full(n, 50.0)
+    cx1 = np.full(n, 150.0); cy1 = np.full(n, 50.0)
+    # Inject CSV swap at frame 30.
+    cx0[swap_at:], cx1[swap_at:] = cx1[swap_at:].copy(), cx0[swap_at:].copy()
+    cy0[swap_at:], cy1[swap_at:] = cy1[swap_at:].copy(), cy0[swap_at:].copy()
+    # Force a contact event at frame 29 so the auditor visits.
+    cx0[swap_at - 1] = 100.0
+    cx1[swap_at - 1] = 100.0
+    df = _build_two_track_df(cx0, cy0, cx1, cy1)
+
+    # Build a fingerprint sidecar.
+    h, w = 8, 16
+    n_dets = 2 * n
+    frame_idx_arr = np.repeat(np.arange(n), 2).astype(np.int32)
+    track_id_arr = np.tile([0, 1], n).astype(np.int32)
+    is_conf = np.ones(n_dets, dtype=bool)
+    is_conf[2 * (swap_at - 1):2 * (swap_at - 1) + 2] = False  # contact frame not confident
+    # Patches: track 0's TRUE fly is bright, track 1's TRUE fly is dark.
+    # Because the CSV swaps the labels at frame swap_at, track_id 0 in
+    # the CSV is at the bright fly's position pre-swap, then at the
+    # dark fly's position post-swap. The fingerprint patches follow
+    # the TRUE fly (bright vs dark), since the fingerprint extractor
+    # would have seen each fly's actual intensity. So:
+    #   pre-swap track_id 0 row → bright patch
+    #   post-swap track_id 0 row → dark patch (because the CSV's track_id 0
+    #     post-swap is at the dark fly's position).
+    bright = np.full((h, w), 200, dtype=np.uint8)
+    dark = np.full((h, w), 50, dtype=np.uint8)
+    patches = np.zeros((n_dets, h, w), dtype=np.uint8)
+    for k in range(n_dets):
+        f = frame_idx_arr[k]
+        t = track_id_arr[k]
+        # Determine which TRUE fly this is.
+        if f < swap_at:
+            true_fly = t  # CSV honest pre-swap.
+        else:
+            true_fly = 1 - t  # CSV swapped post-swap.
+        patches[k] = bright if true_fly == 0 else dark
+    npz_path = tmp_path / "fp.npz"
+    np.savez(
+        npz_path,
+        frame_idx=frame_idx_arr, track_id=track_id_arr, patch=patches,
+        is_confident=is_conf,
+        cx_px=np.zeros(n_dets, dtype=np.float32),
+        cy_px=np.zeros(n_dets, dtype=np.float32),
+        area_px=np.full(n_dets, 1000.0, dtype=np.float32),
+        major_axis_px=np.full(n_dets, 40.0, dtype=np.float32),
+        minor_axis_px=np.full(n_dets, 20.0, dtype=np.float32),
+        orientation_deg=np.full(n_dets, 90.0, dtype=np.float32),
+        patch_h=np.array(h, dtype=np.int32),
+        patch_w=np.array(w, dtype=np.int32),
+    )
+
+    audited, log = audit_track_identities(
+        df, fps=10.0, pix_per_mm=1.0,
+        contact_threshold_mm=80.0, window_s=2.0,
+        swap_cost_ratio=0.9,
+        max_jump_mm=200.0,
+        fingerprint_path=npz_path,
+        appearance_weight=1.0,
+        axis_ratio_weight=0.0,
+        area_weight=0.0,
+    )
+    assert not log.empty, "appearance term should have caught the swap"
+    # Track 0 should consistently sit at one true fly's intensity post-audit.
+    # We don't check positions (they're symmetric) — we check the swap log.
+    assert tuple(log.iloc[0]["permutation"]) == (1, 0)
+    assert log.iloc[0]["cost_appearance_after"] < log.iloc[0]["cost_appearance_before"]
+
+
+def test_audit_falls_back_to_kalman_when_no_fingerprint(tmp_path):
+    """Without a fingerprint file, the audit behaves exactly as before."""
+    n = 50
+    swap_at = 25
+    cx0 = np.full(n, 5.0); cy0 = np.full(n, 5.0)
+    cx1 = np.full(n, 5.0); cy1 = np.full(n, 80.0)
+    cx0[swap_at:], cx1[swap_at:] = cx1[swap_at:].copy(), cx0[swap_at:].copy()
+    cy0[swap_at:], cy1[swap_at:] = cy1[swap_at:].copy(), cy0[swap_at:].copy()
+    cy0[swap_at - 1] = 40.0
+    cy1[swap_at - 1] = 40.0
+    df = _build_two_track_df(cx0, cy0, cx1, cy1)
+
+    audited, log = audit_track_identities(
+        df, fps=10.0, pix_per_mm=1.0,
+        contact_threshold_mm=50.0, window_s=1.0,
+        swap_cost_ratio=0.9,
+        # Path that doesn't exist: should silently fall back.
+        fingerprint_path=tmp_path / "missing.npz",
+    )
+    assert not log.empty
+    # Cost columns for appearance should all be 0 (no fingerprint).
+    assert log.iloc[0]["cost_appearance_before"] == 0.0
+    assert log.iloc[0]["cost_appearance_after"] == 0.0
+
+
+def test_audit_rejects_negative_appearance_weight():
+    df = _build_two_track_df(
+        cx0=np.arange(10, dtype=float), cy0=np.zeros(10),
+        cx1=np.arange(10, dtype=float), cy1=np.full(10, 100.0),
+    )
+    with pytest.raises(ValueError, match="appearance_weight"):
+        audit_track_identities(df, fps=10.0, pix_per_mm=1.0,
+                                appearance_weight=-1.0)
+
+
 def test_audit_kalman_catches_a_swap_between_two_stationary_tracks():
     """Two near-stationary flies trade IDs — the lite median-velocity
     predictor produced near-zero velocity for both pre-event so the

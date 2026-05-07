@@ -45,10 +45,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from itertools import permutations
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
+from pylace.posthoc.appearance import (
+    area_continuity_score,
+    match_patch,
+)
 from pylace.tracking.constants import (
     DEFAULT_KALMAN_INITIAL_V_STD,
     DEFAULT_KALMAN_Q_POS,
@@ -74,6 +79,25 @@ class SwapEvent:
     permutation: tuple[int, ...]
     cost_before: float
     cost_after: float
+    cost_kalman_before: float = 0.0
+    cost_kalman_after: float = 0.0
+    cost_appearance_before: float = 0.0
+    cost_appearance_after: float = 0.0
+    cost_axis_before: float = 0.0
+    cost_axis_after: float = 0.0
+    cost_area_before: float = 0.0
+    cost_area_after: float = 0.0
+
+
+@dataclass
+class _AppearanceState:
+    """Wide-form per-frame, per-column fingerprint arrays."""
+
+    patches: np.ndarray         # (n_frames, n_tracks, h, w) uint8
+    is_confident: np.ndarray    # (n_frames,) bool
+    axis_ratio: np.ndarray      # (n_frames, n_tracks) float, NaN where missing
+    area: np.ndarray            # (n_frames, n_tracks) float, NaN where missing
+    has_patch: np.ndarray       # (n_frames, n_tracks) bool
 
 
 def audit_track_identities(
@@ -87,6 +111,10 @@ def audit_track_identities(
     coalesce_window_frames: int | None = None,
     max_event_block_s: float | None = None,
     max_jump_mm: float | None = None,
+    fingerprint_path: Path | None = None,
+    appearance_weight: float = 1.0,
+    axis_ratio_weight: float = 1.0,
+    area_weight: float = 1.0,
     kalman_q_pos: float = DEFAULT_KALMAN_Q_POS,
     kalman_q_vel: float = DEFAULT_KALMAN_Q_VEL,
     kalman_r_pos: float = DEFAULT_KALMAN_R_POS,
@@ -159,6 +187,13 @@ def audit_track_identities(
         raise ValueError(
             f"max_jump_mm must be positive, got {max_jump_mm}",
         )
+    for name, w in (
+        ("appearance_weight", appearance_weight),
+        ("axis_ratio_weight", axis_ratio_weight),
+        ("area_weight", area_weight),
+    ):
+        if w < 0:
+            raise ValueError(f"{name} must be >= 0, got {w}")
 
     relabelled = traj.copy()
     relabelled["original_track_id"] = relabelled["track_id"]
@@ -200,6 +235,12 @@ def audit_track_identities(
     cy = pivot_y.to_numpy(dtype=float).copy()
     frames = pivot_x.index.to_numpy(dtype=np.int64)
 
+    appearance: _AppearanceState | None = None
+    if fingerprint_path is not None and Path(fingerprint_path).exists():
+        appearance = _load_appearance_state(
+            Path(fingerprint_path), frames, track_ids,
+        )
+
     event_blocks = _find_event_blocks(
         cx, cy,
         contact_threshold_px=contact_threshold_px,
@@ -219,14 +260,27 @@ def audit_track_identities(
         if pre_hi - pre_lo < 3 or post_hi - post_lo < 3:
             continue
 
-        cost_id = _block_cost(
+        kal_id = _block_cost(
             cx, cy, pre_lo, pre_hi, post_lo, post_hi, identity, kalman,
         )
-        if cost_id <= 0.0:
+        if kal_id <= 0.0:
             continue
+        app_id, axis_id, area_id = _appearance_terms(
+            appearance, pre_lo, pre_hi, post_lo, post_hi, identity,
+        )
+        cost_id = (
+            kal_id
+            + appearance_weight * app_id
+            + axis_ratio_weight * axis_id
+            + area_weight * area_id
+        )
 
         best_perm = identity
         best_cost = cost_id
+        best_kal = kal_id
+        best_app = app_id
+        best_axis = axis_id
+        best_area = area_id
         for perm in permutations(range(n_tracks)):
             if perm == identity:
                 continue
@@ -234,12 +288,25 @@ def audit_track_identities(
                 cx, cy, pre_lo, pre_hi, post_lo, post_hi, perm,
             ) > max_jump_px:
                 continue
-            cost = _block_cost(
+            kal = _block_cost(
                 cx, cy, pre_lo, pre_hi, post_lo, post_hi, perm, kalman,
+            )
+            app, axis, area = _appearance_terms(
+                appearance, pre_lo, pre_hi, post_lo, post_hi, perm,
+            )
+            cost = (
+                kal
+                + appearance_weight * app
+                + axis_ratio_weight * axis
+                + area_weight * area
             )
             if cost < best_cost:
                 best_cost = cost
                 best_perm = perm
+                best_kal = kal
+                best_app = app
+                best_axis = axis
+                best_area = area
 
         if best_perm == identity:
             continue
@@ -251,12 +318,25 @@ def audit_track_identities(
         cols = list(best_perm)
         cx[post_lo:, :] = cx[post_lo:, cols]
         cy[post_lo:, :] = cy[post_lo:, cols]
+        if appearance is not None:
+            appearance.patches[post_lo:, :] = appearance.patches[post_lo:, cols]
+            appearance.axis_ratio[post_lo:, :] = appearance.axis_ratio[post_lo:, cols]
+            appearance.area[post_lo:, :] = appearance.area[post_lo:, cols]
+            appearance.has_patch[post_lo:, :] = appearance.has_patch[post_lo:, cols]
         swaps.append(
             SwapEvent(
                 frame_idx=int(frames[block_end]),
                 permutation=best_perm,
                 cost_before=float(cost_id),
                 cost_after=float(best_cost),
+                cost_kalman_before=float(kal_id),
+                cost_kalman_after=float(best_kal),
+                cost_appearance_before=float(app_id),
+                cost_appearance_after=float(best_app),
+                cost_axis_before=float(axis_id),
+                cost_axis_after=float(best_axis),
+                cost_area_before=float(area_id),
+                cost_area_after=float(best_area),
             ),
         )
 
@@ -279,6 +359,14 @@ def audit_track_identities(
                 "improvement_ratio": (
                     1.0 - sw.cost_after / sw.cost_before if sw.cost_before > 0 else 0.0
                 ),
+                "cost_kalman_before": sw.cost_kalman_before,
+                "cost_kalman_after": sw.cost_kalman_after,
+                "cost_appearance_before": sw.cost_appearance_before,
+                "cost_appearance_after": sw.cost_appearance_after,
+                "cost_axis_before": sw.cost_axis_before,
+                "cost_axis_after": sw.cost_axis_after,
+                "cost_area_before": sw.cost_area_before,
+                "cost_area_after": sw.cost_area_after,
             } for sw in swaps],
         )
         if swaps else _empty_swap_log()
@@ -296,6 +384,10 @@ def _empty_swap_log() -> pd.DataFrame:
         columns=[
             "frame_idx", "permutation",
             "cost_before", "cost_after", "improvement_ratio",
+            "cost_kalman_before", "cost_kalman_after",
+            "cost_appearance_before", "cost_appearance_after",
+            "cost_axis_before", "cost_axis_after",
+            "cost_area_before", "cost_area_after",
         ],
     )
 
@@ -468,6 +560,148 @@ def _block_cost(
     if n_active == 0:
         return 0.0
     return total / n_active
+
+
+# ─────────────────────────────────────────────────────────────────
+#  Appearance / continuity scoring (Perez-Escudero 2014, ToxTrac 2018)
+# ─────────────────────────────────────────────────────────────────
+
+
+def _load_appearance_state(
+    fingerprint_path: Path,
+    frames: np.ndarray,
+    track_ids: list[int],
+) -> _AppearanceState | None:
+    """Pivot a pylace_fingerprints.npz into wide-form arrays aligned to ``frames``.
+
+    Returns None if the file cannot be loaded or has no overlap with
+    the trajectory's frame indices.
+    """
+    try:
+        npz = np.load(fingerprint_path)
+    except (OSError, ValueError):
+        return None
+    try:
+        fp_frames = npz["frame_idx"]
+        fp_tracks = npz["track_id"]
+        fp_patch = npz["patch"]
+        fp_conf = npz["is_confident"]
+        fp_axis_major = npz["major_axis_px"]
+        fp_axis_minor = npz["minor_axis_px"]
+        fp_area = npz["area_px"]
+    except KeyError:
+        npz.close()
+        return None
+
+    n_frames = len(frames)
+    n_tracks = len(track_ids)
+    h, w = fp_patch.shape[1], fp_patch.shape[2]
+
+    patches = np.zeros((n_frames, n_tracks, h, w), dtype=np.uint8)
+    has_patch = np.zeros((n_frames, n_tracks), dtype=bool)
+    axis_ratio = np.full((n_frames, n_tracks), np.nan, dtype=np.float32)
+    area = np.full((n_frames, n_tracks), np.nan, dtype=np.float32)
+    is_confident = np.zeros(n_frames, dtype=bool)
+
+    frame_to_pos = {int(f): i for i, f in enumerate(frames)}
+    track_to_col = {int(t): i for i, t in enumerate(track_ids)}
+
+    for k in range(len(fp_frames)):
+        f = int(fp_frames[k])
+        t = int(fp_tracks[k])
+        i = frame_to_pos.get(f)
+        j = track_to_col.get(t)
+        if i is None or j is None:
+            continue
+        patches[i, j] = fp_patch[k]
+        has_patch[i, j] = True
+        if fp_axis_minor[k] > 0:
+            axis_ratio[i, j] = float(fp_axis_major[k]) / float(fp_axis_minor[k])
+        area[i, j] = float(fp_area[k])
+        if fp_conf[k]:
+            is_confident[i] = True
+
+    npz.close()
+    if not has_patch.any():
+        return None
+    return _AppearanceState(
+        patches=patches,
+        is_confident=is_confident,
+        axis_ratio=axis_ratio,
+        area=area,
+        has_patch=has_patch,
+    )
+
+
+def _appearance_terms(
+    state: _AppearanceState | None,
+    pre_lo: int, pre_hi: int, post_lo: int, post_hi: int,
+    perm: tuple[int, ...],
+) -> tuple[float, float, float]:
+    """Mean per-track ``(appearance_rmse, axis_ratio_diff, area_diff)`` under ``perm``.
+
+    Pre-event reference per track is the median over confident frames
+    in the pre-window; post-event candidate per column is the median
+    over all post-window frames (whether confident or not — we are
+    judging identity, so we want the data even if it is post-merge
+    transition). Tracks lacking enough valid pre or post observations
+    contribute zero (no information). The mean is taken over tracks
+    that did contribute; if none did, returns ``(0, 0, 0)``.
+    """
+    if state is None:
+        return 0.0, 0.0, 0.0
+    n_tracks = state.patches.shape[1]
+    pre_conf_mask = state.is_confident[pre_lo:pre_hi]
+    pre_indices = np.where(pre_conf_mask)[0] + pre_lo
+    if pre_indices.size < 1:
+        return 0.0, 0.0, 0.0
+
+    appearance_total = 0.0
+    axis_total = 0.0
+    area_total = 0.0
+    n_active = 0
+    for i in range(n_tracks):
+        ref_patches = state.patches[pre_indices, i]
+        ref_has = state.has_patch[pre_indices, i]
+        ref_patches = ref_patches[ref_has]
+        if ref_patches.shape[0] < 1:
+            continue
+        ref_patch = np.median(
+            ref_patches.astype(np.float32), axis=0,
+        ).clip(0, 255).astype(np.uint8)
+        ref_axis = float(np.nanmedian(state.axis_ratio[pre_indices, i]))
+        ref_area = float(np.nanmedian(state.area[pre_indices, i]))
+        if not (np.isfinite(ref_axis) and np.isfinite(ref_area)):
+            continue
+
+        post_col = perm[i]
+        post_has = state.has_patch[post_lo:post_hi, post_col]
+        post_idx = np.where(post_has)[0] + post_lo
+        if post_idx.size < 1:
+            continue
+        post_patches = state.patches[post_idx, post_col]
+        post_patch = np.median(
+            post_patches.astype(np.float32), axis=0,
+        ).clip(0, 255).astype(np.uint8)
+        post_axis_ratios = state.axis_ratio[post_idx, post_col]
+        post_areas = state.area[post_idx, post_col]
+        post_axis = float(np.nanmedian(post_axis_ratios))
+        post_area = float(np.nanmedian(post_areas))
+        if not (np.isfinite(post_axis) and np.isfinite(post_area)):
+            continue
+
+        appearance_total += match_patch(post_patch, ref_patch)
+        axis_total += abs(post_axis - ref_axis) / max(ref_axis, 1e-9)
+        area_total += area_continuity_score(post_area, ref_area)
+        n_active += 1
+
+    if n_active == 0:
+        return 0.0, 0.0, 0.0
+    return (
+        appearance_total / n_active,
+        axis_total / n_active,
+        area_total / n_active,
+    )
 
 
 __all__ = ["SwapEvent", "audit_track_identities"]

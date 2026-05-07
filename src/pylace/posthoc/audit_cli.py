@@ -68,6 +68,21 @@ def main(argv: list[str] | None = None) -> int:
         f"max_jump={max_jump_mm:.2f} mm",
     )
 
+    fingerprint_path = (
+        args.fingerprint if args.fingerprint is not None
+        else _default_fingerprint_path(args.trajectory)
+    )
+    if fingerprint_path is not None and fingerprint_path.exists():
+        print(
+            f"  appearance: {fingerprint_path.name}  "
+            f"weights app={args.appearance_weight:.2f} "
+            f"axis={args.axis_ratio_weight:.2f} "
+            f"area={args.area_weight:.2f}",
+        )
+    else:
+        print("  appearance: disabled (no fingerprint sidecar)")
+        fingerprint_path = None
+
     df = pd.read_csv(args.trajectory)
     n_tracks = df["track_id"].nunique()
     print(f"  loaded {len(df)} rows across {n_tracks} tracks")
@@ -77,8 +92,13 @@ def main(argv: list[str] | None = None) -> int:
         contact_threshold_mm=args.contact_mm,
         window_s=args.window_s,
         swap_cost_ratio=args.swap_cost_ratio,
+        coalesce_window_frames=args.coalesce_window_frames,
         max_event_block_s=max_block_s,
         max_jump_mm=max_jump_mm,
+        fingerprint_path=fingerprint_path,
+        appearance_weight=args.appearance_weight,
+        axis_ratio_weight=args.axis_ratio_weight,
+        area_weight=args.area_weight,
         kalman_q_pos=args.kalman_q_pos,
         kalman_q_vel=args.kalman_q_vel,
         kalman_r_pos=args.kalman_r_pos,
@@ -128,6 +148,13 @@ def _default_audited_path(trajectory: Path) -> Path:
     return trajectory.with_name(trajectory_stem(trajectory) + ".pylace_audited.csv")
 
 
+def _default_fingerprint_path(trajectory: Path) -> Path | None:
+    """Conventional fingerprint sidecar path next to the trajectory CSV's video."""
+    video = video_path_from_trajectory(trajectory)
+    candidate = video.with_name(video.name + ".pylace_fingerprints.npz")
+    return candidate if candidate.exists() else None
+
+
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="pylace-audit",
@@ -159,6 +186,13 @@ def _build_parser() -> argparse.ArgumentParser:
                    help="Commit a swap when its cost is below this fraction "
                         "of the identity-permutation cost. Default 0.7 "
                         "(= require 30%% improvement).")
+    p.add_argument("--coalesce-window-frames", type=int, default=None,
+                   dest="coalesce_window_frames",
+                   help="Adjacent event-frames within this gap are merged into "
+                        "one block. Default = round(fps x window-s). Set to 1 "
+                        "to disable coalescing — useful when the trajectory "
+                        "has long NaN spans that would otherwise swallow the "
+                        "real merge events.")
     p.add_argument("--max-event-block-s", type=float, default=None,
                    dest="max_event_block_s",
                    help="Skip event blocks longer than this many seconds "
@@ -174,6 +208,23 @@ def _build_parser() -> argparse.ArgumentParser:
                         "2 x contact-mm). Catches obvious teleports the "
                         "Kalman cost can rank favourably under degenerate "
                         "covariance.")
+    p.add_argument("--fingerprint", type=Path, default=None,
+                   help="Path to a pylace_fingerprints.npz sidecar produced by "
+                        "pylace-fingerprint. Default: auto-detect "
+                        "<video>.pylace_fingerprints.npz next to the "
+                        "trajectory's video.")
+    p.add_argument("--appearance-weight", type=float, default=1.0,
+                   dest="appearance_weight",
+                   help="Weight on the pose-normalised intensity-patch RMSE "
+                        "term in the permutation cost. Set to 0 to disable. "
+                        "Default 1.0.")
+    p.add_argument("--axis-ratio-weight", type=float, default=1.0,
+                   dest="axis_ratio_weight",
+                   help="Weight on the axis-ratio (major/minor) continuity "
+                        "term. Default 1.0.")
+    p.add_argument("--area-weight", type=float, default=1.0,
+                   dest="area_weight",
+                   help="Weight on the area continuity term. Default 1.0.")
     p.add_argument("--kalman-q-pos", type=float, default=DEFAULT_KALMAN_Q_POS,
                    dest="kalman_q_pos",
                    help=f"Audit Kalman position-drift std (px). "
