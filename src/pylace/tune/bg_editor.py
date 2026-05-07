@@ -33,8 +33,9 @@ HISTORY_LIMIT = 32
 ToolName = Literal["smart_fill", "clone_stamp", "healing_brush"]
 TOOL_HINTS: dict[str, str] = {
     "smart_fill": (
-        "Smart fill: paint with LMB, erase with RMB, then click "
-        "'Inpaint mask'."
+        "Smart fill: paint over the unwanted region with LMB (erase with "
+        "RMB), then click 'Apply smart fill' below to fill it from the "
+        "surrounding pixels."
     ),
     "clone_stamp": (
         "Clone stamp: Alt-click to set source. Drag with LMB to copy from "
@@ -383,7 +384,15 @@ class BgEditDialog(QtWidgets.QDialog):
         form.addRow("Inpaint radius", self._sb_radius)
         v.addLayout(form)
 
-        v.addWidget(self._action_button("Inpaint mask", self._on_inpaint))
+        self._btn_inpaint = self._action_button(
+            "Apply smart fill", self._on_inpaint,
+        )
+        self._btn_inpaint.setToolTip(
+            "Fill the painted (red) region using surrounding pixels "
+            "(cv2 TELEA inpaint). Use this AFTER painting a mask with the "
+            "smart-fill brush.",
+        )
+        v.addWidget(self._btn_inpaint)
         v.addWidget(self._action_button("Clear mask", self._canvas.clear_mask))
         v.addWidget(
             self._action_button("Undo", self._on_undo, shortcut="Ctrl+Z"),
@@ -454,44 +463,69 @@ class BgEditDialog(QtWidgets.QDialog):
     def _on_stroke_finished(self, prev_bg: np.ndarray) -> None:
         self._push_undo(prev_bg)
         self._redo.clear()
-        self._lbl_status.setText(f"Stroke applied. Undo: {len(self._undo)}.")
+        self._set_status(
+            f"Stroke applied. Undo: {len(self._undo)}.", kind="ok",
+        )
 
     def _on_inpaint(self) -> None:
         if not self._canvas.has_mask():
-            self._lbl_status.setText("Paint a mask first.")
+            self._set_status(
+                "Paint a mask first (LMB with the smart-fill tool).",
+                kind="warn",
+            )
             return
         bg = self._canvas.current_bg()
         mask = self._canvas.current_mask()
+        masked_pixels = int((mask > 0).sum())
         self._push_undo(bg)
         self._redo.clear()
         try:
             new_bg = apply_inpaint(bg, mask, radius=self._sb_radius.value())
         except ValueError as exc:
-            self._lbl_status.setText(f"Inpaint failed: {exc}")
+            self._set_status(f"Inpaint failed: {exc}", kind="error")
             return
         self._canvas.replace_bg(new_bg)
-        self._lbl_status.setText(f"Filled. Undo stack: {len(self._undo)}.")
+        self._set_status(
+            f"✓ Smart fill applied to {masked_pixels} px. "
+            f"Undo stack: {len(self._undo)}.",
+            kind="ok",
+        )
+
+    def _set_status(self, text: str, *, kind: str = "info") -> None:
+        """Update the status label with a colour cue per ``kind``."""
+        colour = {
+            "ok":    "#1e8449",
+            "warn":  "#b9770e",
+            "error": "#c0392b",
+            "info":  "#34495e",
+        }.get(kind, "#34495e")
+        self._lbl_status.setText(text)
+        self._lbl_status.setStyleSheet(
+            f"QLabel {{ color: {colour}; font-weight: bold; }}",
+        )
 
     def _on_undo(self) -> None:
         if not self._undo:
-            self._lbl_status.setText("Nothing to undo.")
+            self._set_status("Nothing to undo.", kind="warn")
             return
         prev = self._undo.pop()
         self._redo.append(self._canvas.current_bg())
         self._canvas.replace_bg(prev)
-        self._lbl_status.setText(
+        self._set_status(
             f"Undid one step. Undo: {len(self._undo)}, redo: {len(self._redo)}.",
+            kind="ok",
         )
 
     def _on_redo(self) -> None:
         if not self._redo:
-            self._lbl_status.setText("Nothing to redo.")
+            self._set_status("Nothing to redo.", kind="warn")
             return
         nxt = self._redo.pop()
         self._push_undo(self._canvas.current_bg())
         self._canvas.replace_bg(nxt)
-        self._lbl_status.setText(
+        self._set_status(
             f"Redid one step. Undo: {len(self._undo)}, redo: {len(self._redo)}.",
+            kind="ok",
         )
 
     def _push_undo(self, bg: np.ndarray) -> None:
