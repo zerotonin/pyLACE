@@ -230,6 +230,101 @@ def test_audit_rejects_invalid_swap_cost_ratio():
                                 swap_cost_ratio=1.5)
 
 
+def test_audit_skips_giant_event_blocks():
+    """Event blocks longer than max_event_block_s are left untouched."""
+    n = 200
+    swap_at = 100
+    # Two truly stationary tracks far apart, with a CSV-injected swap
+    # in the middle. We then make the entire span around the swap a
+    # contact event by shoving the y-coordinates close together for a
+    # very long stretch — far longer than max_event_block_s — so the
+    # block coalesces and gets skipped.
+    cx0 = np.full(n, 5.0); cy0 = np.full(n, 5.0)
+    cx1 = np.full(n, 5.0); cy1 = np.full(n, 80.0)
+    cx0[swap_at:], cx1[swap_at:] = cx1[swap_at:].copy(), cx0[swap_at:].copy()
+    cy0[swap_at:], cy1[swap_at:] = cy1[swap_at:].copy(), cy0[swap_at:].copy()
+    # Long contact event spanning frames 20..180 (160 frames at 10 fps = 16 s,
+    # well over the 5 × window_s = 5 s default cap).
+    cy0[20:180] = 40.0
+    cy1[20:180] = 40.0
+    df = _build_two_track_df(cx0, cy0, cx1, cy1)
+
+    audited, log = audit_track_identities(
+        df, fps=10.0, pix_per_mm=1.0,
+        contact_threshold_mm=50.0, window_s=1.0,
+        swap_cost_ratio=0.9,
+    )
+    # Block was skipped → no commit, IDs unchanged from the (swapped) input.
+    assert log.empty, "the giant block should have been skipped"
+    assert (audited["track_id"] == audited["original_track_id"]).all()
+
+
+def test_audit_position_jump_gate_refuses_teleport_perms():
+    """A perm that would teleport a track is refused regardless of cost."""
+    n = 50
+    swap_at = 25
+    # Two stationary tracks 400 px apart. CSV is honest (no injected
+    # swap). A 1-frame contact event triggers the audit. The position-
+    # jump gate must refuse the (1, 0) permutation because committing
+    # it would teleport track 0 by ~400 px.
+    cx0 = np.full(n, 50.0);  cy0 = np.full(n, 50.0)
+    cx1 = np.full(n, 450.0); cy1 = np.full(n, 50.0)
+    # Inject a single-frame "contact" by squashing the y-coords.
+    cy0[swap_at] = 100.0
+    cy1[swap_at] = 100.0
+    df = _build_two_track_df(cx0, cy0, cx1, cy1)
+
+    audited, log = audit_track_identities(
+        df, fps=10.0, pix_per_mm=1.0,
+        contact_threshold_mm=80.0, window_s=1.0,
+        swap_cost_ratio=0.9,
+        max_jump_mm=20.0,    # 20 mm × 1 px/mm = 20 px — well below 400 px.
+    )
+    assert log.empty, "the 400 px teleport should fail the position-jump gate"
+
+
+def test_audit_position_jump_gate_does_not_block_legitimate_local_swap():
+    """A real swap with both tracks staying in place still passes the gate."""
+    n = 50
+    swap_at = 25
+    # Two near-stationary tracks 100 px apart, swapped at frame 25.
+    cx0 = np.full(n, 50.0); cy0 = np.full(n, 50.0)
+    cx1 = np.full(n, 50.0); cy1 = np.full(n, 150.0)
+    cx0[swap_at:], cx1[swap_at:] = cx1[swap_at:].copy(), cx0[swap_at:].copy()
+    cy0[swap_at:], cy1[swap_at:] = cy1[swap_at:].copy(), cy0[swap_at:].copy()
+    cy0[swap_at - 1] = 100.0  # single-frame contact only
+    cy1[swap_at - 1] = 100.0
+    df = _build_two_track_df(cx0, cy0, cx1, cy1)
+
+    audited, log = audit_track_identities(
+        df, fps=10.0, pix_per_mm=1.0,
+        contact_threshold_mm=20.0, window_s=1.0,
+        swap_cost_ratio=0.9,
+        max_jump_mm=200.0,   # > the 100 px swap distance, so swap passes.
+    )
+    assert not log.empty, "the local stationary swap should still be caught"
+
+
+def test_audit_rejects_invalid_max_event_block_s():
+    df = _build_two_track_df(
+        cx0=np.arange(10, dtype=float), cy0=np.zeros(10),
+        cx1=np.arange(10, dtype=float), cy1=np.full(10, 100.0),
+    )
+    with pytest.raises(ValueError, match="max_event_block_s"):
+        audit_track_identities(df, fps=10.0, pix_per_mm=1.0,
+                                max_event_block_s=0.0)
+
+
+def test_audit_rejects_invalid_max_jump_mm():
+    df = _build_two_track_df(
+        cx0=np.arange(10, dtype=float), cy0=np.zeros(10),
+        cx1=np.arange(10, dtype=float), cy1=np.full(10, 100.0),
+    )
+    with pytest.raises(ValueError, match="max_jump_mm"):
+        audit_track_identities(df, fps=10.0, pix_per_mm=1.0,
+                                max_jump_mm=-1.0)
+
+
 def test_audit_kalman_catches_a_swap_between_two_stationary_tracks():
     """Two near-stationary flies trade IDs — the lite median-velocity
     predictor produced near-zero velocity for both pre-event so the

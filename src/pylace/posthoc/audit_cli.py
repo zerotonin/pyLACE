@@ -49,11 +49,23 @@ def main(argv: list[str] | None = None) -> int:
         ))
     )
 
+    max_block_s = (
+        args.max_event_block_s if args.max_event_block_s is not None
+        else args.window_s * 5.0
+    )
+    max_jump_mm = (
+        args.max_jump_mm if args.max_jump_mm is not None
+        else args.contact_mm * 2.0
+    )
     print(f"pylace-audit: {args.trajectory.name} -> {out_path.name}")
     print(
         f"  fps={fps:.2f}  pix_per_mm={pix_per_mm:.4f}  "
         f"contact={args.contact_mm:.2f} mm  window={args.window_s:.2f} s  "
         f"swap_cost_ratio={args.swap_cost_ratio:.2f}",
+    )
+    print(
+        f"  gates: max_event_block={max_block_s:.2f} s  "
+        f"max_jump={max_jump_mm:.2f} mm",
     )
 
     df = pd.read_csv(args.trajectory)
@@ -65,6 +77,8 @@ def main(argv: list[str] | None = None) -> int:
         contact_threshold_mm=args.contact_mm,
         window_s=args.window_s,
         swap_cost_ratio=args.swap_cost_ratio,
+        max_event_block_s=max_block_s,
+        max_jump_mm=max_jump_mm,
         kalman_q_pos=args.kalman_q_pos,
         kalman_q_vel=args.kalman_q_vel,
         kalman_r_pos=args.kalman_r_pos,
@@ -145,6 +159,21 @@ def _build_parser() -> argparse.ArgumentParser:
                    help="Commit a swap when its cost is below this fraction "
                         "of the identity-permutation cost. Default 0.7 "
                         "(= require 30%% improvement).")
+    p.add_argument("--max-event-block-s", type=float, default=None,
+                   dest="max_event_block_s",
+                   help="Skip event blocks longer than this many seconds "
+                        "(default = 5 x window-s). Coalesced contact / NaN "
+                        "spans this long bridge the Kalman filter through "
+                        "too many predict-only steps and the cost ratio "
+                        "becomes numerical noise.")
+    p.add_argument("--max-jump-mm", type=float, default=None,
+                   dest="max_jump_mm",
+                   help="Refuse any non-identity permutation whose worst-case "
+                        "track jump from last pre-event position to first "
+                        "post-event position exceeds this distance (default = "
+                        "2 x contact-mm). Catches obvious teleports the "
+                        "Kalman cost can rank favourably under degenerate "
+                        "covariance.")
     p.add_argument("--kalman-q-pos", type=float, default=DEFAULT_KALMAN_Q_POS,
                    dest="kalman_q_pos",
                    help=f"Audit Kalman position-drift std (px). "
