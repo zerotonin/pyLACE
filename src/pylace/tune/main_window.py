@@ -74,8 +74,19 @@ class TuneWindow(QtWidgets.QMainWindow):
         fps = sidecar.video.fps if sidecar.video.fps > 0 else 25.0
         self._fps = fps
         self._video_duration_s = self._video_total_frames / fps
-        self._preview_start_s = 0.0
-        self._preview_end_s = self._video_duration_s
+        # Preview window defaults to the sidecar's trim if set, else
+        # the whole video.
+        trim = sidecar.trim
+        self._preview_start_s = (
+            float(trim.start_s)
+            if trim is not None and trim.start_s is not None
+            else 0.0
+        )
+        self._preview_end_s = (
+            float(trim.end_s)
+            if trim is not None and trim.end_s is not None
+            else self._video_duration_s
+        )
         self._preview_n = PREVIEW_DEFAULT_N
 
         self._show_mask = False
@@ -114,12 +125,43 @@ class TuneWindow(QtWidgets.QMainWindow):
 
     def _load_or_default_params(self) -> TuningParams:
         if not self._params_path.exists():
-            return TuningParams.defaults()
+            return self._defaults_with_trim()
         try:
             params, _ = read_params(self._params_path)
             return params
         except TuningParamsSchemaError:
-            return TuningParams.defaults()
+            return self._defaults_with_trim()
+
+    def _defaults_with_trim(self) -> TuningParams:
+        """Default params; honour sidecar.trim for the bg-projection fractions.
+
+        Without this, rebuilding the background in the tuner would
+        sample uniformly across the whole video — including a wobbly
+        first second the user explicitly trimmed off in the annotator.
+        We project the trim seconds into the [0, 1] start_frac /
+        end_frac range used by ``compute_projection_pair``.
+        """
+        defaults = TuningParams.defaults()
+        trim = self._sidecar.trim
+        if trim is None:
+            return defaults
+        # Probe duration locally — _fps / _video_total_frames are set
+        # later in __init__, but _load_or_default_params runs first.
+        fps = self._sidecar.video.fps if self._sidecar.video.fps > 0 else 25.0
+        total_frames = self._probe_total_frames()
+        duration = total_frames / fps if fps > 0 and total_frames > 0 else 0.0
+        if duration <= 0:
+            return defaults
+        if trim.start_s is not None:
+            defaults.background.start_frac = max(
+                0.0, min(0.99, trim.start_s / duration),
+            )
+        if trim.end_s is not None:
+            defaults.background.end_frac = max(
+                defaults.background.start_frac + 0.01,
+                min(1.0, trim.end_s / duration),
+            )
+        return defaults
 
     def _probe_total_frames(self) -> int:
         import cv2
