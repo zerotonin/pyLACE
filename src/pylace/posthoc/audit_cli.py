@@ -19,6 +19,7 @@ from pylace.posthoc.io import (
     video_path_from_trajectory,
     write_trajectory,
 )
+from pylace.review.verdicts import default_verdicts_path, read_verdicts
 from pylace.tracking.constants import (
     DEFAULT_KALMAN_INITIAL_V_STD,
     DEFAULT_KALMAN_Q_POS,
@@ -83,6 +84,18 @@ def main(argv: list[str] | None = None) -> int:
         print("  appearance: disabled (no fingerprint sidecar)")
         fingerprint_path = None
 
+    verdicts_path = (
+        args.verdicts if args.verdicts is not None
+        else default_verdicts_path(args.trajectory)
+    )
+    verdicts = read_verdicts(verdicts_path)
+    if verdicts:
+        print(
+            f"  verdicts:   {verdicts_path.name} ({len(verdicts)} record(s))",
+        )
+    else:
+        print("  verdicts:   none on disk (cost-based only)")
+
     df = pd.read_csv(args.trajectory)
     n_tracks = df["track_id"].nunique()
     print(f"  loaded {len(df)} rows across {n_tracks} tracks")
@@ -99,6 +112,7 @@ def main(argv: list[str] | None = None) -> int:
         appearance_weight=args.appearance_weight,
         axis_ratio_weight=args.axis_ratio_weight,
         area_weight=args.area_weight,
+        verdicts=verdicts or None,
         kalman_q_pos=args.kalman_q_pos,
         kalman_q_vel=args.kalman_q_vel,
         kalman_r_pos=args.kalman_r_pos,
@@ -213,6 +227,12 @@ def _build_parser() -> argparse.ArgumentParser:
                         "pylace-fingerprint. Default: auto-detect "
                         "<video>.pylace_fingerprints.npz next to the "
                         "trajectory's video.")
+    p.add_argument("--verdicts", type=Path, default=None,
+                   help="Path to a pylace_verdicts.csv produced by the "
+                        "swap-review GUI. Default: auto-detect "
+                        "<video>.pylace_verdicts.csv next to the trajectory. "
+                        "Verdicts override cost-based logic event-by-event; "
+                        "see pylace.review.verdicts.")
     p.add_argument("--appearance-weight", type=float, default=1.0,
                    dest="appearance_weight",
                    help="Weight on the pose-normalised intensity-patch RMSE "

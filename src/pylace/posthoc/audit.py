@@ -54,6 +54,7 @@ from pylace.posthoc.appearance import (
     area_continuity_score,
     match_patch,
 )
+from pylace.review.verdicts import Verdict, VerdictRecord, make_event_id
 from pylace.tracking.constants import (
     DEFAULT_KALMAN_INITIAL_V_STD,
     DEFAULT_KALMAN_Q_POS,
@@ -69,6 +70,11 @@ from pylace.tracking.kalman import (
     transition_matrix,
     update,
 )
+
+EVENT_TYPE_MOUNT = "mount"
+EVENT_TYPE_SWAP_AUTO = "swap_auto"
+EVENT_TYPE_SWAP_ACCEPTED = "swap_accepted"
+EVENT_TYPE_REJECTED = "swap_rejected"
 
 
 @dataclass(frozen=True)
@@ -87,6 +93,10 @@ class SwapEvent:
     cost_axis_after: float = 0.0
     cost_area_before: float = 0.0
     cost_area_after: float = 0.0
+    event_id: str = ""
+    frame_start: int = -1
+    frame_end: int = -1
+    verdict: str = ""
 
 
 @dataclass
@@ -115,6 +125,7 @@ def audit_track_identities(
     appearance_weight: float = 1.0,
     axis_ratio_weight: float = 1.0,
     area_weight: float = 1.0,
+    verdicts: dict[str, VerdictRecord] | None = None,
     kalman_q_pos: float = DEFAULT_KALMAN_Q_POS,
     kalman_q_vel: float = DEFAULT_KALMAN_Q_VEL,
     kalman_r_pos: float = DEFAULT_KALMAN_R_POS,
@@ -164,12 +175,25 @@ def audit_track_identities(
         kalman_r_pos: Per-axis measurement-noise std (px).
         kalman_initial_v_std: Initial velocity prior at filter
             initialisation (px/frame).
+        verdicts: Optional ``{event_id: VerdictRecord}`` from a human
+            review pass (see :mod:`pylace.review.verdicts`). Verdicts
+            override cost-based logic:
+
+            * ``accept_swap`` — force a pair-swap on the event's two
+              tracks, ignoring cost gates.
+            * ``reject_swap`` — leave IDs untouched at this event.
+            * ``mount`` — leave IDs untouched AND label the event's
+              frames in the returned trajectory with
+              ``event_type='mount'`` so downstream kinematics can
+              drop the window.
+            * ``unknown`` / missing — normal cost-based behaviour.
 
     Returns:
         ``(relabelled_traj, swap_log)``. ``relabelled_traj`` is a
-        copy of ``traj`` with ``track_id`` rewritten and a new
-        ``original_track_id`` column for audit. ``swap_log`` is a
-        DataFrame of the accepted swap events, one row per swap.
+        copy of ``traj`` with ``track_id`` rewritten, plus
+        ``original_track_id`` and ``event_type`` columns for audit.
+        ``swap_log`` is a DataFrame of the accepted swap events plus
+        any verdict-driven mount events (one row per event).
     """
     if pix_per_mm <= 0:
         raise ValueError(f"pix_per_mm must be positive, got {pix_per_mm}")
@@ -197,9 +221,13 @@ def audit_track_identities(
 
     relabelled = traj.copy()
     relabelled["original_track_id"] = relabelled["track_id"]
+    if "event_type" not in relabelled.columns:
+        relabelled["event_type"] = ""
     n_tracks = relabelled["track_id"].nunique()
     if n_tracks < 2:
         return relabelled, _empty_swap_log()
+    if verdicts is None:
+        verdicts = {}
 
     track_ids = sorted(int(t) for t in relabelled["track_id"].unique())
     window_frames = max(3, int(round(fps * window_s)))
@@ -241,16 +269,62 @@ def audit_track_identities(
             Path(fingerprint_path), frames, track_ids,
         )
 
-    event_blocks = _find_event_blocks(
+    event_blocks = _find_event_blocks_with_pairs(
         cx, cy,
         contact_threshold_px=contact_threshold_px,
         coalesce_window_frames=coalesce_window_frames,
     )
 
     swaps: list[SwapEvent] = []
+    mount_windows: list[tuple[int, int, int, int]] = []  # (frame_start, frame_end, tid_a, tid_b)
     identity = tuple(range(n_tracks))
 
-    for block_start, block_end in event_blocks:
+    for block_start, block_end, col_a, col_b in event_blocks:
+        tid_a = track_ids[col_a]
+        tid_b = track_ids[col_b]
+        frame_start = int(frames[block_start])
+        frame_end = int(frames[block_end])
+        event_id = make_event_id(frame_start, tid_a, tid_b)
+        verdict_record = verdicts.get(event_id)
+        verdict_kind = verdict_record.verdict if verdict_record else None
+
+        # --- mount: tag rows, no permutation, no cost work ---
+        if verdict_kind is Verdict.MOUNT:
+            mount_windows.append((frame_start, frame_end, tid_a, tid_b))
+            swaps.append(_mount_swap_event(
+                event_id, frame_start, frame_end, identity,
+            ))
+            continue
+
+        # --- reject_swap: do nothing at this event ---
+        if verdict_kind is Verdict.REJECT_SWAP:
+            continue
+
+        # --- accept_swap: force the pair-swap, ignore cost gates ---
+        if verdict_kind is Verdict.ACCEPT_SWAP:
+            perm = _pair_swap_perm(n_tracks, col_a, col_b)
+            cols = list(perm)
+            post_lo = block_end + 1
+            cx[post_lo:, :] = cx[post_lo:, cols]
+            cy[post_lo:, :] = cy[post_lo:, cols]
+            if appearance is not None:
+                appearance.patches[post_lo:, :] = appearance.patches[post_lo:, cols]
+                appearance.axis_ratio[post_lo:, :] = appearance.axis_ratio[post_lo:, cols]
+                appearance.area[post_lo:, :] = appearance.area[post_lo:, cols]
+                appearance.has_patch[post_lo:, :] = appearance.has_patch[post_lo:, cols]
+            swaps.append(SwapEvent(
+                frame_idx=frame_end,
+                permutation=perm,
+                cost_before=float("nan"),
+                cost_after=float("nan"),
+                event_id=event_id,
+                frame_start=frame_start,
+                frame_end=frame_end,
+                verdict=Verdict.ACCEPT_SWAP.value,
+            ))
+            continue
+
+        # --- normal cost-based path ---
         if block_end - block_start + 1 > max_event_block_frames:
             continue
         pre_lo = max(0, block_start - window_frames)
@@ -325,7 +399,7 @@ def audit_track_identities(
             appearance.has_patch[post_lo:, :] = appearance.has_patch[post_lo:, cols]
         swaps.append(
             SwapEvent(
-                frame_idx=int(frames[block_end]),
+                frame_idx=frame_end,
                 permutation=best_perm,
                 cost_before=float(cost_id),
                 cost_after=float(best_cost),
@@ -337,27 +411,51 @@ def audit_track_identities(
                 cost_axis_after=float(best_axis),
                 cost_area_before=float(area_id),
                 cost_area_after=float(best_area),
+                event_id=event_id,
+                frame_start=frame_start,
+                frame_end=frame_end,
+                verdict="",
             ),
         )
 
     # Apply swaps in chronological order to the DataFrame using the
-    # current track_id at each step.
+    # current track_id at each step. Mount events use the identity
+    # permutation so this loop is a no-op for them.
     for sw in swaps:
+        if sw.verdict == EVENT_TYPE_MOUNT:
+            continue
         mapping = {track_ids[i]: track_ids[sw.permutation[i]] for i in range(n_tracks)}
         mask = relabelled["frame_idx"] > sw.frame_idx
         relabelled.loc[mask, "track_id"] = (
             relabelled.loc[mask, "track_id"].map(mapping).astype(int)
         )
 
+    # Mount windows: tag the rows in the audited trajectory so
+    # downstream tools can filter the contact frames out.
+    for f_start, f_end, tid_a, tid_b in mount_windows:
+        mask = (
+            (relabelled["frame_idx"] >= f_start)
+            & (relabelled["frame_idx"] <= f_end)
+            & relabelled["original_track_id"].isin((tid_a, tid_b))
+        )
+        relabelled.loc[mask, "event_type"] = EVENT_TYPE_MOUNT
+
     swap_log = (
         pd.DataFrame(
             [{
                 "frame_idx": sw.frame_idx,
+                "event_id": sw.event_id,
+                "frame_start": sw.frame_start,
+                "frame_end": sw.frame_end,
+                "verdict": sw.verdict,
                 "permutation": list(sw.permutation),
                 "cost_before": sw.cost_before,
                 "cost_after": sw.cost_after,
                 "improvement_ratio": (
-                    1.0 - sw.cost_after / sw.cost_before if sw.cost_before > 0 else 0.0
+                    1.0 - sw.cost_after / sw.cost_before
+                    if sw.cost_before and sw.cost_before > 0
+                    and np.isfinite(sw.cost_before) and np.isfinite(sw.cost_after)
+                    else 0.0
                 ),
                 "cost_kalman_before": sw.cost_kalman_before,
                 "cost_kalman_after": sw.cost_kalman_after,
@@ -374,6 +472,29 @@ def audit_track_identities(
     return relabelled, swap_log
 
 
+def _pair_swap_perm(n_tracks: int, col_a: int, col_b: int) -> tuple[int, ...]:
+    """Identity permutation with columns ``col_a`` and ``col_b`` swapped."""
+    perm = list(range(n_tracks))
+    perm[col_a], perm[col_b] = perm[col_b], perm[col_a]
+    return tuple(perm)
+
+
+def _mount_swap_event(
+    event_id: str, frame_start: int, frame_end: int, identity: tuple[int, ...],
+) -> SwapEvent:
+    """A non-swap log row that records a 'mount' verdict on this event."""
+    return SwapEvent(
+        frame_idx=frame_end,
+        permutation=identity,
+        cost_before=float("nan"),
+        cost_after=float("nan"),
+        event_id=event_id,
+        frame_start=frame_start,
+        frame_end=frame_end,
+        verdict=EVENT_TYPE_MOUNT,
+    )
+
+
 # ─────────────────────────────────────────────────────────────────
 #  Helpers
 # ─────────────────────────────────────────────────────────────────
@@ -382,7 +503,8 @@ def audit_track_identities(
 def _empty_swap_log() -> pd.DataFrame:
     return pd.DataFrame(
         columns=[
-            "frame_idx", "permutation",
+            "frame_idx", "event_id", "frame_start", "frame_end", "verdict",
+            "permutation",
             "cost_before", "cost_after", "improvement_ratio",
             "cost_kalman_before", "cost_kalman_after",
             "cost_appearance_before", "cost_appearance_after",
@@ -397,37 +519,71 @@ def _find_event_blocks(
     *, contact_threshold_px: float, coalesce_window_frames: int,
 ) -> list[tuple[int, int]]:
     """Return ``[(start_idx, end_idx)]`` half-closed blocks of event frames."""
+    return [(s, e) for (s, e, _a, _b) in _find_event_blocks_with_pairs(
+        cx, cy,
+        contact_threshold_px=contact_threshold_px,
+        coalesce_window_frames=coalesce_window_frames,
+    )]
+
+
+def _find_event_blocks_with_pairs(
+    cx: np.ndarray, cy: np.ndarray,
+    *, contact_threshold_px: float, coalesce_window_frames: int,
+) -> list[tuple[int, int, int, int]]:
+    """Return ``[(start_idx, end_idx, col_a, col_b)]`` with the closest pair.
+
+    ``col_a < col_b`` are wide-form column indices (which equal sorted
+    track ids on entry). The pair is the one with the smallest mean
+    pairwise distance across the block frames — for N=2 this is always
+    ``(0, 1)``; for N>2 it picks out who actually merged.
+    """
     n_frames, n_tracks = cx.shape
     if n_tracks < 2:
         return []
 
-    # Pairwise distance per frame, excluding self.
     dx = cx[:, :, None] - cx[:, None, :]
     dy = cy[:, :, None] - cy[:, None, :]
-    d = np.hypot(dx, dy)
+    d_full = np.hypot(dx, dy)
     for i in range(n_tracks):
-        d[:, i, i] = np.inf
+        d_full[:, i, i] = np.inf
     with np.errstate(invalid="ignore"):
-        min_pair_d = np.nanmin(d.reshape(n_frames, -1), axis=1)
+        min_pair_d = np.nanmin(d_full.reshape(n_frames, -1), axis=1)
     contact = (min_pair_d < contact_threshold_px) & np.isfinite(min_pair_d)
     has_nan = np.any(np.isnan(cx) | np.isnan(cy), axis=1)
     event = contact | has_nan
-
     if not event.any():
         return []
+
     event_idx = np.where(event)[0]
-    blocks: list[tuple[int, int]] = []
+    spans: list[tuple[int, int]] = []
     cur_start = int(event_idx[0])
     cur_end = int(event_idx[0])
     for idx in event_idx[1:]:
         if int(idx) - cur_end <= coalesce_window_frames:
             cur_end = int(idx)
         else:
-            blocks.append((cur_start, cur_end))
+            spans.append((cur_start, cur_end))
             cur_start = int(idx)
             cur_end = int(idx)
-    blocks.append((cur_start, cur_end))
-    return blocks
+    spans.append((cur_start, cur_end))
+
+    results: list[tuple[int, int, int, int]] = []
+    for s, e in spans:
+        block_d = d_full[s:e + 1]  # (block_len, n_tracks, n_tracks)
+        with np.errstate(invalid="ignore"), np.testing.suppress_warnings() as sup:
+            sup.filter(RuntimeWarning, "Mean of empty slice")
+            mean_pair = np.nanmean(block_d, axis=0)
+        # Mask the diagonal so argmin picks a real pair.
+        for i in range(n_tracks):
+            mean_pair[i, i] = np.inf
+        # nan→inf so they never win.
+        mean_pair = np.where(np.isnan(mean_pair), np.inf, mean_pair)
+        flat = int(np.argmin(mean_pair))
+        a, b = divmod(flat, n_tracks)
+        if a > b:
+            a, b = b, a
+        results.append((s, e, int(a), int(b)))
+    return results
 
 
 def _default_kalman_matrices() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
