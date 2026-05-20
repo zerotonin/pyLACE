@@ -45,6 +45,22 @@ def read_detections(csv_path: Path) -> pd.DataFrame:
     return df.sort_values(["track_id", "frame_idx"]).reset_index(drop=True)
 
 
+def read_trajectory_csv(
+    csv_path: Path, *, include_mount: bool = False,
+) -> pd.DataFrame:
+    """Load a cleaned / audited trajectory CSV with optional mount filtering.
+
+    Downstream analyses (kinematics, occupancy, bout detection) almost
+    always want to skip the rows that the audit (or a human reviewer)
+    flagged as ``event_type == 'mount'`` — those are biological contact
+    windows, not real walking. Pass ``include_mount=True`` to keep them.
+    """
+    df = pd.read_csv(csv_path)
+    if not include_mount and "event_type" in df.columns:
+        df = df[df["event_type"] != "mount"].reset_index(drop=True)
+    return df
+
+
 def write_trajectory(df: pd.DataFrame, csv_path: Path) -> None:
     """Write a cleaned trajectory DataFrame to CSV with consistent column order."""
     cols = list(DETECTION_COLUMNS) + [

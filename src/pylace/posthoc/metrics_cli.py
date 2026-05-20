@@ -20,6 +20,7 @@ from pylace.posthoc.constants import (
     DEFAULT_THIGMOTAXIS_OUTER_FRAC,
 )
 from pylace.posthoc.io import (
+    read_trajectory_csv,
     trajectory_stem,
     video_path_from_trajectory,
 )
@@ -55,9 +56,10 @@ def main(argv: list[str] | None = None) -> int:
         f"thigmo outer band={args.outer_band:.2f}",
     )
 
-    df = pd.read_csv(args.trajectory)
+    df = read_trajectory_csv(args.trajectory, include_mount=args.include_mount)
     n_tracks = df["track_id"].nunique()
-    print(f"  loaded {len(df)} rows across {n_tracks} tracks")
+    note = " (mount frames included)" if args.include_mount else ""
+    print(f"  loaded {len(df)} rows across {n_tracks} tracks{note}")
 
     nn_long: pd.DataFrame | None = None
     if n_tracks >= 2 and pix_per_mm is not None:
@@ -172,6 +174,10 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--write-multifly", action="store_true", dest="write_multifly",
                    help="Write the per-frame multi-fly CSV at the default "
                         "<video>.pylace_multifly.csv path.")
+    p.add_argument("--include-mount", action="store_true", dest="include_mount",
+                   help="Keep rows tagged 'event_type=mount' by the audit. "
+                        "Default: drop them, since mount windows are biological "
+                        "contact events rather than free locomotion.")
     p.add_argument("--on-threshold", type=float,
                    default=DEFAULT_BOUT_ON_MM_S, dest="on_threshold",
                    help="Schmitt-trigger ON threshold (mm/s).")
