@@ -56,6 +56,10 @@ from pylace.inspect.traces import (
     render_trail,
 )
 from pylace.posthoc.analytics import compute_distance_to_wall
+from pylace.review.candidates import default_candidates_path, read_candidates
+from pylace.review.merge import merge_review_events
+from pylace.review.review_panel import ReviewPanel
+from pylace.review.verdicts import default_verdicts_path, read_verdicts
 from pylace.roi.geometry import ROISet
 from pylace.roi.sidecar import default_rois_path, read_rois
 from pylace.widgets.navigation import FrameNavigationStrip
@@ -73,15 +77,27 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         sidecar: Sidecar,
         roi_set: ROISet | None,
         parent: QtWidgets.QWidget | None = None,
+        *,
+        review_mode: bool = False,
+        candidates_path: Path | None = None,
+        audit_log_path: Path | None = None,
+        verdicts_path: Path | None = None,
+        reviewer: str | None = None,
     ) -> None:
         super().__init__(parent)
         self._video = video
+        self._trajectory_csv = trajectory_csv
         self._sidecar = sidecar
         self._roi_set = roi_set
         self._fps = float(sidecar.video.fps) or 25.0
         self._pix_per_mm = float(
             sidecar.calibration.pixel_distance / sidecar.calibration.physical_mm,
         )
+        self._review_mode = bool(review_mode)
+        self._candidates_path = candidates_path
+        self._audit_log_path = audit_log_path
+        self._verdicts_path = verdicts_path
+        self._reviewer = reviewer
 
         self._cap = cv2.VideoCapture(str(video))
         if not self._cap.isOpened():
@@ -114,6 +130,9 @@ class ExplorerWindow(QtWidgets.QMainWindow):
             f"({len(self._track_ids)} tracks)",
         )
         self.setCentralWidget(self._build_central())
+        self._review_panel: ReviewPanel | None = None
+        if self._review_mode:
+            self._install_review_dock()
         self._refresh_all()
 
     # ── Setup helpers ──────────────────────────────────────────────────
@@ -121,6 +140,65 @@ class ExplorerWindow(QtWidgets.QMainWindow):
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:  # noqa: N802
         self._cap.release()
         super().closeEvent(event)
+
+    # ── Review dock ───────────────────────────────────────────────────
+
+    def _install_review_dock(self) -> None:
+        """Build the swap-review panel and dock it on the right."""
+        candidates_path = (
+            self._candidates_path
+            if self._candidates_path is not None
+            else default_candidates_path(self._trajectory_csv)
+        )
+        verdicts_path = (
+            self._verdicts_path
+            if self._verdicts_path is not None
+            else default_verdicts_path(self._trajectory_csv)
+        )
+        audit_log_path = (
+            self._audit_log_path
+            if self._audit_log_path is not None
+            else _default_audit_log_path(self._trajectory_csv)
+        )
+
+        candidates = (
+            read_candidates(candidates_path)
+            if candidates_path.exists() else []
+        )
+        audit_log = (
+            pd.read_csv(audit_log_path) if audit_log_path.exists() else None
+        )
+        verdicts = read_verdicts(verdicts_path)
+        events = merge_review_events(
+            candidates=candidates, audit_log=audit_log, verdicts=verdicts,
+        )
+
+        self._review_panel = ReviewPanel(
+            events=events,
+            verdicts_path=verdicts_path,
+            reviewer=self._reviewer,
+            parent=self,
+        )
+        self._review_panel.frameJumpRequested.connect(
+            lambda f: self._set_current_frame(int(f), source="review"),
+        )
+        self.addDockWidget(
+            Qt.DockWidgetArea.RightDockWidgetArea, self._review_panel,
+        )
+        title = self.windowTitle()
+        if "[review]" not in title:
+            self.setWindowTitle(title + "   [review]")
+        sources = {
+            "candidates": candidates_path if candidates_path.exists() else None,
+            "audit_log":  audit_log_path  if audit_log_path.exists()  else None,
+            "verdicts":   verdicts_path,
+        }
+        msg = "review-mode: " + ", ".join(
+            f"{k}={p.name if isinstance(p, Path) else 'none'}"
+            for k, p in sources.items()
+        ) + f" ({len(events)} events)"
+        if hasattr(self, "_lbl_status"):
+            self._lbl_status.setText(msg)
 
     def _read_frame_at(self, idx: int) -> np.ndarray:
         self._cap.set(cv2.CAP_PROP_POS_FRAMES, float(max(0, idx)))
@@ -488,10 +566,24 @@ def _augment_track(
     return g
 
 
+def _default_audit_log_path(trajectory_csv: Path) -> Path:
+    """Audit swap-log convention: ``<video>.pylace_audit_swaps.csv``."""
+    from pylace.posthoc.io import trajectory_stem
+    return trajectory_csv.with_name(
+        trajectory_stem(trajectory_csv) + ".pylace_audit_swaps.csv",
+    )
+
+
 def run(
     video: Path,
     trajectory: Path,
     sidecar_path: Path | None = None,
+    *,
+    review_mode: bool = False,
+    candidates_path: Path | None = None,
+    audit_log_path: Path | None = None,
+    verdicts_path: Path | None = None,
+    reviewer: str | None = None,
 ) -> int:
     """Launch the explorer GUI; returns a process exit code."""
     sidecar_path = sidecar_path or default_sidecar_path(video)
@@ -516,8 +608,13 @@ def run(
     window = ExplorerWindow(
         video=video, trajectory_csv=trajectory,
         sidecar=sidecar, roi_set=roi_set,
+        review_mode=review_mode,
+        candidates_path=candidates_path,
+        audit_log_path=audit_log_path,
+        verdicts_path=verdicts_path,
+        reviewer=reviewer,
     )
-    window.resize(1500, 1000)
+    window.resize(1700, 1000)
     window.show()
     return app.exec()
 
