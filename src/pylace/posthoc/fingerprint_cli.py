@@ -86,9 +86,7 @@ def main(argv: list[str] | None = None) -> int:
 
     pix_per_mm = float(sidecar.calibration.pixel_distance / sidecar.calibration.physical_mm)
     contact_threshold_px = float(args.contact_mm) * pix_per_mm
-    min_pairwise_distance_px = (
-        contact_threshold_px * DEFAULT_CONFIDENT_SEPARATION_FACTOR
-    )
+    min_pairwise_distance_px = contact_threshold_px * float(args.separation_factor)
 
     out_path = (
         args.out if args.out is not None
@@ -101,7 +99,8 @@ def main(argv: list[str] | None = None) -> int:
         f"n_animals={n_animals if n_animals else 'auto'}  "
         f"expected_area={expected_area_px:.0f} px²  "
         f"contact={args.contact_mm:.2f} mm  "
-        f"min_pair_sep={min_pairwise_distance_px:.1f} px",
+        f"min_pair_sep={min_pairwise_distance_px:.1f} px  "
+        f"canonicalize_head_abdomen={args.canonicalize_head}",
     )
 
     df = read_detections(args.detections)
@@ -132,6 +131,7 @@ def main(argv: list[str] | None = None) -> int:
         patch_h=args.patch_h,
         patch_w=args.patch_w,
         pad_factor=args.pad_factor,
+        canonicalize_head_abdomen=args.canonicalize_head,
     )
 
     np.savez_compressed(
@@ -193,6 +193,7 @@ def _extract_all(
     patch_h: int,
     patch_w: int,
     pad_factor: float,
+    canonicalize_head_abdomen: bool,
 ) -> dict[str, np.ndarray]:
     """Stream through the video once, extracting every per-detection patch."""
     cap = cv2.VideoCapture(str(video_path))
@@ -249,6 +250,7 @@ def _extract_all(
                     patch_h=patch_h,
                     patch_w=patch_w,
                     pad_factor=pad_factor,
+                    canonicalize_head_abdomen=canonicalize_head_abdomen,
                 )
                 out_frame_idx[write_idx] = int(row["frame_idx"])
                 out_track_id[write_idx] = int(row["track_id"])
@@ -306,13 +308,20 @@ def _build_parser() -> argparse.ArgumentParser:
                    help="Expected per-fly area in px² (default: from tuning "
                         "params or auto-estimated from the detections CSV).")
     p.add_argument("--contact-mm", type=float, default=5.0, dest="contact_mm",
-                   help="Contact-distance threshold in mm (default 5.0). "
-                        f"Confidence requires pairwise separation > "
-                        f"{DEFAULT_CONFIDENT_SEPARATION_FACTOR} x contact-mm.")
+                   help="Contact-distance threshold in mm (default 5.0).")
+    p.add_argument("--separation-factor", type=float,
+                   default=DEFAULT_CONFIDENT_SEPARATION_FACTOR,
+                   dest="separation_factor",
+                   help=f"Confidence requires pairwise separation > "
+                        f"separation-factor x contact-mm (default "
+                        f"{DEFAULT_CONFIDENT_SEPARATION_FACTOR}). Lower = "
+                        f"more confident frames feed the medians; higher = "
+                        f"stricter, only well-separated flies.")
     p.add_argument("--area-tol", type=float, default=DEFAULT_CONFIDENT_AREA_TOL,
                    dest="area_tol",
                    help=f"Confidence area tolerance fraction (default "
-                        f"{DEFAULT_CONFIDENT_AREA_TOL}).")
+                        f"{DEFAULT_CONFIDENT_AREA_TOL}). Admits +/- this "
+                        f"fraction of expected_area_px.")
     p.add_argument("--patch-h", type=int, default=DEFAULT_PATCH_H, dest="patch_h",
                    help=f"Patch height in pixels (default {DEFAULT_PATCH_H}).")
     p.add_argument("--patch-w", type=int, default=DEFAULT_PATCH_W, dest="patch_w",
@@ -321,6 +330,14 @@ def _build_parser() -> argparse.ArgumentParser:
                    dest="pad_factor",
                    help=f"Source-region size as a multiple of the fitted axes "
                         f"(default {DEFAULT_PATCH_PAD_FACTOR}).")
+    p.add_argument("--no-canonicalize-head", action="store_false",
+                   dest="canonicalize_head",
+                   help="Disable the dark-end-is-abdomen head/abdomen "
+                        "canonicalization. The fly-friendly default flips "
+                        "patches so the darker half of the body sits on the "
+                        "+x side, which preserves head-abdomen asymmetry in "
+                        "the per-track median. Disable for species without "
+                        "this asymmetry (e.g., zebrafish, ants).")
     return p
 
 
