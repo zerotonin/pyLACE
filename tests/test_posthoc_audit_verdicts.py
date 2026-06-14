@@ -257,6 +257,83 @@ def test_unknown_verdict_falls_back_to_cost_logic():
     assert log["verdict"].iloc[0] == ""
 
 
+def test_accept_swap_with_explicit_permutation_applies_3way_cycle():
+    """A 3-fly 3-way cycle (perm = (1, 2, 0)) recorded in the verdict file
+    must be applied directly by the audit rather than falling back to a
+    pair-swap on (animal_a, animal_b)."""
+    n = 60
+    contact_frame = 29
+    # Three stationary tracks at distinct y positions; brief 3-way contact
+    # at the contact frame (all collapse to the same x, y so the audit
+    # detects a block there).
+    cx = [np.full(n, 100.0), np.full(n, 100.0), np.full(n, 100.0)]
+    cy = [np.full(n, 50.0), np.full(n, 100.0), np.full(n, 150.0)]
+    for arr in (*cx, *cy):
+        arr[contact_frame] = 80.0
+
+    rows = []
+    for i in range(n):
+        for tid in (0, 1, 2):
+            rows.append(dict(
+                frame_idx=i, track_id=tid,
+                cx_smooth_px=cx[tid][i], cy_smooth_px=cy[tid][i],
+            ))
+    df = pd.DataFrame(rows)
+
+    event_id = make_event_id(contact_frame, 0, 1)
+    verdicts = {event_id: VerdictRecord(
+        event_id=event_id,
+        frame_start=contact_frame, frame_end=contact_frame,
+        animal_a=0, animal_b=1,
+        verdict=Verdict.ACCEPT_SWAP,
+        source="test", reviewer="unittest",
+        timestamp_iso=now_iso(),
+        permutation=(1, 2, 0),
+    )}
+    audited, log = audit_track_identities(
+        df, fps=10.0, pix_per_mm=1.0,
+        contact_threshold_mm=30.0, window_s=1.0,
+        swap_cost_ratio=0.9, max_jump_mm=400.0,
+        verdicts=verdicts,
+    )
+    assert len(log) == 1
+    assert log["verdict"].iloc[0] == Verdict.ACCEPT_SWAP.value
+
+    post = audited[audited["frame_idx"] > contact_frame]
+    by_track = post.groupby("track_id")
+    # User-natural cycle (1, 2, 0): old label 0 → new label 1; old 1 → 2;
+    # old 2 → 0. The relabelled DataFrame's track 0 therefore holds what
+    # was track 2 (y=150); track 1 holds what was track 0 (y=50); track 2
+    # holds what was track 1 (y=100).
+    assert by_track.get_group(0)["cy_smooth_px"].mean() == 150.0
+    assert by_track.get_group(1)["cy_smooth_px"].mean() == 50.0
+    assert by_track.get_group(2)["cy_smooth_px"].mean() == 100.0
+
+
+def test_accept_swap_with_malformed_permutation_falls_back_to_pair_swap():
+    """A permutation with the wrong track ids should be ignored, not crash."""
+    df, contact_frame = _injected_swap_setup()
+    event_id = make_event_id(contact_frame, 0, 1)
+    verdicts = {event_id: VerdictRecord(
+        event_id=event_id,
+        frame_start=contact_frame, frame_end=contact_frame,
+        animal_a=0, animal_b=1,
+        verdict=Verdict.ACCEPT_SWAP,
+        source="test", reviewer="unittest",
+        timestamp_iso=now_iso(),
+        permutation=(7, 8),   # garbage
+    )}
+    _, log = audit_track_identities(
+        df, fps=10.0, pix_per_mm=1.0,
+        contact_threshold_mm=20.0, window_s=1.0,
+        swap_cost_ratio=0.9, max_jump_mm=200.0,
+        verdicts=verdicts,
+    )
+    assert len(log) == 1
+    assert log["verdict"].iloc[0] == Verdict.ACCEPT_SWAP.value
+    # Fallback pair-swap on (animal_a=0, animal_b=1) was applied.
+
+
 def test_verdict_for_unrelated_event_id_is_ignored():
     df, _ = _injected_swap_setup()
     # A verdict on a totally different event id should not affect anything.

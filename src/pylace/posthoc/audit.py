@@ -300,9 +300,14 @@ def audit_track_identities(
         if verdict_kind is Verdict.REJECT_SWAP:
             continue
 
-        # --- accept_swap: force the pair-swap, ignore cost gates ---
+        # --- accept_swap: force the swap, ignore cost gates ---
+        # If the verdict carries an explicit full permutation (e.g. a
+        # 3-way cycle Bart entered in the GUI), use it directly;
+        # otherwise fall back to the pair-swap on (col_a, col_b).
         if verdict_kind is Verdict.ACCEPT_SWAP:
-            perm = _pair_swap_perm(n_tracks, col_a, col_b)
+            perm = _resolve_accept_swap_perm(
+                verdict_record, track_ids, n_tracks, col_a, col_b,
+            )
             cols = list(perm)
             post_lo = block_end + 1
             cx[post_lo:, :] = cx[post_lo:, cols]
@@ -477,6 +482,33 @@ def _pair_swap_perm(n_tracks: int, col_a: int, col_b: int) -> tuple[int, ...]:
     perm = list(range(n_tracks))
     perm[col_a], perm[col_b] = perm[col_b], perm[col_a]
     return tuple(perm)
+
+
+def _resolve_accept_swap_perm(
+    verdict_record: VerdictRecord,
+    track_ids: list[int],
+    n_tracks: int,
+    col_a: int,
+    col_b: int,
+) -> tuple[int, ...]:
+    """Pick the permutation a verdict's ACCEPT_SWAP should apply.
+
+    If the record carries an explicit ``permutation`` field whose values
+    are a permutation of ``track_ids``, convert it to column indices and
+    return. Otherwise (or if it is malformed) fall back to a pair-swap
+    on ``(col_a, col_b)``.
+    """
+    pair_swap = _pair_swap_perm(n_tracks, col_a, col_b)
+    perm = verdict_record.permutation
+    if perm is None or len(perm) != n_tracks:
+        return pair_swap
+    if sorted(perm) != sorted(track_ids):
+        return pair_swap
+    tid_to_col = {tid: i for i, tid in enumerate(track_ids)}
+    try:
+        return tuple(tid_to_col[int(t)] for t in perm)
+    except KeyError:
+        return pair_swap
 
 
 def _mount_swap_event(
