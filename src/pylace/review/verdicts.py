@@ -53,7 +53,14 @@ class Verdict(str, Enum):
 
 @dataclass(frozen=True)
 class VerdictRecord:
-    """One reviewer call on one candidate event."""
+    """One reviewer call on one candidate event.
+
+    ``permutation`` is optional and only meaningful for ``accept_swap``
+    verdicts on N>2 events: it stores the full per-track relabelling as
+    a tuple where ``permutation[i]`` is the new label for the i-th
+    sorted track id. ``None`` falls back to a pair-swap on
+    ``(animal_a, animal_b)``.
+    """
 
     event_id: str
     frame_start: int
@@ -65,13 +72,40 @@ class VerdictRecord:
     reviewer: str = ""
     timestamp_iso: str = ""
     note: str = ""
+    permutation: tuple[int, ...] | None = None
 
 
 _COLUMNS: tuple[str, ...] = (
     "event_id", "frame_start", "frame_end",
     "animal_a", "animal_b",
     "verdict", "source", "reviewer", "timestamp_iso", "note",
+    "permutation",
 )
+
+
+def encode_permutation(perm: tuple[int, ...] | None) -> str:
+    """Encode ``perm`` as a CSV-safe comma-separated string. ``None`` → ``''``."""
+    if perm is None:
+        return ""
+    return ",".join(str(int(x)) for x in perm)
+
+
+def decode_permutation(value: object) -> tuple[int, ...] | None:
+    """Inverse of :func:`encode_permutation`; tolerant of NaN / empty cells."""
+    if value is None:
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        pass
+    s = str(value).strip()
+    if not s:
+        return None
+    try:
+        return tuple(int(tok.strip()) for tok in s.split(",") if tok.strip())
+    except ValueError:
+        return None
 
 
 def make_event_id(frame_start: int, animal_a: int, animal_b: int) -> str:
@@ -93,16 +127,22 @@ def default_verdicts_path(audited_csv: Path) -> Path:
 
 
 def read_verdicts(path: Path) -> dict[str, VerdictRecord]:
-    """Load verdicts keyed by event_id. Missing file → empty dict."""
+    """Load verdicts keyed by event_id. Missing file → empty dict.
+
+    Files written before the ``permutation`` column existed are still
+    accepted: the column defaults to ``None`` (pair-swap fallback).
+    """
     path = Path(path)
     if not path.exists():
         return {}
     df = pd.read_csv(path)
-    missing = [c for c in _COLUMNS if c not in df.columns]
+    required = [c for c in _COLUMNS if c != "permutation"]
+    missing = [c for c in required if c not in df.columns]
     if missing:
         raise ValueError(
             f"Verdicts CSV {path} missing columns: {missing}",
         )
+    has_perm = "permutation" in df.columns
     records: dict[str, VerdictRecord] = {}
     for _, row in df.iterrows():
         rec = VerdictRecord(
@@ -116,6 +156,7 @@ def read_verdicts(path: Path) -> dict[str, VerdictRecord]:
             reviewer=_str_or_empty(row["reviewer"]),
             timestamp_iso=_str_or_empty(row["timestamp_iso"]),
             note=_str_or_empty(row["note"]),
+            permutation=decode_permutation(row["permutation"]) if has_perm else None,
         )
         records[rec.event_id] = rec
     return records
@@ -150,6 +191,7 @@ def write_verdicts(
                 "reviewer": r.reviewer,
                 "timestamp_iso": r.timestamp_iso,
                 "note": r.note,
+                "permutation": encode_permutation(r.permutation),
             }
             for r in records
         ],
@@ -187,7 +229,9 @@ __all__ = [
     "VERDICTS_SUFFIX",
     "Verdict",
     "VerdictRecord",
+    "decode_permutation",
     "default_verdicts_path",
+    "encode_permutation",
     "make_event_id",
     "now_iso",
     "read_verdicts",

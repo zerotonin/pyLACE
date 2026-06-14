@@ -147,6 +147,39 @@ def test_read_rejects_truncated_file(tmp_path: Path):
         read_verdicts(p)
 
 
+def test_permutation_round_trips_through_csv(tmp_path: Path):
+    r = VerdictRecord(
+        event_id="100-0-1",
+        frame_start=100, frame_end=110,
+        animal_a=0, animal_b=1,
+        verdict=Verdict.ACCEPT_SWAP,
+        source="audit", reviewer="bart",
+        timestamp_iso=now_iso(), note="",
+        permutation=(1, 2, 0),
+    )
+    p = tmp_path / "v.csv"
+    write_verdicts([r], p)
+    loaded = read_verdicts(p)
+    assert loaded["100-0-1"].permutation == (1, 2, 0)
+
+
+def test_missing_permutation_column_is_treated_as_none(tmp_path: Path):
+    """Verdicts files written before the permutation column existed."""
+    import pandas as pd
+    p = tmp_path / "v.csv"
+    # Hand-write a legacy-style CSV with no permutation column.
+    pd.DataFrame([{
+        "event_id": "100-0-1",
+        "frame_start": 100, "frame_end": 102,
+        "animal_a": 0, "animal_b": 1,
+        "verdict": "mount",
+        "source": "audit", "reviewer": "bart",
+        "timestamp_iso": "2026-05-20T00:00:00+00:00", "note": "",
+    }]).to_csv(p, index=False)
+    loaded = read_verdicts(p)
+    assert loaded["100-0-1"].permutation is None
+
+
 def test_empty_string_cells_round_trip_as_empty(tmp_path: Path):
     """note='' should come back as '' not 'nan'."""
     r = VerdictRecord(
