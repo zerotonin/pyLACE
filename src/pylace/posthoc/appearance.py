@@ -55,15 +55,22 @@ DEFAULT_HISTORY_FRAMES = 250
 enough that the running median tracks slow appearance drift (lighting,
 shadows, fly position relative to the lens)."""
 
-DEFAULT_CONFIDENT_AREA_TOL = 0.30
+DEFAULT_CONFIDENT_AREA_TOL = 0.50
 """+/- fraction of expected_animal_area_px within which a detection's
-area must fall to count as confident. 0.30 keeps fly-on-edge and
-mild-overlap frames out of the running medians."""
+area must fall to count as confident. 0.50 admits the natural
+per-fly variation while still excluding partial merges (whose area
+typically sits ~2x expected, well above the +/-50% band)."""
 
-DEFAULT_CONFIDENT_SEPARATION_FACTOR = 2.0
+DEFAULT_CONFIDENT_SEPARATION_FACTOR = 1.5
 """Multiple of the contact threshold below which a frame is *not*
-counted as confident. With contact_threshold = 5 mm and factor = 2.0,
-flies must be > 10 mm apart for a frame to feed the fingerprint."""
+counted as confident. With contact_threshold = 5 mm and factor = 1.5,
+flies must be > 7.5 mm apart for a frame to feed the fingerprint —
+some buffer above the merge threshold without demanding the flies be
+perfectly isolated. Empirically gets ~18% of frames flagged confident
+on a typical 3-fly arena recording. Higher = more conservative
+medians but fewer audit events get appearance information; lower =
+more coverage but risk of contaminating medians with edge-case
+patches."""
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -82,22 +89,48 @@ def extract_patch(
     patch_h: int = DEFAULT_PATCH_H,
     patch_w: int = DEFAULT_PATCH_W,
     pad_factor: float = DEFAULT_PATCH_PAD_FACTOR,
+    canonicalize_head_abdomen: bool = True,
 ) -> np.ndarray:
     """Crop a rotated rectangle around the fly and resize to ``(patch_h, patch_w)``.
 
     The source rectangle is sized ``pad_factor × major_axis_px`` along
     the body axis and ``pad_factor × minor_axis_px`` perpendicular to
-    it, centred on ``(cx, cy)``. cv2.fitEllipse's angle convention has
-    the unrotated ellipse with its major axis along +y, so we rotate
-    the source by ``(90 - orientation_deg)`` degrees CCW to bring the
-    major axis onto +x in the output.
+    it, centred on ``(cx, cy)``. cv2.fitEllipse returns an angle for
+    which the major axis lies along the image-coord direction
+    ``(sin(angle), -cos(angle))`` — verified empirically by drawing
+    the implied direction onto a painted ellipse and matching it to
+    the long fly axis. The major axis therefore makes an angle of
+    ``(orientation_deg - 90)`` with +x in image coords, and we align
+    the source rectangle's long edge to that direction so the patch
+    reads pixels along the fly's body.
+
+    cv2.fitEllipse's angle is in ``[0, 180)``, so the major-axis
+    direction is determined modulo 180 deg — head and abdomen could
+    end up at either end of the patch. If
+    ``canonicalize_head_abdomen`` is True we resolve this by
+    summing intensity along each half of the body axis: in
+    *Drosophila* (and most diptera) the abdomen is darker and denser
+    than the thorax+head, so the half with the lower mean intensity
+    is the abdomen. We always orient the patch so the abdomen sits
+    on the +x (right) side. This is critical for the per-track
+    median patch to preserve head-abdomen asymmetry — without it
+    the median averages both orientations and washes out the
+    discriminating signal.
+
+    **Species note**: the dark-end-is-abdomen rule holds for
+    *Drosophila* and most flies. Zebrafish, ants, and most
+    species without a darkly-pigmented abdomen do *not* obey it —
+    set ``canonicalize_head_abdomen=False`` and rely on the
+    180-degree flip trick in :func:`match_patch` instead. A future
+    extension may take a callable to plug in a species-specific
+    head-detection rule (e.g., velocity-based, or a dorsal stripe).
 
     Returns a uint8 array. Pixels outside the source frame are filled
     with 0.
     """
     src_w_px = max(float(major_axis_px) * pad_factor, float(patch_w))
     src_h_px = max(float(minor_axis_px) * pad_factor, float(patch_h))
-    angle_rad = np.deg2rad(90.0 - float(orientation_deg))
+    angle_rad = np.deg2rad(float(orientation_deg) - 90.0)
     cosA = float(np.cos(angle_rad))
     sinA = float(np.sin(angle_rad))
     hw = src_w_px * 0.5
@@ -125,6 +158,24 @@ def extract_patch(
     )
     if patch.dtype != np.uint8:
         patch = np.clip(patch, 0, 255).astype(np.uint8)
+    if canonicalize_head_abdomen:
+        patch = canonicalize_patch_by_intensity(patch)
+    return patch
+
+
+def canonicalize_patch_by_intensity(patch: np.ndarray) -> np.ndarray:
+    """Flip the patch 180 deg if the LEFT half is darker than the right.
+
+    Result: the half with lower mean intensity (the *Drosophila*
+    abdomen, in practice) consistently sits on the +x side. This is
+    a fly-friendly default; species without a dark-end-light-end
+    asymmetry should disable this in :func:`extract_patch`.
+    """
+    half = patch.shape[1] // 2
+    left = patch[:, :half]
+    right = patch[:, half:]
+    if float(left.mean()) < float(right.mean()):
+        return np.flip(patch, axis=(0, 1))
     return patch
 
 
@@ -291,6 +342,7 @@ __all__ = [
     "RunningMedianFingerprint",
     "area_continuity_score",
     "axis_ratio_continuity_score",
+    "canonicalize_patch_by_intensity",
     "extract_patch",
     "is_confident_frame",
     "match_patch",
