@@ -169,6 +169,8 @@ def detect_candidates(
         block_pair_d = pair_d[s:e + 1]
         with np.errstate(invalid="ignore"), np.testing.suppress_warnings() as sup:
             sup.filter(RuntimeWarning, "Mean of empty slice")
+            sup.filter(RuntimeWarning, "All-NaN slice encountered")
+            sup.filter(RuntimeWarning, "All-NaN axis encountered")
             mean_pair = np.nanmean(block_pair_d, axis=0)
             min_pair = np.nanmin(block_pair_d, axis=0)
         for i in range(n_t):
