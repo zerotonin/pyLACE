@@ -177,11 +177,13 @@ class ExplorerWindow(QtWidgets.QMainWindow):
             events=events,
             verdicts_path=verdicts_path,
             reviewer=self._reviewer,
+            track_ids=self._track_ids,
             parent=self,
         )
         self._review_panel.frameJumpRequested.connect(
             lambda f: self._set_current_frame(int(f), source="review"),
         )
+        self._review_panel.zoomWindowRequested.connect(self._zoom_plots_to_window)
         self.addDockWidget(
             Qt.DockWidgetArea.RightDockWidgetArea, self._review_panel,
         )
@@ -488,6 +490,34 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         self._canvas.draw_idle()
         self._refresh_scrub()
         self._refresh_overview_marker()
+
+    def _zoom_plots_to_window(self, frame_lo: int, frame_hi: int) -> None:
+        """Pan/zoom plots AND the navigation strip brackets to a frame window.
+
+        Updates three things in lock-step so the visual context stays
+        consistent: the matplotlib x-axis on speed / yaw / wall plots,
+        the bracket positions on the navigation strip, and the
+        scrubber's range. Use the matplotlib toolbar 'home' icon or
+        drag the brackets back open to restore the full view.
+        """
+        if not hasattr(self, "_ax_speed"):
+            return
+        lo = max(0, int(frame_lo))
+        hi = min(self._total_frames - 1, int(frame_hi))
+        if hi <= lo:
+            hi = lo + 1
+        t_lo = lo / self._fps
+        t_hi = hi / self._fps
+        for ax in (self._ax_speed, self._ax_yaw, self._ax_wall):
+            ax.set_xlim(t_lo, t_hi)
+        self._canvas.draw_idle()
+
+        if hasattr(self, "_nav"):
+            bar = self._nav._range_bar
+            bar._lo = lo
+            bar._hi = hi
+            bar.update()
+            bar.rangeChanged.emit(lo, hi)
 
     def _refresh_all(self) -> None:
         self._refresh_scrub()
