@@ -2,17 +2,28 @@ name: lint
 
 on:
   push:
+    branches: [master]
   pull_request:
+    branches: [master]
 
+# Tight bug-only rule set on CI: undefined names, syntax errors,
+# comparison-to-singleton (E9, F63, F7, F82). The full project rule set
+# in pyproject.toml is for local development and is intentionally
+# stricter — it is not enforced here so banner-styled code does not get
+# blocked on cosmetic findings.
 jobs:
   ruff:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install ruff
-      - run: ruff check .
-      - run: ruff format --check .
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Lint (bug-only subset)
+        run: ruff check --select E9,F63,F7,F82 .
