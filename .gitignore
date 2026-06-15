@@ -19,6 +19,10 @@ figures/
 *.h5
 *.parquet
 
+# Sphinx
+docs/_build/
+docs/_autosummary/
+
 # Editor / OS
 .vscode/
 .idea/
