@@ -132,12 +132,15 @@ def write_params(
     """Write tuning params to JSON, with the source video's identity stamped in."""
     payload = {
         "schema_version": SCHEMA_VERSION,
-        "video": {"path": str(video_path), "sha256": video_sha256_hex},
+        "video": {
+            "path": Path(video_path).as_posix(),
+            "sha256": video_sha256_hex,
+        },
         "detection": asdict(params.detection),
         "background": asdict(params.background),
         "tracking": asdict(params.tracking),
     }
-    out_path.write_text(json.dumps(payload, indent=2))
+    out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
 def read_params(in_path: Path) -> tuple[TuningParams, dict]:
@@ -146,7 +149,7 @@ def read_params(in_path: Path) -> tuple[TuningParams, dict]:
     Tolerant of missing dataclass fields so old sidecars (pre-dilate/erode)
     still load by falling back to dataclass defaults.
     """
-    payload = json.loads(in_path.read_text())
+    payload = json.loads(in_path.read_text(encoding="utf-8"))
     version = payload.get("schema_version")
     if version != SCHEMA_VERSION:
         raise TuningParamsSchemaError(
