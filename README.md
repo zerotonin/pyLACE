@@ -1,5 +1,12 @@
 # pyLACE
 
+[![tests](https://github.com/zerotonin/pyLACE/actions/workflows/tests.yml/badge.svg?branch=master)](https://github.com/zerotonin/pyLACE/actions/workflows/tests.yml)
+[![lint](https://github.com/zerotonin/pyLACE/actions/workflows/lint.yml/badge.svg?branch=master)](https://github.com/zerotonin/pyLACE/actions/workflows/lint.yml)
+[![docs](https://github.com/zerotonin/pyLACE/actions/workflows/docs.yml/badge.svg?branch=master)](https://zerotonin.github.io/pyLACE/)
+[![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue.svg)](https://www.python.org/)
+[![License: GPL-3.0-or-later](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](LICENSE)
+[![Code style: ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+
 A Python port of LACE — **L**imbless **A**nimal tra**C**k**E**r — a
 marker-free pose estimator and identity tracker for small animals in
 top-down arena video (adult *Drosophila*, larval flies, zebrafish),
