@@ -1,0 +1,31 @@
+cff-version: 1.2.0
+title: "pyLACE: Limbless Animal traCkEr (Python port)"
+message: "If you use this software, please cite it as below."
+type: software
+authors:
+  - given-names: Bart
+    family-names: Geurten
+    email: bart.geurten@gmail.com
+    orcid: "https://orcid.org/0000-0002-1816-3241"
+    affiliation: "Department of Zoology, University of Otago"
+version: "0.1.0.dev0"
+date-released: "2026-06-15"
+repository-code: "https://github.com/zerotonin/pyLACE"
+license: GPL-3.0-or-later
+keywords:
+  - animal tracking
+  - pose estimation
+  - identity tracking
+  - Drosophila
+  - behavioural neuroscience
+preferred-citation:
+  type: article
+  title: "LACE: Limbless Animal traCkEr, a marker-free pose estimator"
+  authors:
+    - family-names: Garg
+      given-names: Sourav
+  journal: "Frontiers in Behavioral Neuroscience"
+  year: 2022
+  volume: 16
+  start: 819146
+  doi: "10.3389/fnbeh.2022.819146"
